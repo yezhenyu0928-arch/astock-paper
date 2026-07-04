@@ -53,6 +53,24 @@ def _retry(fn, tries=2, delay=0.6, what=""):
     raise last
 
 
+def _retry_df(fn, tries=3, delay=0.5, what=""):
+    """重试直到拿到非空 DataFrame(baostock 偶发返回空,不抛异常,故需对"空"也重试)。
+    否则 fetch_daily 会因一次空响应就跌到被限流的东财,导致整只股票取数失败。"""
+    for i in range(tries):
+        try:
+            df = fn()
+            if df is not None and not getattr(df, "empty", True):
+                return df
+        except Exception as e:  # noqa
+            log.warning("取数重试(空/异常) %s (%d/%d): %s", what, i + 1, tries, e)
+        if i + 1 < tries:
+            time.sleep(delay * (i + 1))
+    try:
+        return fn()
+    except Exception:
+        return None
+
+
 def _bs():
     global _bs_logged_in
     import baostock as bs
@@ -161,7 +179,7 @@ def _ak_raw(code, start, end):
 
 
 def _bs_raw(code, start, end):
-    b = _bs_kline(code, start, end, 3)
+    b = _retry_df(lambda: _bs_kline(code, start, end, 3), what=f"bs_raw {code}")
     if b is None or b.empty:
         return None, None
     raw = b[["trade_date", "open", "high", "low", "close", "volume", "amount"]].copy()
@@ -191,7 +209,7 @@ def _fetch_hfq_close(code, start, end):
     for src in ("bs", "ak"):
         try:
             if src == "bs":
-                h = _bs_kline(code, start, end, 1)
+                h = _retry_df(lambda: _bs_kline(code, start, end, 1), what=f"bs_hfq {code}")
                 if h is not None and not h.empty:
                     return h.set_index("trade_date")["close"]
             else:
