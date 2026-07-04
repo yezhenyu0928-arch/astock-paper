@@ -3,11 +3,11 @@
 #   PUSHPLUS_TOKEN / SMTP_AUTH_CODE / DASHBOARD_PASSWORD / ANTHROPIC_API_KEY
 
 user:
-  capital: 50000            # ←改成你计划将来实盘投入的金额,模拟按此建账(回测/持仓数都按此)
+  capital: 20000            # ←改成你计划将来实盘投入的金额,模拟按此建账(回测/持仓数都按此)
   smtp:
     host: smtp.qq.com
     port: 465
-    user: your@qq.com       # ←改成你的邮箱(推送失败时的备用通知)
+    user: 1330262571@qq.com       # ←改成你的邮箱(推送失败时的备用通知)
 
 costs:
   commission_rate: 0.00025  # 佣金万2.5
