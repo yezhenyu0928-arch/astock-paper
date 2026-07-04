@@ -33,6 +33,29 @@ def _stock_universe(cfg, reg, conn):
     return codes
 
 
+def _fund_fail_track(failed, cfg):
+    """卡B:基本面接口连续失败跟踪。连续≥2日失败→告警一次(S1/S4 将沿用库内旧基本面)。
+    用 state/fund_fail_count.txt 持久化计数;成功即清零。"""
+    p = conf.STATE_DIR / "fund_fail_count.txt"
+    try:
+        prev = int((p.read_text(encoding="utf-8").strip() or "0"))
+    except Exception:
+        prev = 0
+    cur = prev + 1 if failed else 0
+    try:
+        p.write_text(str(cur), encoding="utf-8")
+    except Exception:
+        pass
+    if failed and cur >= 2:
+        try:
+            t, c = notify.build_alert(
+                f"🟡 基本面接口连续 {cur} 日更新失败,S1/S4 将沿用库内旧基本面数据;"
+                f"请检查 baostock/akshare 是否漂移。")
+            notify.push(t, c, "alert", cfg)
+        except Exception:
+            pass
+
+
 def _render_plan_items(eng, ctx, sid, orders):
     """把订单渲染成推送 items(名称/参考价/数量描述)。"""
     acct = eng.load_account(sid)
@@ -74,6 +97,24 @@ def run(date=None, only=None):
         log.info("非交易日 %s,退出", today)
         return 0
 
+    # 1.5 数据库丢失自检(卡B):防 Actions cache 被驱逐后静默空库跑。
+    # 首次部署须先跑 backfill 工作流(README 步骤6);此后 daily 每次都应见到完整历史(>>5万行)。
+    conn0 = get_conn()
+    try:
+        try:
+            n_bar = conn0.execute("SELECT count(*) FROM daily_bar").fetchone()[0]
+        except Exception:
+            n_bar = 0
+    finally:
+        conn0.close()
+    if n_bar < 50000:
+        t, c = notify.build_alert(
+            f"🛑 数据库疑似丢失(daily_bar 仅 {n_bar} 行,Actions cache 可能被驱逐)。"
+            f"请手动运行 backfill 工作流重建历史库后再跟单;今日已暂停,未产生任何操作。")
+        notify.push(t, c, "alert", cfg)
+        log.error("DB自检失败:daily_bar=%d 行(<50000),疑似 cache 驱逐,退出", n_bar)
+        return 1
+
     # 2 更新数据 + 质检
     conn = get_conn()
     try:
@@ -85,11 +126,14 @@ def run(date=None, only=None):
             data.update_daily(sorted(stock_codes), conn=conn)
             data.update_security(stock_codes, conn=conn)
             # 基本面增量(S1股息率/S4市值PB;仅个股策略启用时)
+            fund_ok = True
             try:
                 import fundamental as F
                 F.update_stock_fundamental(sorted(stock_codes), conn=conn)
             except Exception as e:
+                fund_ok = False
                 log.warning("基本面更新失败(不阻断):%s", e)
+            _fund_fail_track(not fund_ok, cfg)   # 卡B:连续失败升级为告警
         # 指数PE(S5)
         if cfg.get("strategies", {}).get("s5_grid@v1"):
             try:
@@ -178,6 +222,11 @@ def run(date=None, only=None):
             report_html.generate()
         except Exception as e:
             log.warning("静态看板生成失败(不阻断):%s", e)
+            try:                                  # 卡B:看板停更也要告警,否则无人知晓
+                t, c = notify.build_alert(f"🔴 看板生成失败:{e};Pages 可能停更,请检查 report_html")
+                notify.push(t, c, "alert", cfg)
+            except Exception:
+                pass
         log.info("run_daily 完成 %s:回报%d 计划%d 市场分%s", today, len(reports), len(orders), mkt_score)
     finally:
         eng.close()

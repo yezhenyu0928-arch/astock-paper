@@ -18,10 +18,27 @@ log = logging.getLogger("data")
 
 # ---------- 目标代码集 ----------
 def core_etf_codes(cfg, registry) -> set:
+    """交易赖以运行的核心 ETF 池:S2 动量池 + S5 网格标的 + S6 行业池(注册后自动纳入)。
+    这些是"当日必须有数据、否则暂停跟单"的标的。"""
     codes = set(registry.get("s2_etf@v1", {}).get("universe", []) or [])
     codes |= set((cfg.get("custom") or {}).get("s2_universe_extra", []) or [])
     codes |= set(registry.get("s5_grid@v1", {}).get("universe", []) or [])
+    codes |= set(registry.get("s6_sector@v1", {}).get("universe", []) or [])   # 卡B/卡C:S6 行业ETF池
     return {c for c in codes if da.is_etf_code(c)}
+
+
+def held_codes_from_state() -> set:
+    """扫描 state/*.json 得到所有策略当前持仓标的(卡B:持仓当日缺数据要告警)。"""
+    import json
+    import glob
+    out = set()
+    for f in glob.glob(str(conf.STATE_DIR / "*.json")):
+        try:
+            d = json.load(open(f, encoding="utf-8"))
+            out |= set((d.get("positions") or {}).keys())
+        except Exception:
+            pass
+    return out
 
 
 def benchmark_codes(registry) -> set:
@@ -191,6 +208,7 @@ def check(date, tradable_codes=None, index_codes=None, conn=None):
             log.info("check: %s 非交易日,跳过", date)
             return {"ok": True, "warnings": [], "note": "非交易日"}
 
+        default_path = tradable_codes is None    # 仅默认路径(run_daily)才追加持仓标的校验
         if tradable_codes is None:
             cfg = conf.load_config(); reg = conf.load_registry()
             tradable_codes = sorted(core_etf_codes(cfg, reg))
@@ -209,6 +227,21 @@ def check(date, tradable_codes=None, index_codes=None, conn=None):
                              (code, date)).fetchone()
             if r is None:
                 warnings.append(f"基准指数 {code} 缺 {date} 数据(WARN,指数常晚一日)")
+
+        # ①b 持仓标的当日缺数据(卡B):真数据缺口→FAIL;近5日曾有bar→疑似停牌→WARN(不误停跟单)
+        if default_path:
+            for code in sorted(held_codes_from_state() - set(tradable_codes)):
+                r = conn.execute("SELECT close FROM daily_bar WHERE code=? AND trade_date=?",
+                                 (code, date)).fetchone()
+                if r is not None:
+                    continue
+                recent = conn.execute(
+                    "SELECT count(*) FROM daily_bar WHERE code=? AND trade_date<? "
+                    "AND trade_date>=?", (code, date, cal.prev_trade_day(date, 5))).fetchone()[0]
+                if recent > 0:
+                    warnings.append(f"持仓 {code} 缺 {date} 数据(WARN,疑似停牌)")
+                else:
+                    raise DataCheckError(f"持仓 {code} 连续无日线数据(FAIL,疑数据缺口)")
 
         # ②③ 逐标的检查涨跌幅与复权因子(仅可交易标的)
         for code in tradable_codes:

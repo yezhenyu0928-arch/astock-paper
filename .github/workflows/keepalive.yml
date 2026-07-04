@@ -1,0 +1,47 @@
+name: keepalive
+# 卡B:每3天"访问并续存"DB cache,防 GitHub Actions 7天未访问即驱逐(覆盖春节/国庆长假)。
+# 原理:restore-keys 取回最新 db-* cache(daily 跑完的新鲜库)→ 校验非空 → 以新 key 再存一份,
+# 重置 7 天 TTL。restore 恒取最新,故不会把库回滚成旧快照。
+on:
+  schedule:
+    - cron: '17 3 */3 * *'    # 每3天 UTC03:17(北京11:17),错峰非整点
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: restore DB cache (latest db-*)
+        uses: actions/cache/restore@v4
+        with:
+          path: db/market.sqlite
+          key: db-keepalive-${{ github.run_id }}
+          restore-keys: db-
+      - name: verify DB present
+        id: verify
+        run: |
+          if [ -f db/market.sqlite ]; then
+            sz=$(stat -c%s db/market.sqlite)
+            echo "DB size=$sz bytes"
+            if [ "$sz" -lt 1000000 ]; then
+              echo "::warning::DB 异常小($sz),可能未命中缓存"; echo "ok=0" >> "$GITHUB_OUTPUT"
+            else
+              echo "ok=1" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "::warning::未命中任何 db-* cache(可能从未 backfill 或已被驱逐)"; echo "ok=0" >> "$GITHUB_OUTPUT"
+          fi
+      - name: re-save DB cache (reset 7-day TTL)
+        if: steps.verify.outputs.ok == '1'
+        uses: actions/cache/save@v4
+        with:
+          path: db/market.sqlite
+          key: db-keepalive-${{ github.run_id }}

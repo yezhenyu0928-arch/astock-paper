@@ -67,6 +67,12 @@
 | s4_smallcap@v1 | 小市值多因子 | 月 | 沪深300* | *数据可行性:沪深300内取最小市值演示;真小盘改 POOL_INDEX 为中证1000并重跑 backfill |
 | s5_grid@v1 | 大盘网格 | 日 | 沪深300ETF | PE分位择时+5档网格 |
 
+## 数据长期不失效(已内置四道保险)
+- **空库自检**:daily 每次先查 `daily_bar` 行数,<5万(疑似 Actions cache 被驱逐)立即告警并暂停当日跟单,提示你手动重跑 backfill。
+- **cache 保活**:`keepalive` 工作流每3天取回并续存 DB cache,重置 GitHub 的 7 天驱逐计时(覆盖春节/国庆长假)。
+- **推送不吞错**:snapshot 推送失败重试3次仍失败即告警(Pages 停更有感知);看板生成失败、基本面接口连续失败同样告警。
+- **月度接口回归**:`probe` 工作流每月1日跑数据接口回归(test_m1),akshare/baostock 漂移先在此暴露。
+
 ## 部署自检(照做即可确认每一环)
 1. **本地测试全绿**:`python tests/test_m1.py && python tests/test_m2.py && python tests/test_m4.py && python tests/test_risk.py && python tests/test_news.py`
 2. **回填成功**:backfill 工作流日志末尾出现"回填完成";或本地 `python backfill.py`。
