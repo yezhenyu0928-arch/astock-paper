@@ -42,7 +42,9 @@ schedule:
 
 news_layer:                   # 消息面层(SPEC_NEWS.md):只降险不追涨
   enabled: true
-  llm: false                  # true 需在 Secrets 配 ANTHROPIC_API_KEY
+  llm: false                  # true 需在 Secrets 配 ANTHROPIC_API_KEY(正式档:L1更保守则采纳)
+  llm_shadow: false           # 卡F:影子评估档。true 时每日算L1但不干预交易,仅记录到 state/news_shadow.csv;
+                              # 需配 ANTHROPIC_API_KEY。跑≥2周后 python eval_news.py 出评估报告,决定是否转正式 llm:true
   intraday_scan: true         # 盘中10:00/13:30/14:45三次黑天鹅扫描
   exposure_map: {-2: 0.0, -1: 0.5, 0: 1.0, 1: 1.0, 2: 1.0}
 

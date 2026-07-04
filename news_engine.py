@@ -55,12 +55,16 @@ def scan_market(date, conn=None):
                 ev.append(f"{w}({wt:+d}):{t[:30]}")
     score = max(-2, min(2, score))
     level = "L0"
-    # L1 大模型档:与 L0 取更保守者(更低分)
+    l0_score = score
+    # L1 大模型档:正式档与 L0 取更保守者;影子档(卡F)只记录不干预
     cfg = conf.load_config()
+    nl = cfg.get("news_layer") or {}
     l1 = _l1_market(date, cfg, titles)
     if l1 is not None:
         l1s = l1.get("market_score", 0)
-        if l1s < score:
+        if nl.get("llm_shadow") and not nl.get("llm"):
+            _log_shadow(date, l0_score, l1s, l1.get("top_risks", []))   # 影子:signal 仍用 L0
+        elif l1s < score:
             ev.append(f"[L1更保守 {l1s}] " + "；".join(l1.get("top_risks", [])[:2]))
             score = l1s
             level = "L1"
@@ -99,8 +103,9 @@ def scan_holdings(date, holdings, conn=None):
 
 
 def _l1_market(date, cfg, titles):
-    """L1 大模型档(P14)。失败/未启用返回 None(回退 L0)。"""
-    if not (cfg.get("news_layer") or {}).get("llm"):
+    """L1 大模型档(P14)。正式档(llm)或影子档(llm_shadow,卡F)启用时调用;失败/未启用返回 None。"""
+    nl = cfg.get("news_layer") or {}
+    if not (nl.get("llm") or nl.get("llm_shadow")):
         return None
     try:
         import news_llm
@@ -108,6 +113,21 @@ def _l1_market(date, cfg, titles):
     except Exception as e:
         log.warning("L1 失败,回退 L0: %s", e)
         return None
+
+
+def _log_shadow(date, l0, l1, top_risks):
+    """卡F 影子模式:把 (日期, L0分, L1分, L1更保守?, 证据) 追加到 state/news_shadow.csv,供 eval_news.py 评估。"""
+    import csv as _csv
+    p = conf.STATE_DIR / "news_shadow.csv"
+    exists = p.exists()
+    try:
+        with open(p, "a", encoding="utf-8", newline="") as f:
+            w = _csv.writer(f)
+            if not exists:
+                w.writerow(["date", "l0_score", "l1_score", "l1_stricter", "top_risks"])
+            w.writerow([date, l0, l1, int(l1 < l0), "；".join((top_risks or [])[:3])])
+    except Exception as e:
+        log.warning("影子日志写入失败:%s", e)
 
 
 def market_exposure_mult(date, ctx, cfg):
