@@ -24,9 +24,65 @@ CREATE INDEX IF NOT EXISTS idx_fund_date ON fundamental(trade_date);
 
 INDEX_PE_NAME = {"sh000300": "沪深300", "sh000905": "中证500", "sh000906": "中证800"}
 
+# 年度盈利质量(卡D:s1@v2 用)。annual 数据独立成表,按公告日防未来函数。
+ANNUAL_DDL = """
+CREATE TABLE IF NOT EXISTS stock_annual (
+  code TEXT NOT NULL, stat_year INTEGER NOT NULL,
+  roe REAL, net_profit REAL, pub_date TEXT,
+  PRIMARY KEY(code, stat_year));
+CREATE INDEX IF NOT EXISTS idx_annual_pub ON stock_annual(pub_date);
+"""
+
 
 def ensure():
     ensure_table(FUND_DDL)
+
+
+def ensure_annual():
+    ensure_table(ANNUAL_DDL)
+
+
+def update_annual_roe(codes, conn=None, start_year=2015, end_year=None):
+    """更新年度 ROE/净利润/公告日(卡D)。增量:从库内该code最大 stat_year 起(重取最后一年,防年报后补/更正)。"""
+    ensure_annual()
+    own = conn is None
+    if own:
+        conn = get_conn()
+    import datetime
+    end_year = end_year or datetime.date.today().year
+    n = 0
+    for code in codes:
+        code = util.with_prefix(code) if code[:2] not in ("sh", "sz", "bj") else code
+        if da.is_etf_code(code) or util.is_bj(code):
+            continue
+        mx = conn.execute("SELECT max(stat_year) FROM stock_annual WHERE code=?", (code,)).fetchone()[0]
+        s = max(start_year, int(mx)) if mx else start_year
+        df = da.fetch_annual_profit(code, s, end_year)
+        if df is None or df.empty:
+            continue
+        n += da.upsert(df, "stock_annual", conn=conn)
+    if own:
+        conn.close()
+    return n
+
+
+def roe_quality(code, date, years=3, min_roe=0.08, conn=None):
+    """防未来函数:取 pub_date<=date 的最近 years 个年报。返回 (pass, latest_roe)。
+    pass = 有满 years 个年报 且 全部 roe>min_roe(小数) 且 净利润>0。数据不足 → (False, None)。"""
+    own = conn is None
+    if own:
+        conn = get_conn()
+    date = util.to_date_str(date)
+    rows = conn.execute(
+        "SELECT roe, net_profit FROM stock_annual WHERE code=? AND pub_date IS NOT NULL AND pub_date<>'' "
+        "AND pub_date<=? ORDER BY stat_year DESC LIMIT ?", (code, date, years)).fetchall()
+    if own:
+        conn.close()
+    if len(rows) < years:
+        return (False, None)
+    latest = rows[0][0]
+    ok = all((r[0] is not None and r[0] > min_roe and (r[1] is None or r[1] > 0)) for r in rows)
+    return (ok, latest)
 
 
 def _div_yield_map(conn, code):

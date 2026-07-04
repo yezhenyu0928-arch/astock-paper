@@ -67,12 +67,26 @@ def main():
         if i % 50 == 0:
             print(f"  分红 {i}/{len(div_codes)} ({time.time()-t0:.0f}s)", flush=True)
 
-    print(f"== 6/6 基本面 PE/PB/市值/股息率({len(codes)}只) + 指数PE ==", flush=True)
+    print(f"== 6/7 基本面 PE/PB/市值/股息率({len(codes)}只) + 指数PE ==", flush=True)
     for i, code in enumerate(codes, 1):
         fundamental.update_stock_fundamental([code], conn=conn)
         if i % 50 == 0:
             print(f"  基本面 {i}/{len(codes)} ({time.time()-t0:.0f}s)", flush=True)
     fundamental.update_index_pe("sh000300", conn=conn)
+
+    print(f"== 7/7 年度ROE/净利润({len(codes)}只,卡D:s1@v2 用) ==", flush=True)
+    for i, code in enumerate(codes, 1):
+        fundamental.update_annual_roe([code], conn=conn, start_year=2015)
+        if i % 50 == 0:
+            print(f"  年度ROE {i}/{len(codes)} ({time.time()-t0:.0f}s)", flush=True)
+
+    # ETF 份额折算校正(卡C),确保回填后的ETF动量/NAV口径正确
+    try:
+        cfg, reg = __import__("conf").load_config(), __import__("conf").load_registry()
+        etfs = sorted(data.core_etf_codes(cfg, reg))
+        da.reconcile_etf_splits(etfs, conn=conn)
+    except Exception as e:
+        print("  ETF折算校正跳过:", e, flush=True)
 
     conn.close()
     da.bs_logout()

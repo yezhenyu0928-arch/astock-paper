@@ -332,6 +332,34 @@ def fetch_stock_fundamental(code: str, start: str, end: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def fetch_annual_profit(code: str, start_year: int, end_year: int) -> pd.DataFrame:
+    """年度盈利质量(卡D)。baostock query_profit_data Q4=全年:roeAvg(净资产收益率,小数)、netProfit(净利润,元)、
+    pubDate(公告日,防未来函数用)。返回 code,stat_year,roe,net_profit,pub_date。"""
+    bs = _bs()
+    bscode = _bs_code(code)
+    rows = []
+    for y in range(start_year, end_year + 1):
+        try:
+            rs = bs.query_profit_data(code=bscode, year=y, quarter=4)
+            data = []
+            while (rs.error_code == "0") and rs.next():
+                data.append(rs.get_row_data())
+            if not data:
+                continue
+            d = dict(zip(rs.fields, data[0]))
+            roe = pd.to_numeric(d.get("roeAvg"), errors="coerce")
+            npf = pd.to_numeric(d.get("netProfit"), errors="coerce")
+            pub = d.get("pubDate") or ""
+            if pd.notna(roe):
+                rows.append({"code": util.with_prefix(code), "stat_year": y,
+                             "roe": float(roe),
+                             "net_profit": (float(npf) if pd.notna(npf) else None),
+                             "pub_date": pub})
+        except Exception as e:
+            log.warning("年报ROE抓取失败 %s %d: %s", code, y, e)
+    return pd.DataFrame(rows)
+
+
 def fetch_index_pe(index_name: str = "沪深300") -> pd.DataFrame:
     """指数滚动市盈率历史(乐咕乐股)。返回 trade_date,pe。用于 S5 的PE分位。"""
     import akshare as ak

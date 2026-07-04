@@ -130,6 +130,10 @@ def run(date=None, only=None):
             try:
                 import fundamental as F
                 F.update_stock_fundamental(sorted(stock_codes), conn=conn)
+                # 卡D:s1@v2 启用时更新年度ROE。年报仅1-4月披露,故只在年报季(≤5月)增量更新,
+                # 其余月份年度数据不变、免每日300次baostock空取。首次库存由 backfill 填充。
+                if cfg.get("strategies", {}).get("s1_dividend@v2") and util.now_cn().month <= 5:
+                    F.update_annual_roe(sorted(stock_codes), conn=conn)
             except Exception as e:
                 fund_ok = False
                 log.warning("基本面更新失败(不阻断):%s", e)

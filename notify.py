@@ -22,6 +22,7 @@ PUSHPLUS_URL = "http://www.pushplus.plus/send"
 STRATEGY_CN = {
     "s2_etf@v1": "ETF动量轮动", "s1_dividend@v1": "红利低波", "s3_ma_trend@v1": "双均线趋势",
     "s4_smallcap@v1": "沪深300价值精选", "s5_grid@v1": "大盘估值网格", "s6_sector@v1": "行业ETF轮动",
+    "s1_dividend@v2": "红利低波·质量增强",
 }
 
 

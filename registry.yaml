@@ -25,6 +25,21 @@ s1_dividend@v1:
   universe: dynamic            # 全A过滤,generate_orders 内实现
   rebalance: monthly
 
+s1_dividend@v2:
+  class: strategies.s1_dividend.S1DividendQuality
+  benchmark: sh510300          # 沪深300ETF(数据可行;池已用沪深300)
+  frozen_date: 2026-07-06       # 卡D 注册入赛(v1 并行不受影响);ROE数据覆盖率98.8%,过门槛
+  params:
+    min_dividend_yield: 0.04   # 股息率下限
+    dividend_years: 3          # 连续分红年数
+    low_vol_pct: 0.30          # 波动率位于池内后30%
+    roe_years: 3               # 连续3年ROE门槛
+    roe_min: 0.08              # 每年ROE>8%(小数)且净利润>0
+    weights: {dividend: 0.4, low_vol: 0.3, roe: 0.3}   # 三因子排名打分权重
+    hold_n: 10                 # 等权持有
+  universe: dynamic            # 沪深300过滤,generate_orders 内实现
+  rebalance: monthly
+
 s3_ma_trend@v1:
   class: strategies.s3_ma_trend.S3MaTrend
   benchmark: sh510300
