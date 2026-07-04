@@ -173,6 +173,12 @@ def update_all(cfg=None, registry=None, extra_codes=None, with_members=True,
     conn = get_conn()
     try:
         result["etf_daily"] = update_daily(sorted(etfs), conn=conn)
+        # ETF 份额折算/拆分校正(卡C):防止折算日被当成假暴跌污染动量/NAV。幂等,宽基ETF为no-op。
+        try:
+            bu, dw = da.reconcile_etf_splits(sorted(etfs), conn=conn)
+            result["etf_split_fix"] = {"adj_rows": bu, "div_events": dw}
+        except Exception as e:
+            log.warning("ETF折算校正失败(不阻断):%s", e)
         result["index_daily"] = update_index_daily(sorted(benchmark_codes(registry)), conn=conn)
         if with_members:
             result["members_sh000300"] = update_members("sh000300", conn=conn)

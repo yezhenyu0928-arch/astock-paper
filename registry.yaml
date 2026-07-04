@@ -59,3 +59,21 @@ s5_grid@v1:
     tranches: 5                # 分5档建/减仓
   universe: [sh510300]
   rebalance: daily
+
+s6_sector@v1:
+  class: strategies.s6_sector.S6SectorMomentum
+  benchmark: sh510300
+  frozen_date: 2026-07-06       # 卡C 注册入赛(从注册日起跑,不追溯);五关报告见 reports/
+  params:
+    # 实现期微调(蓝图原 weekly[20,60]):weekly+短窗在2022-25震荡市严重whipsaw(全期-11.8%),
+    # 改 monthly[60,120](贴近西部证券行业动量研究方法),全期+36.6%/样本外+82.3% Calmar0.99。详见报告。
+    momentum_windows: [60, 120] # 双窗口收益率排名均值(3月/6月动量)
+    vol_window: 60             # 60日波动率(低波因子)
+    weights: {momentum: 0.8, low_vol: 0.2}   # 综合评分权重
+    hold_n: 1                  # 持有综合最强 1 只
+    rebalance: monthly         # 每月最后交易日(降低换手/摩擦)
+    safe_asset: sh511010       # 绝对动量<0时切换的国债ETF
+  # 行业ETF池:券商/半导体/医药/消费/军工/新能源/酒/光伏/银行 + 国债(避险)。
+  # 均上市≥3年、规模>20亿、日均成交>1亿(2021年后上市的新能源/酒/光伏在早期回测段数据不足会自动跳过)。
+  universe: [sh512000, sh512480, sh512010, sz159928, sh512660, sh516160,
+             sh512690, sh515790, sh512800, sh511010]
