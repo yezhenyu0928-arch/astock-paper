@@ -1,0 +1,36 @@
+{
+ "strategy_id": "s3_ma_trend@v1",
+ "init_capital": 50000.0,
+ "cash": 50000.0,
+ "positions": {},
+ "frozen": false,
+ "nav": 1.0,
+ "nav_history": [
+  [
+   "2026-07-03",
+   1.0
+  ]
+ ],
+ "pending": [
+  {
+   "strategy_id": "s3_ma_trend@v1",
+   "code": "sz301165",
+   "side": "buy",
+   "weight": 0.15,
+   "reason": "MA20上穿MA60+放量,买入锐捷网络[单票上限15%削仓]",
+   "signal_date": "2026-07-03",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  }
+ ],
+ "highest_nav": 1.0,
+ "settled_dates": [
+  "2026-07-03"
+ ],
+ "applied_div": [],
+ "aux": {}
+}

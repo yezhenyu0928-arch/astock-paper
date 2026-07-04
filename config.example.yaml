@@ -1,0 +1,56 @@
+# 复制为 config.yaml 后使用。普通用户只需要改 capital 和 smtp.user 两处。
+# 秘钥不写在这里!放 GitHub Secrets,运行时由环境变量注入:
+#   PUSHPLUS_TOKEN / SMTP_AUTH_CODE / DASHBOARD_PASSWORD
+
+user:
+  capital: 50000            # ←改成你计划将来实盘投入的金额,模拟按此建账
+  smtp:
+    host: smtp.qq.com
+    port: 465
+    user: your@qq.com       # ←改成你的邮箱(推送失败时的备用通知)
+
+costs:
+  commission_rate: 0.00025  # 佣金万2.5
+  commission_min: 5         # 最低5元
+  stamp_tax_sell: 0.0005    # 卖出印花税(实现时以现行税率核对)
+  slippage:
+    etf: 0.0005
+    stock: 0.0015
+
+risk:
+  strategy_max_drawdown: 0.15   # 策略熔断线
+  stop_loss:
+    trend: 0.08                 # s3 等趋势类个股止损
+    rotation: 0.12              # s1/s4 等轮动类
+  max_position_pct: 0.15        # 单票占账户上限
+  market_freeze:
+    day_drop: 0.03              # 沪深300单日跌幅
+    m20_drop: 0.10              # 20日累计跌幅
+  min_avg_amount: 50000000      # 个股20日日均成交额下限(元)
+
+strategies:                     # 开关:true 参与赛马。建议先只开 s2。
+  s2_etf@v1: true
+  s1_dividend@v1: false
+  s3_ma_trend@v1: false
+  s4_smallcap@v1: false
+  s5_grid@v1: false
+
+schedule:
+  signal_push_time: "18:00"     # 北京时间,仅用于消息标题展示
+
+news_layer:                   # 消息面层(SPEC_NEWS.md):只降险不追涨
+  enabled: true
+  llm: false                  # true 需在 Secrets 配 ANTHROPIC_API_KEY
+  intraday_scan: true         # 盘中10:00/13:30/14:45三次黑天鹅扫描
+  exposure_map: {-2: 0.0, -1: 0.5, 0: 1.0, 1: 1.0, 2: 1.0}
+
+custom:                        # 小资金适配与个性化(SPEC_FILL.md)
+  min_order_amount: 5000       # 单笔最低金额(最低佣金5元的成本保护)
+  min_ticket: 8000             # 单票最低配置额,决定持仓数随资金自适应
+  open_frac: {stock: 0.08, etf: 0.10}   # 开盘时段成交额占比(成交概率模型)
+  impact_k: {stock: 0.0020, etf: 0.0008} # 冲击成本系数
+  hold_n_override: {}          # 手动锁定某策略持仓数,如 {s1_dividend@v1: 5}
+  universe_exclude: []         # 你不想碰的代码黑名单
+  s2_universe_extra: []        # 追加ETF即注册s2@v2新赛道,旧曲线归档
+  push_times_intraday: ["10:00","13:30","14:45"]
+  risk_override: {}            # 只允许比默认更严,放松将被拒绝加载

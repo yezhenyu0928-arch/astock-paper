@@ -1,0 +1,52 @@
+name: daily
+on:
+  schedule:
+    - cron: '40 9 * * 1-5'    # UTC09:40 = 北京17:40 主触发
+    - cron: '10 10 * * 1-5'   # 北京18:10 补跑(run_daily 幂等,重复安全)
+  workflow_dispatch: {}        # 手动触发按钮(部署验证用)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt
+      # DB 用 cache 持久化(避免把大二进制提交进 git 造成仓库膨胀)。
+      # key 每次唯一以强制保存新版,restore-keys 前缀取回最近一次。
+      - name: restore DB cache
+        uses: actions/cache@v4
+        with:
+          path: db/market.sqlite
+          key: db-${{ github.run_id }}
+          restore-keys: db-
+      - name: run pipeline
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python run_daily.py
+      - name: alert on failure
+        if: failure()
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
+        run: python notify.py --alert "🔴 今日Actions任务失败,系统未正常运行,请暂停跟单并检查" || true
+      # 只提交文本快照(state/reports/docs),不提交 DB。docs/ 供 GitHub Pages。
+      - name: commit snapshot
+        run: |
+          git config user.name "astock-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add state/ reports/ docs/ || true
+          git commit -m "snapshot $(date -u +%F)" || echo "nothing to commit"
+          git pull --rebase --autostash || true
+          git push || true

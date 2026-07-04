@@ -1,0 +1,61 @@
+# 策略版本注册档案 —— 只增不改。改参数 = 注册新版本(如 s2_etf@v2)从零起跑。
+# 赛马公平性的根:净值曲线永不因中途调参而混接。
+
+s2_etf@v1:
+  class: strategies.s2_etf.S2EtfMomentum
+  benchmark: sh510300
+  frozen_date: 2026-07-03       # M3 验证完成,版本锁定入赛(五关报告见 reports/s2_etf_at_v1.md)
+  params:
+    momentum_windows: [20, 60] # 双窗口收益率排名取均值
+    hold_n: 1                  # 持有最强 n 只
+    rebalance: weekly          # 每周最后一个交易日
+    safe_asset: sh511010       # 绝对动量<0时切换的国债ETF
+  universe: [sh510300, sh510500, sh512890, sh518880, sh513100, sh511010]
+  # 沪深300 / 中证500 / 红利低波 / 黄金 / 纳指(QDII,T+0) / 国债
+
+s1_dividend@v1:
+  class: strategies.s1_dividend.S1DividendLowVol
+  benchmark: sh510300          # 沪深300ETF(数据可行:原中证红利未入库;池已用沪深300)
+  frozen_date: 2026-07-03       # 版本锁定入赛(报告见 reports/)
+  params:
+    min_dividend_yield: 0.04   # 股息率下限
+    dividend_years: 3          # 连续分红年数
+    low_vol_pct: 0.30          # 波动率位于池内后30%
+    hold_n: 10                 # 等权持有
+  universe: dynamic            # 全A过滤,generate_orders 内实现
+  rebalance: monthly
+
+s3_ma_trend@v1:
+  class: strategies.s3_ma_trend.S3MaTrend
+  benchmark: sh510300
+  frozen_date: 2026-07-03       # 版本锁定入赛(报告见 reports/)
+  params:
+    fast: 20                   # 20日均线上穿
+    slow: 60                   # 60日均线
+    vol_mult: 1.5              # 突破日成交量 > 20日均量×1.5
+    max_holdings: 10           # 单票权重=1/10
+  universe: index:sh000300     # 沪深300成分(历史快照)
+  rebalance: daily
+
+s4_smallcap@v1:
+  class: strategies.s4_smallcap.S4SmallCapFactor
+  benchmark: sh510300          # 沪深300ETF(数据可行:原中证2000未入库;池已用沪深300)
+  frozen_date: 2026-07-03       # 版本锁定入赛(报告见 reports/)
+  params:
+    pool_size: 400             # 过滤后市值最小400只
+    weights: {size: 0.5, pb: 0.3, momentum_20d: 0.2}   # 打分权重
+    hold_n: 20
+  universe: dynamic
+  rebalance: monthly
+
+s5_grid@v1:
+  class: strategies.s5_grid.S5IndexGrid
+  benchmark: sh510300
+  frozen_date: 2026-07-03       # 版本锁定入赛(报告见 reports/)
+  params:
+    pe_low: 0.30               # 沪深300 PE十年分位<30%区间分批买
+    pe_high: 0.70              # >70%区间分批卖
+    grid_step: 0.02            # 中间区间2%网格
+    tranches: 5                # 分5档建/减仓
+  universe: [sh510300]
+  rebalance: daily

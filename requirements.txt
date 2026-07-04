@@ -1,0 +1,9 @@
+akshare>=1.14
+baostock
+pandas>=2.0
+numpy
+pyyaml
+requests
+streamlit>=1.35
+plotly
+anthropic        # 仅 P14 大模型消息档(config news_layer.llm=true)才用;不启用可忽略

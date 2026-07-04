@@ -1,0 +1,33 @@
+name: backfill
+# 手动触发:构建/刷新历史数据 DB(首次部署,或 cache 被淘汰后重建)。
+# 跑完把 DB 存入 cache,供 daily/intraday 复用。
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt
+      - name: restore existing DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: db/market.sqlite
+          key: db-${{ github.run_id }}
+          restore-keys: db-
+      - name: backfill (ETF + 沪深300 个股/基本面/分红)
+        run: |
+          python -c "import data,conf; data.update_all(conf.load_config(), conf.load_registry(), with_members=True)"
+          python backfill.py
+      - name: save DB cache
+        uses: actions/cache/save@v4
+        with:
+          path: db/market.sqlite
+          key: db-${{ github.run_id }}

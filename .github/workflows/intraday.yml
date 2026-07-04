@@ -1,0 +1,37 @@
+name: intraday
+# 盘中增量扫描(SPEC_NEWS N4):只推送不落单。仅当 config news_layer.intraday_scan=true 才有动作。
+on:
+  schedule:
+    - cron: '0 2 * * 1-5'     # 北京10:00
+    - cron: '30 5 * * 1-5'    # 北京13:30
+    - cron: '45 6 * * 1-5'    # 北京14:45
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: intraday
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt
+      - name: restore DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: db/market.sqlite
+          key: db-${{ github.run_id }}
+          restore-keys: db-
+      - name: intraday scan
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python run_intraday.py
