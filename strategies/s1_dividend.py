@@ -53,15 +53,30 @@ class S1DividendLowVol(BaseStrategy):
         scored = sorted(keep, key=lambda x: 0.5 * dy_rank[x[0]] + 0.5 * vol_rank[x[0]])
         target = [c[0] for c in scored[:eff]]
 
+        # —— 仅供理由展示(卡H):只读排名/数值,不参与选股 ——
+        n_keep = len(keep)
+        cand_codes = {c[0] for c in cand}
+        keep_dy = {c[0]: c[1] for c in keep}
+        full_rank = {c[0]: i + 1 for i, c in enumerate(scored)}   # 综合分名次(1=最优)
+
         held = set(account.positions.keys())
         orders = []
         for code in held:
             if code not in target:
-                orders.append(Order(self.strategy_id, code, "sell", 0.0,
-                                    f"掉出红利低波前{eff},卖出{ctx.name(code)}", date))
+                nm = ctx.name(code)
+                if code in full_rank:
+                    reason = f"红利低波调仓:{nm}综合排名第{full_rank[code]}/{n_keep}掉出前{eff},卖出"
+                elif code in cand_codes:
+                    reason = f"红利低波:{nm}波动率升高、掉出低波区,卖出"
+                else:
+                    reason = f"红利低波:{nm}不再满足股息率≥{min_dy:.0%}或连续{years}年分红门槛,卖出"
+                orders.append(Order(self.strategy_id, code, "sell", 0.0, reason, date))
         for code in target:
             if code not in held:
-                dy = dict((c[0], c[1]) for c in keep)[code]
+                dy = keep_dy[code]
+                dyr = dy_rank[code] + 1                            # 股息率名次(降序,1=最高)
+                volpct = round((vol_rank[code] + 1) / n_keep * 100)  # 波动率池内分位(越低越稳)
                 orders.append(Order(self.strategy_id, code, "buy", w,
-                                    f"红利低波:买入{ctx.name(code)}(股息率{dy:.1%})", date))
+                                    f"红利低波:买入{ctx.name(code)}(股息率{dy:.1%}第{dyr}/{n_keep}"
+                                    f"·波动率池内最低{volpct}%)", date))
         return orders

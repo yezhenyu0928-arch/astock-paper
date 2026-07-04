@@ -37,7 +37,7 @@ class S3MaTrend(BaseStrategy):
             if code in held:
                 if close_now < ma_f_now:
                     orders.append(Order(self.strategy_id, code, "sell", 0.0,
-                                        f"跌破MA{fast},清仓{ctx.name(code)}", date))
+                                        f"收盘{close_now:.2f}跌破MA{fast}({ma_f_now:.2f}),清仓{ctx.name(code)}", date))
                 continue
             # 买:金叉 + 放量 + 可交易
             if not ctx.is_tradable(code, date):
@@ -50,13 +50,15 @@ class S3MaTrend(BaseStrategy):
             if not bar or avgvol <= 0 or bar["volume"] <= vol_mult * avgvol:
                 continue
             strength = close_now / ma_s_now - 1
-            buy_cands.append((strength, code))
+            volr = bar["volume"] / avgvol if avgvol else 0.0      # 量比(仅理由展示,不参与排序)
+            buy_cands.append((strength, code, volr))
 
         # 空位 = eff - 现有持仓(扣除本轮将卖出的)
         selling = {o.code for o in orders}
         slots = max(0, eff - (len(held) - len(selling)))
-        buy_cands.sort(reverse=True)
-        for _, code in buy_cands[:slots]:
+        buy_cands.sort(reverse=True)                              # code 唯一,追加 volr 不改排序结果
+        for strength, code, volr in buy_cands[:slots]:
             orders.append(Order(self.strategy_id, code, "buy", w,
-                                f"MA{fast}上穿MA{slow}+放量,买入{ctx.name(code)}", date))
+                                f"MA{fast}上穿MA{slow},量比{volr:.1f}倍,买入{ctx.name(code)}"
+                                f"(站上MA{slow}幅度{strength:+.1%})", date))
         return orders

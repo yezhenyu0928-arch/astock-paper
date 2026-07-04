@@ -49,14 +49,25 @@ class S4SmallCapFactor(BaseStrategy):
                                              + weights["momentum_20d"] * mom_rank[x[0]]))
         target = [c[0] for c in scored[:eff]]
 
+        # —— 仅供理由展示(卡H):只读数值/排名,不参与选股 ——
+        meta = {c[0]: (c[1], c[2], c[3]) for c in cand}          # code -> (市值, PB, 20日动量)
+        size_pos = {c[0]: i + 1 for i, c in enumerate(sorted(cand, key=lambda x: x[1]))}  # 1=最小市值
+        full_rank = {c[0]: i + 1 for i, c in enumerate(scored)}  # 综合分名次(1=最优)
+
         held = set(account.positions.keys())
         orders = []
         for code in held:
             if code not in target:
-                orders.append(Order(self.strategy_id, code, "sell", 0.0,
-                                    f"掉出小市值前{eff},卖出{ctx.name(code)}", date))
+                nm = ctx.name(code)
+                if code in full_rank:
+                    reason = f"小市值调仓:{nm}综合排名第{full_rank[code]}/{n}掉出前{eff},卖出"
+                else:
+                    reason = f"小市值:{nm}掉出候选池(市值/流动性/上市满1年过滤),卖出"
+                orders.append(Order(self.strategy_id, code, "sell", 0.0, reason, date))
         for code in target:
             if code not in held:
+                mcap, pb, ret20 = meta[code]
                 orders.append(Order(self.strategy_id, code, "buy", w,
-                                    f"小市值多因子:买入{ctx.name(code)}", date))
+                                    f"小市值价值:买入{ctx.name(code)}(市值{mcap/1e8:.0f}亿第{size_pos[code]}小"
+                                    f"·PB{pb:.2f}·20日{ret20:+.1%}·综合分第{full_rank[code]}/{n})", date))
         return orders

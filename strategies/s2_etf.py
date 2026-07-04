@@ -40,22 +40,34 @@ class S2EtfMomentum(BaseStrategy):
 
         # 绝对动量:best 的最短窗口收益<0 → 切避险(国债ETF)
         w0 = min(windows)
+        orig_best = best                                # 仅供理由展示(卡H)
+        switched_safe = False
         if rets[best][w0] < 0:
             best = safe
+            switched_safe = True
 
         held = set(account.positions.keys())
         if held == {best}:
             return []                                   # 已只持有 best,无需操作
 
+        best_name = ctx.name(best)
         orders = []
         for code in held:
             if code != best:
+                if switched_safe:
+                    reason = f"动量轮动:换出{ctx.name(code)}(最强{ctx.name(orig_best)}绝对动量转负,避险)"
+                else:
+                    reason = f"动量轮动:换出{ctx.name(code)},轮入更强的{best_name}"
                 orders.append(Order(strategy_id=self.strategy_id, code=code, side="sell",
-                                    weight=0.0, reason=f"动量轮动:卖出{ctx.name(code)}", signal_date=date))
+                                    weight=0.0, reason=reason, signal_date=date))
         if best not in held:
-            r_show = rets.get(best, {}).get(w0)
-            reason = (f"动量轮动:买入最强 {ctx.name(best)}(r{w0}={r_show:.1%})"
-                      if r_show is not None else f"避险:买入{ctx.name(best)}(绝对动量为负)")
+            if switched_safe:
+                r0 = rets[orig_best][w0]
+                reason = (f"避险:买入{best_name}(最强{ctx.name(orig_best)} r{w0}={r0:+.1%}<0,"
+                          f"绝对动量为负,全仓避险)")
+            else:
+                rtxt = " ".join(f"r{wn}={rets[best][wn]:+.1%}" for wn in windows)
+                reason = f"动量轮动:买入最强 {best_name}({rtxt},{len(rets)}只中第1)"
             orders.append(Order(strategy_id=self.strategy_id, code=best, side="buy",
                                 weight=0.98, reason=reason, signal_date=date))
         return orders
