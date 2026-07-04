@@ -13,6 +13,7 @@ import time
 import logging
 import contextlib
 import pandas as pd
+import requests
 
 import util
 from db import get_conn, init_db
@@ -335,6 +336,80 @@ def fetch_index_pe(index_name: str = "沪深300") -> pd.DataFrame:
     df["trade_date"] = df["trade_date"].astype(str).str[:10]
     df["pe"] = pd.to_numeric(df["pe"], errors="coerce")
     return df[["trade_date", "pe"]].dropna()
+
+
+# ============ 实时行情(卡G:盘中开盘校准用) ============
+# 唯一取数入口原则:实时价也走本文件。腾讯 qt.gtimg.cn(无需 referer,主) → 新浪 hq.sinajs.cn(备)。
+# 均 GBK 编码、返回 JS 变量赋值。Actions 无代理直连;单只失败跳过(上层回退昨收)。
+def _parse_tencent(text):
+    out = {}
+    for line in text.split(";"):
+        line = line.strip()
+        if not line.startswith("v_") or "=" not in line:
+            continue
+        try:
+            head, payload = line.split("=", 1)
+            code = head[2:].strip()                       # v_sh510300 -> sh510300
+            f = payload.strip().strip('"').split("~")
+            price, prev = float(f[3]), float(f[4])
+            openp = float(f[5]) if len(f) > 5 and f[5] else 0.0
+            t = f[30] if len(f) > 30 else ""
+            if price > 0:
+                out[code] = {"price": price, "prev_close": prev, "open": openp, "time": t}
+        except Exception:
+            continue
+    return out
+
+
+def _parse_sina(text):
+    out = {}
+    for line in text.split(";"):
+        line = line.strip()
+        if "hq_str_" not in line or "=" not in line:
+            continue
+        try:
+            head, payload = line.split("=", 1)
+            code = head.split("hq_str_")[1].strip()
+            f = payload.strip().strip('"').split(",")
+            if len(f) < 4:
+                continue
+            openp, prev, price = float(f[1]), float(f[2]), float(f[3])
+            t = (f[30] + " " + f[31]) if len(f) > 31 else ""
+            if price > 0:
+                out[code] = {"price": price, "prev_close": prev, "open": openp, "time": t}
+        except Exception:
+            continue
+    return out
+
+
+def _fetch_tencent(codes):
+    r = requests.get("https://qt.gtimg.cn/q=" + ",".join(codes), timeout=6)
+    r.encoding = "gbk"
+    return _parse_tencent(r.text)
+
+
+def _fetch_sina(codes):
+    r = requests.get("https://hq.sinajs.cn/list=" + ",".join(codes), timeout=6,
+                     headers={"Referer": "https://finance.sina.com.cn"})
+    r.encoding = "gbk"
+    return _parse_sina(r.text)
+
+
+def fetch_realtime(codes) -> dict:
+    """实时行情。返回 {code: {price, prev_close, open, time}}。多源兜底,缺失的标的不在返回里。"""
+    codes = [c for c in dict.fromkeys(codes) if c]
+    if not codes:
+        return {}
+    out = {}
+    for name, fn in (("tencent", _fetch_tencent), ("sina", _fetch_sina)):
+        missing = [c for c in codes if c not in out]
+        if not missing:
+            break
+        try:
+            out.update(_retry(lambda: fn(missing), tries=2, what=f"realtime_{name}"))
+        except Exception as e:
+            log.warning("实时行情 %s 失败: %s", name, e)
+    return out
 
 
 # ============ 分红(除权) ============

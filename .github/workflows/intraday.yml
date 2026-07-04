@@ -1,10 +1,11 @@
 name: intraday
-# 盘中增量扫描(SPEC_NEWS N4):只推送不落单。仅当 config news_layer.intraday_scan=true 才有动作。
+# 盘中任务:09:35 开盘校准(卡G,按实时价重算今日操作股数/金额) + 10:00/13:30/14:45 黑天鹅扫描(SPEC_NEWS N4)。
 on:
   schedule:
-    - cron: '0 2 * * 1-5'     # 北京10:00
-    - cron: '30 5 * * 1-5'    # 北京13:30
-    - cron: '45 6 * * 1-5'    # 北京14:45
+    - cron: '35 1 * * 1-5'    # 北京09:35 开盘校准(卡G)
+    - cron: '0 2 * * 1-5'     # 北京10:00 扫描
+    - cron: '30 5 * * 1-5'    # 北京13:30 扫描
+    - cron: '45 6 * * 1-5'    # 北京14:45 扫描
   workflow_dispatch: {}
 
 permissions:
@@ -29,9 +30,17 @@ jobs:
           path: db/market.sqlite
           key: db-${{ github.run_id }}
           restore-keys: db-
-      - name: intraday scan
+      - name: intraday task (09:35→校准 / 其余→扫描)
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python run_intraday.py
+        run: |
+          MODE=auto
+          if [ "${{ github.event.schedule }}" = "35 1 * * 1-5" ]; then
+            MODE=calibrate
+          elif [ -n "${{ github.event.schedule }}" ]; then
+            MODE=scan
+          fi
+          echo "intraday mode=$MODE"
+          python run_intraday.py --mode "$MODE"
