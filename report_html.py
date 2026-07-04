@@ -587,11 +587,21 @@ def generate_trades(conn, out_path=None, cap=800):
     sections = ""
     if live_rows:
         live_rows.sort(key=lambda r: r.get("trade_date", ""), reverse=True)
-        sections += (f"<details open><summary>🔴 实盘模拟成交（2026-07-06 起，共{len(live_rows)}笔）</summary>"
+        sections += (f"<details open><summary>🔴 实盘模拟成交 · 全部（2026-07-06 起，共{len(live_rows)}笔）</summary>"
                      f"{table(live_rows, truncate=False)}</details>")
+        # 按策略筛选(纯 HTML 分组,卡E):每个有成交的策略一个可折叠子块
+        by_sid = {}
+        for r in live_rows:
+            by_sid.setdefault(r.get("strategy_id", "?"), []).append(r)
+        if len(by_sid) > 1:
+            sections += "<div class='subhead'>按策略筛选</div>"
+            for sid in sorted(by_sid):
+                rows = by_sid[sid]
+                sections += (f"<details><summary>{_cn(sid)}（{len(rows)}笔）</summary>"
+                             f"{table(rows, truncate=False)}</details>")
     else:
         sections += ("<details open><summary>🔴 实盘模拟成交（2026-07-06 起）</summary>"
-                     "<p class='empty'>实盘模拟期尚未产生成交（首个交易日为 2026-07-06）。</p></details>")
+                     "<p class='empty'>实盘模拟期尚未产生成交（首个交易日为 2026-07-06）。上线后此处将按“全部 + 按策略筛选”分组展示。</p></details>")
     for sid in sids:
         p = conf.REPORTS_DIR / f"{sid.replace('@','_at_')}_trades.csv"
         if not p.exists():
@@ -724,6 +734,7 @@ summary{cursor:pointer;font-weight:600;padding:8px 0}
 .t td.rs{white-space:normal;text-align:left;color:var(--mut);min-width:120px}
 .t tr.buy td:nth-child(2){color:var(--up);font-weight:600}.t tr.sell td:nth-child(2){color:var(--down);font-weight:600}
 .tw{overflow-x:auto}.empty{color:var(--mut);text-align:center;padding:24px}
+.subhead{margin:16px 2px 6px;font-size:14px;font-weight:600;color:#334155}
 .foot{color:var(--mut);font-size:12px;margin-top:24px;border-top:1px solid var(--line);padding-top:12px}
 </style>"""
 
