@@ -427,6 +427,22 @@ def _hold_days(bdate, today):
         return 0
 
 
+_WD = "一二三四五六日"
+
+
+def _exec_date(pendings):
+    """待执行订单的开盘执行日 = 其信号日的下一个交易日(与撮合口径一致)。返回 (date_str, 周X, 是否=今天)。"""
+    sig = max((o.get("signal_date", "") for o in pendings), default="")
+    if not sig:
+        return None, "", False
+    try:
+        d = cal.next_trade_day(sig)
+        wd = _WD[datetime.strptime(d, "%Y-%m-%d").weekday()]
+    except Exception:
+        return None, "", False
+    return d, wd, (d == util.today_str())
+
+
 # ---------------- 主生成 ----------------
 def generate(out_path=None):
     accts = _load_accounts()
@@ -439,7 +455,17 @@ def generate(out_path=None):
         conn = None
     last, banner = _freshness(conn) if conn else ("—", "")
 
-    # ===== 今日操作聚合 =====
+    # ===== 操作计划聚合(按执行日,而非"今日";每条明确标注所属策略) =====
+    all_pending = [o for a in accts.values() for o in a.get("pending", [])]
+    exec_d, exec_wd, is_today = _exec_date(all_pending)
+    if all_pending and exec_d:
+        ops_title = ("今日操作" if is_today else f"操作计划（{exec_d[5:]} 周{exec_wd} 开盘跟单）")
+        head_txt = (f"【操作计划】将于 {exec_d} 周{exec_wd} 开盘按价格带手动跟单"
+                    if not is_today else "【今日操作】按开盘价附近手动跟单")
+    else:
+        ops_title = "操作计划"
+        head_txt = ""
+
     op_rows_html = []
     copy_lines = []
     for sid, a in sorted(accts.items()):
@@ -456,23 +482,25 @@ def generate(out_path=None):
             op_rows_html.append(
                 f"<div class='op {cls}' data-code='{o['code']}' data-side='{o['side']}' "
                 f"data-amount='{amt:.0f}' data-ref='{util.r2(ref)}'>"
-                f"<b>{side_cn} {util.bare(o['code'])} {html.escape(nm)}</b>"
-                f"<span class='sname'>{_cn(sid)}</span>"
+                f"<div class='op-hd'><span class='chip'>{_cn(sid)}</span>"
+                f"<b>{side_cn} {util.bare(o['code'])} {html.escape(nm)}</b></div>"
                 f"<span class='q'>{qty} · 参考价 {util.r2(ref)}</span>"
                 f"<span class='reason'>{html.escape(o.get('reason', ''))}</span>{band}</div>")
-            copy_lines.append(f"{side_cn} {util.bare(o['code'])} {nm} {qty} 参考价{util.r2(ref)}（{_cn(sid)}）")
+            copy_lines.append(f"【{_cn(sid)}】{side_cn} {util.bare(o['code'])} {nm} {qty} 参考价{util.r2(ref)}")
     if op_rows_html:
-        copy_js = json.dumps("\n".join(copy_lines), ensure_ascii=False)
+        copy_js = json.dumps((f"操作计划 {exec_d}(周{exec_wd})开盘跟单：\n" if exec_d else "") + "\n".join(copy_lines),
+                             ensure_ascii=False)
         ops_section = (
-            "<div class='ops-head'><span>【今日操作】按次日开盘价附近手动跟单</span>"
+            f"<div class='ops-head'><span>{head_txt}</span>"
             f"<button class='copybtn' onclick='copyOps()'>📋 复制指令</button></div>"
             + "".join(op_rows_html)
-            + "<div class='op-note'>页面会尝试用实时价校准股数与金额（失败则显示“昨收参考”，不影响其他功能）。</div>"
+            + "<div class='op-note'>每条操作左侧标签为所属策略；页面会尝试用实时价校准股数与金额（失败则显示“昨收参考”）。</div>"
             + f"<script>var OPS_TEXT={copy_js};function copyOps(){{"
-              "if(navigator.clipboard){navigator.clipboard.writeText(OPS_TEXT).then(function(){alert('已复制今日操作指令');},"
+              "if(navigator.clipboard){navigator.clipboard.writeText(OPS_TEXT).then(function(){alert('已复制操作指令');},"
               "function(){alert('复制失败，请手动选择');});}else{alert('浏览器不支持一键复制，请手动选择');}}</script>")
     else:
-        ops_section = "<div class='op none'>今日无操作（空仓或未到调仓日）。</div>"
+        ops_section = ("<div class='op none'>暂无待执行操作（各策略空仓或未到调仓日）。"
+                       "上线首个交易日 2026-07-06 起，有操作时此处按策略列出。</div>")
 
     # ===== 实盘赛马总览 =====
     ov = ""
@@ -517,7 +545,7 @@ def generate(out_path=None):
                 f"<b>{'卖出' if is_sell else '买入'} {util.bare(o['code'])} {html.escape(nm)}</b>"
                 f"<span class='q'>{qty} · 参考价 {util.r2(ref)}</span>"
                 f"<span class='reason'>{html.escape(o.get('reason', ''))}</span></div>")
-        ops = "".join(op_items) or "<div class='op none'>今日无操作</div>"
+        ops = "".join(op_items) or "<div class='op none'>无待执行操作</div>"
         cards += (
             f"<div class='card'>"
             f"<div class='card-h'><b>{meta['name']}</b><span class='risk'>{meta['risk']}</span>"
@@ -526,7 +554,7 @@ def generate(out_path=None):
             f"<details><summary>📈 实盘收益率曲线（07-06 起）当前 "
             f"<span style='color:{up_color};font-weight:700'>{cur_txt}</span></summary>{chart}{bt_html}</details>"
             f"<div class='sub2'>最新持仓</div>{_positions_table(conn, a, sid, log_rows)}"
-            f"<div class='sub2'>今日操作</div>{ops}"
+            f"<div class='sub2'>操作计划</div>{ops}"
             f"</div>")
     if not accts:
         cards = "<p class='empty'>暂无策略状态。请先运行 run_daily.py 或回测生成 state/。</p>"
@@ -535,7 +563,7 @@ def generate(out_path=None):
         f"<h1>📊 A股模拟跟单看板</h1>"
         f"<div class='sub'>生成 {today} · 数据最新 {last} · 实盘模拟期自 2026-07-06 起 · 模拟/历史不代表未来，非投资建议，人工跟单</div>"
         f"{banner}"
-        f"<div class='sec'>今日操作</div>{ops_section}"
+        f"<div class='sec'>{ops_title}</div>{ops_section}"
         f"<div class='sec'>实盘赛马总览（2026-07-06 起算）</div>{overview}"
         f"<div class='sec'>各策略详情</div>{cards}"
         f"<div class='sec'><a href='trades.html'>📜 查看全部历史交易记录 →</a></div>"
@@ -650,7 +678,8 @@ th{background:#f0f2f5;color:var(--mut);font-weight:600}td.l,th:first-child{text-
 .op{padding:9px 12px;border-radius:9px;margin:6px 0;font-size:14px}
 .op.buy{background:#fef2f2;color:#991b1b}.op.sell{background:#ecfdf5;color:#065f46}
 .op.none{background:#f3f4f6;color:var(--mut)}
-.op .sname{display:inline-block;margin-left:8px;font-size:11.5px;color:var(--mut);font-weight:600}
+.op .op-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px}
+.op .chip{display:inline-block;background:#fff;border:1px solid rgba(0,0,0,.18);color:#1f2937;font-size:11.5px;font-weight:700;padding:1px 9px;border-radius:999px;white-space:nowrap}
 .op .q{display:block;font-size:13px;color:#374151;margin:3px 0}
 .op .reason{display:block;color:var(--mut);font-size:12.5px}
 .op .band{font-size:11.5px;color:#9a3412;margin-top:3px}
@@ -674,7 +703,7 @@ details{margin:8px 0}summary{cursor:pointer;font-size:13.5px;color:#334155;paddi
 </style>"""
 
 _FOOTER = """<div class="foot">
-<b>怎么用</b>：每天 18:00 前后微信收到推送，次日开盘按『今日操作』价格带手动跟单；没收到心跳=系统故障，当天别跟单。<br>
+<b>怎么用</b>：每天 18:00 前后微信收到推送，次日开盘按『操作计划』的价格带手动跟单（每条已标注所属策略）；没收到心跳=系统故障，当天别跟单。<br>
 <b>观察期纪律</b>：第0-2周只看不投；满季度后若赛马正常，5万低风险参考配比 = 大盘网格30%+ETF轮动25%+红利低波25%+行业轮动10%+现金10%（S3/S4仅观察）。任何策略熔断→该部分转现金等复核。<br>
 <b>数据来源</b>：sina/baostock/东财 免费源，每交易日17:40自动更新；页面顶部横幅提示数据新鲜度。<br>
 <b>免责</b>：本页由 report_html.py 自动生成，零外部依赖可离线打开；模拟/历史表现不代表未来，不构成投资建议，请仅用可承受损失的资金。
