@@ -108,9 +108,16 @@ class SqlContext:
         return bool(s and s.get("is_t0"))
 
     def is_tradable(self, code: str, date: str) -> bool:
-        """未停牌、未退市、上市满60日、非ST、非北交所。"""
+        """未停牌、未退市、上市满60日、非ST、非北交所。
+        若 config.custom.exclude_star_chinext=true,则科创板(688)/创业板(300/301)也不可买
+        (用户未开通这些权限时用;卖出不受限,见策略)。"""
         date = util.to_date_str(date)
+        cust = self.cfg.get("custom") or {}
         if util.is_bj(code):
+            return False
+        if cust.get("exclude_star_chinext") and util.is_star_or_chinext(code):
+            return False
+        if code in (cust.get("universe_exclude") or []):
             return False
         b = self.bar(code, date)
         if b is None or b.get("is_suspended"):

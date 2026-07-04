@@ -81,15 +81,51 @@ def _pct(x):
     return f"{x:+.1%}" if x is not None else "—"
 
 
+def _latest_close(conn, code):
+    try:
+        r = conn.execute("SELECT close FROM daily_bar WHERE code=? ORDER BY trade_date DESC LIMIT 1",
+                         (code,)).fetchone()
+        return float(r[0]) if r else 0.0
+    except Exception:
+        return 0.0
+
+
+def ctx_name(conn, code):
+    try:
+        r = conn.execute("SELECT name FROM security WHERE code=?", (code,)).fetchone()
+        return r[0] if r and r[0] else util.bare(code)
+    except Exception:
+        return util.bare(code)
+
+
+def _acct_total(conn, a):
+    total = a.get("cash", 0)
+    for code, p in a.get("positions", {}).items():
+        total += p.get("shares", 0) * _latest_close(conn, code)
+    return total
+
+
+def _op_qty(conn, a, o):
+    """返回(数量描述, 参考价)。买:约x%≈y股;卖:全部x股。参考价=最新收盘。"""
+    code = o["code"]
+    close = _latest_close(conn, code)
+    if o["side"] == "sell" or o.get("weight", 0) == 0:
+        held = a.get("positions", {}).get(code, {}).get("shares", 0)
+        return f"全部{held}股", close
+    total = _acct_total(conn, a)
+    est = util.floor100(total * o.get("weight", 0) / close) if close else 0
+    return f"约{o['weight']*100:.0f}%≈{est}股", close
+
+
 def generate(out_path=None):
     accts = _load_accounts()
     today = util.today_str()
+    from db import get_conn
     try:
-        from db import get_conn
         conn = get_conn()
         last = conn.execute("SELECT max(trade_date) FROM daily_bar").fetchone()[0]
-        conn.close()
     except Exception:
+        conn = None
         last = "—"
 
     # 总览表
@@ -110,13 +146,18 @@ def generate(out_path=None):
         rows += (f"<tr><td>{_cn(sid)}</td>"
                  f"<td style='color:{cumcolor}'>{bt_cum}</td><td>{bt_dd}</td><td>{bt_cal}</td>"
                  f"<td>{verdict or '—'}</td></tr>")
-        # 卡片(含曲线 + 今日操作)
+        # 卡片(含曲线 + 今日操作:代码/名称/参考价/股数/理由)
         pend = a.get("pending", [])
-        ops = "".join(
-            f"<div class='op {'sell' if o['side']=='sell' else 'buy'}'>"
-            f"{'卖出' if o['side']=='sell' else '买入'} {util.bare(o['code'])} "
-            f"<span class='reason'>{html.escape(o.get('reason','')[:40])}</span></div>" for o in pend)
-        ops = ops or "<div class='op none'>今日无操作</div>"
+        op_items = []
+        for o in pend:
+            qty, ref = _op_qty(conn, a, o) if conn else ("", 0)
+            nm = ctx_name(conn, o["code"])
+            op_items.append(
+                f"<div class='op {'sell' if o['side']=='sell' else 'buy'}'>"
+                f"<b>{'卖出' if o['side']=='sell' else '买入'} {util.bare(o['code'])} {nm}</b>"
+                f"<span class='q'>{qty} · 参考价{util.r2(ref)}</span>"
+                f"<span class='reason'>{html.escape(o.get('reason','')[:50])}</span></div>")
+        ops = "".join(op_items) or "<div class='op none'>今日无操作(空仓或未到调仓日)</div>"
         live_m = (f"<div class='m'>实盘跟踪: 净值 {a.get('nav',1):.3f} · "
                   f"累计 {_pct(m['total']) if m else '今日起步'}</div>") if m else \
                  f"<div class='m'>实盘跟踪: 今日起步(曲线随天数累积)</div>"
@@ -135,6 +176,63 @@ def generate(out_path=None):
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(html_doc)
+    # 同步生成历史交易页
+    try:
+        generate_trades(conn)
+    except Exception:
+        pass
+    if conn:
+        conn.close()
+    return str(out_path)
+
+
+def generate_trades(conn, out_path=None, cap=800):
+    """历史交易页 docs/trades.html:各策略回测全量成交(reports/{sid}_trades.csv)+实盘流水,折叠表,手机友好。"""
+    import csv
+    sids = ["s2_etf@v1", "s1_dividend@v1", "s3_ma_trend@v1", "s4_smallcap@v1", "s5_grid@v1"]
+    live_rows = []
+    live_csv = conf.STATE_DIR / "trade_log.csv"
+    if live_csv.exists():
+        with open(live_csv, encoding="utf-8") as f:
+            live_rows = [r for r in csv.DictReader(f) if r.get("status") in ("filled", "cut_liquidity")]
+
+    def table(rows):
+        body = ""
+        for r in rows[:cap]:
+            side = "卖出" if r.get("side") == "sell" else "买入"
+            cls = "sell" if r.get("side") == "sell" else "buy"
+            nm = ctx_name(conn, r.get("code", "")) if conn else util.bare(r.get("code", ""))
+            real = r.get("real_price") or ""
+            body += (f"<tr class='{cls}'><td>{r.get('trade_date','')}</td><td>{side}</td>"
+                     f"<td>{util.bare(r.get('code',''))} {nm}</td><td>{r.get('shares','')}</td>"
+                     f"<td>{r.get('sim_price','')}</td><td>{real}</td>"
+                     f"<td class='rs'>{html.escape((r.get('reason','') or '')[:44])}</td></tr>")
+        head = ("<table class='t'><tr><th>日期</th><th>方向</th><th>标的</th><th>股数</th>"
+                "<th>模拟价</th><th>实盘价</th><th>理由</th></tr>")
+        return head + body + "</table>"
+
+    sections = ""
+    for sid in sids:
+        p = conf.REPORTS_DIR / f"{sid.replace('@','_at_')}_trades.csv"
+        if not p.exists():
+            continue
+        with open(p, encoding="utf-8") as f:
+            rows = [r for r in csv.DictReader(f) if r.get("status") in ("filled", "cut_liquidity")]
+        rows.sort(key=lambda r: r.get("trade_date", ""), reverse=True)
+        note = f"共{len(rows)}笔" + (f",显示最近{cap}笔" if len(rows) > cap else "")
+        sections += (f"<details><summary>{_cn(sid)} · 回测成交 {note}</summary>{table(rows)}</details>")
+    if live_rows:
+        live_rows.sort(key=lambda r: r.get("trade_date", ""), reverse=True)
+        sections += (f"<details open><summary>🔴 实盘模拟成交(上线后,共{len(live_rows)}笔)</summary>"
+                     f"{table(live_rows)}</details>")
+    if not sections:
+        sections = "<p class='empty'>暂无交易记录。运行 gen_reports.py 生成回测流水。</p>"
+
+    doc = _TRADES_TEMPLATE.format(today=util.today_str(), sections=sections)
+    out_path = out_path or (conf.ROOT / "docs" / "trades.html")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(doc)
     return str(out_path)
 
 
@@ -157,7 +255,8 @@ th{{background:#f0f2f5;color:var(--mut);font-weight:600}}td:first-child,th:first
 .m{{color:var(--mut);font-size:13px;margin:6px 0}}
 .ops{{margin-top:8px}}.op{{padding:6px 10px;border-radius:8px;margin:4px 0;font-size:13px}}
 .op.buy{{background:#ecfdf5;color:#065f46}}.op.sell{{background:#fef2f2;color:#991b1b}}
-.op.none{{background:#f3f4f6;color:var(--mut)}}.reason{{color:var(--mut)}}
+.op.none{{background:#f3f4f6;color:var(--mut)}}
+.op .q{{display:block;font-size:12.5px;color:#374151;margin:3px 0}}.reason{{display:block;color:var(--mut);font-size:12.5px}}
 .badge{{color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:6px}}
 .bt{{background:#f0f7ff;color:#1e40af;font-size:12.5px;padding:6px 10px;border-radius:8px;margin:6px 0}}
 .sec{{margin:22px 0 8px;font-size:16px;font-weight:600}}
@@ -170,8 +269,38 @@ th{{background:#f0f2f5;color:var(--mut);font-weight:600}}td:first-child,th:first
 <table><tr><th>策略</th><th>累计</th><th>回撤</th><th>Calmar</th><th>判定</th></tr>{rows}</table>
 <div class="sec">各策略详情 &amp; 今日操作</div>
 {cards}
+<div class="sec"><a href="trades.html" style="color:#2563eb;text-decoration:none">📜 查看各策略全部历史交易记录 →</a></div>
 <div class="foot">本页由 report_html.py 自动生成,零外部依赖,可离线打开。<br>
 每次买卖以推送与本页『今日操作』为准,按次日开盘价附近跟单。触发🔴熔断的策略已自动清仓降险。</div>
+</div></body></html>"""
+
+
+_TRADES_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>历史交易记录</title>
+<style>
+:root{{--bg:#f6f7f9;--fg:#1f2937;--mut:#6b7280;--card:#fff;--line:#e5e7eb}}
+*{{box-sizing:border-box}}body{{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+background:var(--bg);color:var(--fg);font-size:14px;line-height:1.5}}
+.wrap{{max-width:820px;margin:0 auto;padding:16px}}
+h1{{font-size:20px;margin:8px 0}}.sub{{color:var(--mut);font-size:13px;margin-bottom:14px}}
+a{{color:#2563eb;text-decoration:none}}
+details{{background:var(--card);border-radius:10px;margin:10px 0;padding:6px 12px;box-shadow:0 1px 3px rgba(0,0,0,.05)}}
+summary{{cursor:pointer;font-weight:600;padding:8px 0}}
+.t{{width:100%;border-collapse:collapse;font-size:12.5px;margin:6px 0}}
+.t th,.t td{{padding:6px 5px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap}}
+.t th{{background:#f0f2f5;color:var(--mut);position:sticky;top:0}}
+.t td.rs{{white-space:normal;text-align:left;color:var(--mut);min-width:120px}}
+.t tr.buy td:nth-child(2){{color:#065f46}}.t tr.sell td:nth-child(2){{color:#991b1b}}
+.tw{{overflow-x:auto}}.empty{{color:var(--mut);text-align:center;padding:40px}}
+.foot{{color:var(--mut);font-size:12px;margin-top:24px;border-top:1px solid var(--line);padding-top:12px}}
+</style></head><body><div class="wrap">
+<h1>📜 历史交易记录</h1>
+<div class="sub">生成 {today} · <a href="index.html">← 返回看板</a> · 回测按次日开盘价+真实费用滑点模拟成交</div>
+<div class="tw">{sections}</div>
+<div class="foot">回测成交=2022年至今历史回放的模拟成交,含费用/滑点/T+1等真实建模。实盘价一列由你在 Streamlit 看板回填。
+完整明细也在仓库 reports/*_trades.csv。</div>
 </div></body></html>"""
 
 

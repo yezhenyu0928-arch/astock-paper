@@ -70,7 +70,7 @@ def _benchmark_navs(conn, bench_code, dates):
 
 # ---------------- 单次回测 ----------------
 def run_backtest(sid, start, end, capital=None, param_override=None,
-                 cost_override=None, custom_override=None, keep_state=False):
+                 cost_override=None, custom_override=None, keep_state=False, trades_out=None):
     """返回 {dates, navs, metrics, bench_navs, trade_log_path, state_dir}。"""
     base_cfg = conf.load_config(use_cache=False)
     cfg = copy.deepcopy(base_cfg)
@@ -108,6 +108,10 @@ def run_backtest(sid, start, end, capital=None, param_override=None,
         result = {"dates": dates, "navs": navs, "metrics": met, "bench_navs": bench,
                   "trade_log_path": str(E.TRADE_LOG), "state_dir": str(sdir),
                   "final_positions": {c: p.shares for c, p in eng.load_account(sid).positions.items()}}
+        if trades_out and (sdir / "trade_log.csv").exists():
+            import os as _os
+            _os.makedirs(_os.path.dirname(trades_out), exist_ok=True)
+            shutil.copy(sdir / "trade_log.csv", trades_out)
     finally:
         conf.STATE_DIR, E.conf.STATE_DIR, E.TRADE_LOG = old_state, old_state, old_log
         if not keep_state:

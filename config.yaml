@@ -3,7 +3,7 @@
 #   PUSHPLUS_TOKEN / SMTP_AUTH_CODE / DASHBOARD_PASSWORD / ANTHROPIC_API_KEY
 
 user:
-  capital: 20000            # ←改成你计划将来实盘投入的金额,模拟按此建账(回测/持仓数都按此)
+  capital: 50000            # 模拟建账规模(非真投额;5万档5策略均可交易赛马)。回测/持仓数按此
   smtp:
     host: smtp.qq.com
     port: 465
@@ -50,7 +50,8 @@ custom:                        # 小资金适配与个性化(SPEC_FILL.md)
   open_frac: {stock: 0.08, etf: 0.10}   # 开盘时段成交额占比(成交概率模型)
   impact_k: {stock: 0.0020, etf: 0.0008} # 冲击成本系数
   hold_n_override: {}          # 手动锁定某策略持仓数,如 {s1_dividend@v1: 5}
-  universe_exclude: []         # 你不想碰的代码黑名单
+  exclude_star_chinext: true   # true=不买科创板(688)/创业板(300/301)。未开通这些权限就设true
+  universe_exclude: []         # 你不想碰的代码黑名单(具体代码,如 [sz300750])
   s2_universe_extra: []        # 追加ETF即注册s2@v2新赛道,旧曲线归档
   push_times_intraday: ["10:00","13:30","14:45"]
   risk_override: {}            # 只允许比默认更严,放松将被拒绝加载

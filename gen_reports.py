@@ -12,10 +12,13 @@ except Exception:
     pass
 
 logging.basicConfig(level=logging.ERROR)
+import conf
+import util
 import backtest
 import validate
 
-SIDS = sys.argv[1:] or ["s3_ma_trend@v1", "s1_dividend@v1", "s4_smallcap@v1", "s5_grid@v1"]
+SIDS = sys.argv[1:] or ["s2_etf@v1", "s3_ma_trend@v1", "s1_dividend@v1", "s4_smallcap@v1", "s5_grid@v1"]
+TODAY = util.today_str()
 
 for sid in SIDS:
     t0 = time.time()
@@ -32,4 +35,15 @@ for sid in SIDS:
     except Exception as e:
         import traceback
         print(f"[验证FAIL] {sid}: {e}", flush=True); traceback.print_exc()
-print("== 全部报告生成完毕 ==", flush=True)
+    # 导出该策略的全部回测成交流水(2022→今)
+    t0 = time.time()
+    try:
+        out = str(conf.REPORTS_DIR / f"{sid.replace('@','_at_')}_trades.csv")
+        r = backtest.run_backtest(sid, "2022-01-01", TODAY, trades_out=out)
+        import csv as _csv
+        n = sum(1 for _ in open(out, encoding="utf-8")) - 1 if __import__("os").path.exists(out) else 0
+        print(f"[流水] {sid}: {n}笔 -> {out} ({time.time()-t0:.0f}s)", flush=True)
+    except Exception as e:
+        import traceback
+        print(f"[流水FAIL] {sid}: {e}", flush=True); traceback.print_exc()
+print("== 全部报告+流水生成完毕 ==", flush=True)
