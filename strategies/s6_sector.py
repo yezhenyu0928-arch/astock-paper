@@ -1,17 +1,21 @@
 # -*- coding: utf-8 -*-
-"""S6 行业ETF动量轮动(卡C)。每周最后交易日持有综合评分最强的 1 只行业ETF;
+"""S6 行业ETF动量轮动(卡C+P2升级)。每月最后交易日持有综合评分最强的 1 只行业ETF;
 评分 = 动量排名×0.8 + 60日低波排名×0.2(低波加分,名次越小越优);
 最强者 20 日收益<0 → 切国债ETF避险。风控(止损/仓位)由 risk.py 统一管。
 
+P2升级: 用 macro_score() 调节避险阈值 + 仓位大小。
+- macro_score < -0.5（紧缩）→ 降仓位到50%，更快切国债
+- macro_score > 0.5（扩张）→ 维持满仓，放宽避险阈值
+
 设计意图——"政策/行业面"的可验证代理:产业政策利好(设备更新、化债、AI扶持、新能源补贴等)
-最终都会体现为对应行业指数的涨幅动量。用行业ETF动量轮动自动跟随政策与景气主线,无需爬政策文本
-(北向实时数据2024-08停发、政策文本无免费稳定源、且无法回测验证)。"""
+最终都会体现为对应行业指数的涨幅动量。用行业ETF动量轮动自动跟随政策与景气主线,无需爬政策文本。"""
 import logging
 from statistics import pstdev
 
 from models import Order
 from strategies.base import BaseStrategy
 from strategies import common
+import macro
 
 log = logging.getLogger("s6")
 
@@ -23,6 +27,21 @@ class S6SectorMomentum(BaseStrategy):
                else ctx.is_last_trade_day_of_week(date))
         if not due:
             return []                                   # 仅调仓日动作
+
+        # ── 宏观评分 ──
+        try:
+            ms = macro.macro_score(date, conn=ctx.conn)
+            mf = macro.macro_factor(date, conn=ctx.conn)
+        except Exception:
+            ms = 0.0
+            mf = {}
+        # 紧缩期降仓位, 扩张期满仓位
+        if ms < -0.5:
+            target_weight = 0.50  # 半仓防御
+        elif ms > 0.5:
+            target_weight = 0.98  # 满仓积极
+        else:
+            target_weight = 0.98
 
         windows = self.params.get("momentum_windows", [20, 60])
         vol_window = self.params.get("vol_window", 60)
@@ -64,32 +83,41 @@ class S6SectorMomentum(BaseStrategy):
         best = min(score, key=lambda c: score[c])
 
         # 绝对动量:best 的最短窗口收益<0 → 切避险(国债ETF)
+        # 紧缩期更敏感: 最短窗口收益 < 0 就切; 扩张期宽松: 收益 < -3% 才切
         w0 = min(windows)
+        if ms < -0.5:
+            safe_threshold = 0.0    # 紧缩: 零收益就切
+        elif ms > 0.3:
+            safe_threshold = -0.03  # 扩张: 跌3%才切
+        else:
+            safe_threshold = 0.0
+
         orig_best, switched = best, False
-        if rets[best][w0] < 0:
+        if rets[best][w0] < safe_threshold:
             best, switched = safe, True
 
         held = set(account.positions.keys())
         if held == {best}:
-            return []                                   # 已只持有 best,无需操作
+            return []
 
         best_name = ctx.name(best)
+        m2_info = f" M2{mf.get('m2_yoy',0) or 0:.0f}%" if mf.get("m2_yoy") else ""
         orders = []
         for code in held:
             if code != best:
                 if switched:
-                    reason = f"行业轮动:换出{ctx.name(code)}(最强{ctx.name(orig_best)}绝对动量转负,避险)"
+                    reason = f"行业轮动:换出{ctx.name(code)}(最强{ctx.name(orig_best)}绝对动量转负,macro{ms:+.1f}{m2_info},避险)"
                 else:
                     reason = f"行业轮动:换出{ctx.name(code)},轮入更强的{best_name}"
                 orders.append(Order(self.strategy_id, code, "sell", 0.0, reason, date))
         if best not in held:
             if switched:
                 r0 = rets[orig_best][w0]
-                reason = (f"避险:买入{best_name}(最强{ctx.name(orig_best)} r{w0}={r0:+.1%}<0,"
-                          f"绝对动量为负,全仓避险)")
+                reason = (f"避险:买入{best_name}(最强{ctx.name(orig_best)} r{w0}={r0:+.1%}<{safe_threshold:+.0%},"
+                          f"绝对动量为负,macro{ms:+.1f}{m2_info},全仓避险)")
             else:
                 rtxt = " ".join(f"r{wn}={rets[best][wn]:+.1%}" for wn in windows)
                 reason = (f"行业轮动:买入最强 {best_name}({rtxt}·60日波动池内第{vol_rank[best]}低,"
-                          f"{len(rets)}只中综合第1)")
-            orders.append(Order(self.strategy_id, best, "buy", 0.98, reason, date))
+                          f"{len(rets)}只中综合第1,macro{ms:+.1f}{m2_info})")
+            orders.append(Order(self.strategy_id, best, "buy", target_weight, reason, date))
         return orders

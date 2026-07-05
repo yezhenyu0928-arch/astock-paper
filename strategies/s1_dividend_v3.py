@@ -87,7 +87,9 @@ class S1DividendV3(BaseStrategy):
             regime = macro.detect_regime(date, conn=ctx.conn)
         except Exception:
             regime = "neutral"
-        log.info("s1_v3: macro regime=%s, date=%s", regime, date)
+            ms = 0.0
+            mf = {}
+        log.info("s1_v3: macro regime=%s score=%+.2f, date=%s", regime, ms, date)
 
         # ── 因子暴露（全池截面，pipeline: 去极值→标准化→正交化） ──
         all_exposures = factors.compute_factor_exposures(pool, date, conn=ctx.conn)

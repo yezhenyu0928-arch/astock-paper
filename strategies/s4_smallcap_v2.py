@@ -91,9 +91,13 @@ class S4SmallcapV2(BaseStrategy):
         # ── 宏观 regime 自适应 ──
         try:
             regime = macro.detect_regime(date, conn=ctx.conn)
+            ms = macro.macro_score(date, conn=ctx.conn)
+            mf = macro.macro_factor(date, conn=ctx.conn)
         except Exception:
             regime = "neutral"
-        log.info("s4_v2: macro regime=%s, date=%s", regime, date)
+            ms = 0.0
+            mf = {}
+        log.info("s4_v2: macro regime=%s score=%+.2f, date=%s", regime, ms, date)
 
         # ── 风险过滤: 剔除残差波动 z > resvol_cap_z ──
         if "VOLATILITY" in exposures.columns:
