@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
-"""宏观regime检测 + 行业动量模块（P0）。
+"""宏观regime检测 + 行业动量 + 真实宏观因子模块（P0+P2）。
 
 提供:
 1. detect_regime(date, conn) → "expansion" | "contraction" | "neutral"
    基于沪深300 PE分位 + MA20/MA60方向判断市场状态。
-   - 扩张: PE分位<50%且MA20>MA60(估值合理+趋势向上)
-   - 收缩: PE分位>70%或MA20<MA60且PE分位>50%(高估或趋势向下+估值不便宜)
-   - 中性: 其他
 
 2. industry_momentum(date, lookback=60, conn=None) → {industry_name: momentum_pct}
-   申万31行业近lookback日涨幅排名（用行业ETF或代表性的成分股打包计算）。
-   简化: 用 stock_industry 表 + daily_bar 计算每个行业所有股票等权组合收益。
+   申万31行业近lookback日涨幅排名。
 
-3. macro_factor(date, conn) → {"shibor": float, "bond_yield": float, "cpi": float}
-   宏观因子（P2待完善，当前占位返回0）。
+3. macro_factor(date, conn) → {"m2_yoy": float, "bond_60d_ret": float, "rate_direction": str}
+   真实宏观因子: M2同比增速(baostock货币供应表) + 国债指数收益(利率方向代理)。
 
-数据来源: baostock 日线(已有)、stock_industry表(已有)、fundamental PE分位(已有)。
+4. macro_score(date, conn) → float
+   综合评分(-1~+1)，策略可用此调整仓位或因子权重。
+
+数据来源: baostock query_money_supply_data_month + query_history_k_data_plus(国债指数sh.000012)
++ fundamental PE分位 + stock_industry + daily_bar。
 """
 import logging
 import numpy as np
@@ -152,28 +152,125 @@ def industry_momentum(date, lookback=60, conn=None):
 
 
 def macro_factor(date, conn=None):
-    """宏观因子占位。
+    """获取真实宏观因子数据。
 
-    P2 将实现: Shibor/10Y国债收益率/CPI/PMI。
-    当前返回占位0。
+    P2 实现:
+    - M2 同比增速(%)：从 baostock query_money_supply_data_month 获取
+    - 国债收益率代理(%)：从国债指数 sh.000012 的 60 日收益率反推（指数涨=收益率降）
+    - 利率方向：基于国债指数 MA20 vs MA60 判断（利率下行=宽松）
+
+    返回 {"m2_yoy": float, "bond_60d_ret": float, "rate_direction": str}
+    数据不可用时各类返回 0.0 / "unknown"。
     """
-    return {
-        "shibor": 0.0,
-        "bond_yield_10y": 0.0,
-        "cpi_change": 0.0,
-        "pmi": 0.0,
+    import factors
+    result = {
+        "m2_yoy": 0.0,
+        "bond_60d_ret": 0.0,
+        "rate_direction": "unknown",
     }
+    own = conn is None
+    if own:
+        conn = get_conn()
+    try:
+        # ── 1. M2 同比增速 ──
+        try:
+            import baostock as bs
+            lg = bs.login()
+            if lg.error_code == "0":
+                date_str = util.to_date_str(date)
+                # 取最近6个月的 M2 数据
+                year = int(date_str[:4])
+                month = int(date_str[5:7])
+                start_ym = f"{year - 1}-{month:02d}"
+                end_ym = f"{year}-{month:02d}"
+                rs = bs.query_money_supply_data_month(start_date=start_ym, end_date=end_ym)
+                if rs.error_code == "0":
+                    m2_rows = []
+                    while rs.next():
+                        r = rs.get_row_data()
+                        if r[9]:  # m2YOY
+                            m2_rows.append((r[0] + "-" + r[1], float(r[9])))
+                    if m2_rows:
+                        result["m2_yoy"] = m2_rows[-1][1]  # 最新 M2 同比
+                bs.logout()
+        except Exception as e:
+            log.debug("M2 数据获取失败: %s", e)
+            try:
+                bs.logout()
+            except Exception:
+                pass
+
+        # ── 2. 国债指数收益(收益率代理) ──
+        # 国债指数 sh.000012 涨 ≈ 国债收益率降 ≈ 宽松
+        try:
+            import baostock as bs
+            lg = bs.login()
+            if lg.error_code == "0":
+                rs = bs.query_history_k_data_plus(
+                    "sh.000012", "date,close",
+                    start_date="2024-01-01",
+                    end_date=util.to_date_str(date),
+                    frequency="d")
+                if rs.error_code == "0":
+                    bond_rows = []
+                    while rs.next():
+                        r = rs.get_row_data()
+                        if r[1]:
+                            bond_rows.append((r[0], float(r[1])))
+                    if len(bond_rows) >= 60:
+                        # 60 日收益
+                        result["bond_60d_ret"] = (bond_rows[-1][1] / bond_rows[-60][1] - 1) * 100
+                        # MA20 vs MA60 方向
+                        closes = [r[1] for r in bond_rows]
+                        ma20 = np.mean(closes[-20:])
+                        ma60 = np.mean(closes[-60:])
+                        result["rate_direction"] = "easing" if ma20 > ma60 else "tightening"
+                        result["bond_ma20"] = round(ma20, 4)
+                        result["bond_ma60"] = round(ma60, 4)
+                bs.logout()
+        except Exception as e:
+            log.debug("国债指数数据获取失败: %s", e)
+            try:
+                bs.logout()
+            except Exception:
+                pass
+    except Exception as e:
+        log.warning("macro_factor 失败: %s", e)
+    finally:
+        if own:
+            conn.close()
+
+    return result
 
 
 def macro_score(date, conn=None) -> float:
     """宏观综合评分: -1(最不利) ~ +1(最有利)。
-    基于 regime + PE分位 + 利率方向。策略可据此调整仓位。"""
+    基于 regime + M2增速 + 利率方向。
+    - expansion + M2高增长 + 利率下行 = 高分(利于股票)
+    - contraction + M2低增长 + 利率上行 = 低分(防御)
+    """
     regime = detect_regime(date, conn=conn)
+    mf = macro_factor(date, conn=conn)
+
+    score = 0.0
+    # regime 基础分
     if regime == "expansion":
-        return 0.5
+        score += 0.6
     elif regime == "contraction":
-        return -0.5
-    return 0.0
+        score -= 0.6
+    # M2 增速调整：>10% 宽松 +0.2, <8% 偏紧 -0.2
+    m2 = mf.get("m2_yoy", 0) or 0
+    if m2 > 10:
+        score += 0.2
+    elif m2 < 8 and m2 > 0:
+        score -= 0.2
+    # 利率方向：宽松
+    if mf.get("rate_direction") == "easing":
+        score += 0.2
+    elif mf.get("rate_direction") == "tightening":
+        score -= 0.2
+
+    return max(-1.0, min(1.0, score))
 
 
 # ── 简易自检 ──
@@ -184,6 +281,13 @@ def _self_test():
 
     regime = detect_regime(date, conn=conn)
     log.info("regime: %s", regime)
+
+    mf = macro_factor(date, conn=conn)
+    log.info("macro_factor: M2 YOY=%.1f%%  bond_60d=%.2f%%  rate=%s",
+             mf.get("m2_yoy", 0) or 0, mf.get("bond_60d_ret", 0) or 0, mf.get("rate_direction", "unknown"))
+
+    ms = macro_score(date, conn=conn)
+    log.info("macro_score: %+.2f", ms)
 
     ind_mom = industry_momentum(date, lookback=60, conn=conn)
     log.info("industry_momentum: %d industries", len(ind_mom))
