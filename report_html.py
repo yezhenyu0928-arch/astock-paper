@@ -164,14 +164,31 @@ def _buy_info(sid, code, log_rows, fallback_date=""):
 
 
 def _backtest_summary(sid):
-    """从 reports/ 读回测主线 + 入池判定,供看板展示历史参考。"""
+    """从 reports/ 读回测主线 + 入池判定,供看板展示历史参考。
+    兼容主回测报告({slug}.md)和五段回测报告({slug}_v3.md)。
+    """
     slug = sid.replace("@", "_at_")
     bt_line, verdict = "", ""
-    rp = conf.REPORTS_DIR / f"{slug}.md"
-    if rp.exists():
-        m = re.search(r"## 主回测.*?\n- (.+)", rp.read_text(encoding="utf-8"))
-        if m:
-            bt_line = m.group(1).strip()
+    # 优先读主回测报告, 不存在则读五段回测报告(_v3后缀)
+    for rp_name in (f"{slug}.md", f"{slug}_v3.md"):
+        rp = conf.REPORTS_DIR / rp_name
+        if rp.exists():
+            text = rp.read_text(encoding="utf-8")
+            # 五段回测格式: 汇总统计行
+            m = re.search(r"年化收益均值:\s*([+\-\d.]+%)", text)
+            if m:
+                ann = m.group(1)
+            else:
+                m = re.search(r"年化\s*([+\-\d.]+%)", text)
+                ann = m.group(1) if m else "?"
+            m = re.search(r"Calmar 均值:\s*([+\-\d.]+)", text)
+            if m:
+                cal = m.group(1)
+            else:
+                m = re.search(r"Calmar([+\-\d.]+)", text)
+                cal = m.group(1) if m else "?"
+            bt_line = f"年化{ann}·Calmar{cal}"
+            break
     vp = conf.REPORTS_DIR / f"{slug}_validate.md"
     if vp.exists():
         m = re.search(r"## 结论:\*\*(.+?)\*\*", vp.read_text(encoding="utf-8"))
