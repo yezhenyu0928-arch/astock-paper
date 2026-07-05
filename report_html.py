@@ -781,10 +781,14 @@ def generate(out_path=None):
         ls = _live_stats(a)
         st = "🔴熔断" if a.get("frozen") else "🟢正常"
         bt_line, verdict = _backtest_summary(sid)
+        npos = len(a.get("positions", {}))
+        total_col = _col(ls["total"]) if ls["total"] is not None else "var(--mut)"
+        total_txt = _pct(ls["total"]) if ls["started"] else "今日起步"
+        ddtxt = _pct(ls["max_dd"], plus=False) if ls["max_dd"] is not None else "—"
         ov += (f"<tr><td class='l'>{_cn(sid)}</td>"
                f"<td style='color:{total_col};font-weight:700'>{total_txt}</td>"
                f"<td>{ddtxt}</td><td>{a.get('nav',1):.3f}</td><td>{npos}</td><td>{st}</td>"
-               f"<td class='ref'>{bt_line}{'·'+verdict if verdict else ''}</td></tr>")
+               f"<td class='ref'>{bt_line}{' · '+verdict if verdict else ''}</td></tr>")
     overview = ("<table class='ov'><tr><th>策略</th><th>实盘累计</th><th>最大回撤</th><th>净值</th>"
                 "<th>持仓</th><th>状态</th><th>回测参考(2022→今)</th></tr>" + ov + "</table>") if accts else ""
 
