@@ -36,6 +36,8 @@ strategies:                     # 开关:true 参与赛马。默认全开(赛马
   s5_grid@v1: true
   s6_sector@v1: true            # 卡C:行业ETF动量轮动(政策/行业面代理)
   s1_dividend@v2: true          # 卡D:红利低波·质量增强(加ROE门槛,与v1并行赛马)
+  s1_dividend@v3: true          # 卡J:红利低波·Barra增强(12个风格因子;V3并行赛马)
+  s4_smallcap@v2: true          # 卡J:多因子价值增强(沪深300)(Barra因子;V2并行赛马)
 
 schedule:
   signal_push_time: "18:00"     # 北京时间,仅用于消息标题展示

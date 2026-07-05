@@ -92,3 +92,30 @@ s6_sector@v1:
   # 均上市≥3年、规模>20亿、日均成交>1亿(2021年后上市的新能源/酒/光伏在早期回测段数据不足会自动跳过)。
   universe: [sh512000, sh512480, sh512010, sz159928, sh512660, sh516160,
              sh512690, sh515790, sh512800, sh511010]
+
+s1_dividend@v3:
+  class: strategies.s1_dividend_v3.S1DividendV3
+  benchmark: sh510300
+  frozen_date: 2026-07-05       # 卡J 注册入赛(v1/v2 并行不受影响);Barra因子增强版
+  params:
+    min_dividend_yield: 0.04
+    dividend_years: 3
+    roe_years: 3
+    roe_min: 0.08
+    factor_weights: {VALUE: 0.4, QUALITY: 0.3, LOW_VOL: 0.2, SIZE: 0.1}
+    hold_n: 10
+    max_per_industry: 2
+  universe: dynamic
+  rebalance: monthly
+
+s4_smallcap@v2:
+  class: strategies.s4_smallcap_v2.S4SmallcapV2
+  benchmark: sh510300
+  frozen_date: 2026-07-05       # 卡J 注册入赛(v1 并行不受影响);Barra多因子价值增强版
+  params:
+    factor_weights: {SIZE: 0.3, MOMENTUM: 0.3, VALUE: 0.2, LIQUIDITY: 0.2}
+    resvol_cap_z: 1.28
+    max_per_industry: 3
+    hold_n: 20
+  universe: dynamic
+  rebalance: monthly

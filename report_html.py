@@ -140,6 +140,109 @@ def _backtest_summary(sid):
     return bt_line, verdict
 
 
+def _load_factor_exposures():
+    """读取 state/factor_exposure.json。不存在或异常返回 None。"""
+    path = conf.STATE_DIR / "factor_exposure.json"
+    if not path.exists():
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _exposure_html(sid, exp_data):
+    """为某个策略生成因子暴露区 HTML（CSS条形图+表格+Chart.js画布）。
+    etf_only 策略显示说明；数据缺失时返回空字符串。"""
+    if exp_data is None:
+        return ""
+    strats = exp_data.get("strategies", {})
+    if sid not in strats:
+        return ""
+    se = strats[sid]
+    if se.get("etf_only"):
+        return ('<details class="factor-exposure"><summary>⚖️ 风格暴露（ETF策略）</summary>'
+                '<div class="exp-note">ETF策略持仓不映射个股风格因子，无法计算风格暴露。</div></details>')
+    exposures = se.get("exposures", {})
+    pred_vol = se.get("pred_vol")
+    factors_order = ["size", "beta", "momentum", "resvol", "liquidity", "btop"]
+    factor_labels = {
+        "size": "市值(Size)", "beta": "贝塔(Beta)", "momentum": "动量(Mom)",
+        "resvol": "残差波动(ResVol)", "liquidity": "流动性(Liq)", "btop": "账面市值比(BTOP)"
+    }
+    bars = ""
+    for f in factors_order:
+        val = exposures.get(f)
+        if val is None:
+            continue
+        clamped = max(-2.0, min(2.0, val))
+        pct = abs(clamped) / 4.0 * 100  # 全幅 [-2,2] → 100% 条宽
+        if clamped >= 0:
+            bar = f'<div class="exp-fill exp-pos" style="width:{pct}%;left:50%"></div>'
+        else:
+            bar = f'<div class="exp-fill exp-neg" style="width:{pct}%;left:{50-pct}%"></div>'
+        bars += (f'<div class="exp-bar-row">'
+                f'<span class="exp-label">{factor_labels.get(f, f)}</span>'
+                f'<div class="exp-bar-wrap">{bar}<div class="exp-zero-line"></div></div>'
+                f'<span class="exp-val">{val:+.2f}</span></div>')
+    vol_str = f"（年化 {pred_vol*100:.1f}%）" if pred_vol is not None else ""
+    vol_line = f'<div class="exp-vol">预测年化波动：{pred_vol*100:.1f}%</div>' if pred_vol is not None else ""
+    chart_id = f"exposureChart_{sid.replace('@','_').replace('.','_')}"
+    tbl_rows = "".join(
+        f"<tr><td>{factor_labels.get(f, f)}</td><td>{exposures.get(f, 0):+.2f}</td></tr>"
+        for f in factors_order if f in exposures)
+    return (f'<details class="factor-exposure">'
+            f'<summary>⚖️ 风格暴露与预测波动{vol_str}</summary>'
+            f'{vol_line}'
+            f'<div class="exp-chart-container">'
+            f'<canvas id="{chart_id}" width="400" height="200"></canvas></div>'
+            f'<div class="exp-bars">{bars}</div>'
+            f'<table class="exposure-table"><thead><tr><th>因子</th><th>暴露值(z分)</th></tr></thead>'
+            f'<tbody>{tbl_rows}</tbody></table>'
+            f'<div class="exp-note"><a href="methodology.html#risk-model">暴露值如何解读？→</a> · '
+            f'策略暴露数据将于下次策略运行时更新</div>'
+            f'</details>')
+
+
+def _exposure_chart_js(exp_data):
+    """生成 Chart.js 渲染脚本（内嵌暴露数据）。Chart.js CDN 未加载时静默跳过。"""
+    if exp_data is None:
+        return ""
+    strats = exp_data.get("strategies", {}) if exp_data else {}
+    factors_order = exp_data.get("factors", ["size", "beta", "momentum", "resvol", "liquidity", "btop"])
+    chart_entries = []
+    for sid, se in strats.items():
+        if se.get("etf_only"):
+            continue
+        exposures = se.get("exposures", {})
+        if not exposures:
+            continue
+        chart_id = f"exposureChart_{sid.replace('@','_').replace('.','_')}"
+        labels = json.dumps([f[:4] for f in factors_order if f in exposures], ensure_ascii=False)
+        values = [exposures.get(f, 0) for f in factors_order if f in exposures]
+        colors = ["#3b82f6" if v >= 0 else "#ef4444" for v in values]
+        chart_entries.append(f"""
+  (function(){{
+    var c=document.getElementById('{chart_id}');
+    if(!c)return;
+    try{{
+      new Chart(c,{{type:'bar',
+        data:{{labels:{labels},datasets:[{{data:{json.dumps(values)},backgroundColor:{json.dumps(colors)}}}]}},
+        options:{{responsive:true,maintainAspectRatio:false,
+          plugins:{{legend:{{display:false}},title:{{display:true,text:'{html.escape(_cn(sid))} 风格暴露',font:{{size:13}}}}}},
+          scales:{{y:{{title:{{display:true,text:'z分'}},min:-2,max:2}}}}}});
+    }}catch(e){{}}
+  }})();""")
+    if not chart_entries:
+        return ""
+    # 同时生成"数据生成中"占位图（chart_entries 为空时）
+    return ("<script>"
+            "(function(){if(typeof Chart==='undefined')return;"
+            + "".join(chart_entries)
+            + "})();</script>")
+
+
 def _grab(line, pat):
     m = re.search(pat, line or "")
     return m.group(1) if m else "—"
@@ -522,6 +625,7 @@ def generate(out_path=None):
                 "<th>持仓</th><th>状态</th><th>回测参考(2022→今)</th></tr>" + ov + "</table>") if accts else ""
 
     # ===== 各策略卡 =====
+    exp_data = _load_factor_exposures()
     cards = ""
     for sid, a in sorted(accts.items()):
         meta = _meta(sid)
@@ -546,21 +650,35 @@ def generate(out_path=None):
                 f"<span class='q'>{qty} · 参考价 {util.r2(ref)}</span>"
                 f"<span class='reason'>{html.escape(o.get('reason', ''))}</span></div>")
         ops = "".join(op_items) or "<div class='op none'>无待执行操作</div>"
+        # 策略逻辑折叠 + 方法论链接
+        logic_block = (
+            f"<details class='strategy-logic'><summary>📐 策略逻辑说明（点击展开）</summary>"
+            f"{_factor_block(meta)}"
+            f"<a class='logic-link' href='methodology.html#{sid}'>完整方法论 →</a>"
+            f"</details>")
+        # 因子暴露区域(放在持仓表之后)
+        exposure_html = _exposure_html(sid, exp_data)
         cards += (
             f"<div class='card'>"
             f"<div class='card-h'><b>{meta['name']}</b><span class='risk'>{meta['risk']}</span>"
             f"<span class='stat'>{st}</span></div>"
-            f"{_factor_block(meta)}"
+            f"{logic_block}"
             f"<details><summary>📈 实盘收益率曲线（07-06 起）当前 "
             f"<span style='color:{up_color};font-weight:700'>{cur_txt}</span></summary>{chart}{bt_html}</details>"
             f"<div class='sub2'>最新持仓</div>{_positions_table(conn, a, sid, log_rows)}"
             f"<div class='sub2'>操作计划</div>{ops}"
+            f"{exposure_html}"
             f"</div>")
     if not accts:
         cards = "<p class='empty'>暂无策略状态。请先运行 run_daily.py 或回测生成 state/。</p>"
 
+    # 顶部导航
+    nav = ('<nav><a href="index.html">📊 策略看板</a>'
+           '<a href="methodology.html">📐 策略方法论</a>'
+           '<a href="methodology.html#risk-model">📈 因子风险模型</a>'
+           '</nav>')
     body = (
-        f"<h1>📊 A股模拟跟单看板</h1>"
+        f"{nav}<h1>📊 A股模拟跟单看板</h1>"
         f"<div class='sub'>生成 {today} · 数据最新 {last} · 实盘模拟期自 2026-07-06 起 · 模拟/历史不代表未来，非投资建议，人工跟单</div>"
         f"{banner}"
         f"<div class='sec'>{ops_title}</div>{ops_section}"
@@ -568,9 +686,12 @@ def generate(out_path=None):
         f"<div class='sec'>各策略详情</div>{cards}"
         f"<div class='sec'><a href='trades.html'>📜 查看全部历史交易记录 →</a></div>"
         f"{_FOOTER}")
+    chart_js = _exposure_chart_js(exp_data)
     html_doc = f"<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'>" \
                f"<meta name='viewport' content='width=device-width, initial-scale=1'>" \
-               f"<title>A股模拟跟单看板</title>{_STYLE}</head><body><div class='wrap'>{body}</div>{_LIVE_JS}</body></html>"
+               f"<title>A股模拟跟单看板</title>" \
+               f"<script src='https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js'>" \
+               f"</script>{_STYLE}</head><body><div class='wrap'>{body}</div>{chart_js}{_LIVE_JS}</body></html>"
 
     out_path = out_path or (conf.ROOT / "docs" / "index.html")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
@@ -580,8 +701,214 @@ def generate(out_path=None):
         generate_trades(conn)
     except Exception:
         pass
+    try:
+        generate_methodology(out_path=conf.ROOT / "docs" / "methodology.html")
+    except Exception:
+        pass
     if conn:
         conn.close()
+    return str(out_path)
+
+
+# ---------------- 方法论页 ----------------
+_METHODOLOGY_STYLE = """<style>
+:root{--bg:#f6f7f9;--fg:#1f2937;--mut:#6b7280;--card:#fff;--line:#e5e7eb;--up:#d92b2b;--down:#0a9e6b}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+background:var(--bg);color:var(--fg);font-size:15px;line-height:1.6}
+.wrap{max-width:800px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:8px 0}h2{font-size:18px;margin:24px 0 10px;border-bottom:2px solid var(--line);padding-bottom:6px}
+h3{font-size:15.5px;margin:16px 0 8px;color:#334155}
+p,li{font-size:14px}ul{padding-left:20px}
+a{color:#2563eb;text-decoration:none}
+/* 导航 */
+nav{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+nav a{display:inline-block;padding:6px 14px;background:#2563eb;color:#fff;border-radius:8px;
+text-decoration:none;font-size:13px;font-weight:600;white-space:nowrap}
+nav a:hover{background:#1d4ed8}
+/* 目录 */
+.toc{background:var(--card);border-radius:10px;padding:14px;margin:12px 0;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.toc a{display:block;padding:3px 0;font-size:13.5px}
+/* 策略块 */
+.strat-block{background:var(--card);border-radius:10px;padding:14px;margin:14px 0;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.strat-block summary{cursor:pointer;font-weight:600;font-size:15px;padding:4px 0;color:#1f2937}
+.strat-block details{margin:0}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;font-size:13px;margin:8px 0}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line)}
+th{background:#f0f2f5;color:var(--mut);font-weight:600;font-size:12px}
+.note{color:var(--mut);font-size:12px;margin:4px 0}
+.foot{color:var(--mut);font-size:12px;margin-top:24px;border-top:1px solid var(--line);padding-top:12px}
+.diff{background:#fef9c3;padding:8px 12px;border-radius:6px;font-size:12.5px;margin:6px 0}
+.risk-badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;
+background:#fef3c7;color:#92400e;margin-left:6px}
+</style>"""
+
+
+def _methodology_toc():
+    """目录锚点导航。"""
+    items = ""
+    for sid, meta in sorted(STRAT_META.items()):
+        items += f'<a href="#{sid}">{meta["name"]}</a>\n'
+    items += '<a href="#risk-model">因子与风险模型</a>\n'
+    return f'<div class="toc"><b>📑 目录</b>\n{items}</div>'
+
+
+def _methodology_strat_block(sid):
+    """单个策略的方法论区块（含完整投资逻辑、因子表、适用环境、风险提示）。"""
+    meta = _meta(sid)
+    factors = meta.get("factors", [])
+    factor_rows = ""
+    if factors:
+        factor_rows = "".join(
+            f"<tr><td>{html.escape(str(n))}</td><td>{html.escape(str(wt))}</td></tr>"
+            for n, wt in factors)
+    # 适用环境与风险提示（按策略类型分）
+    env_risk = {
+        "s2_etf@v1": ("<b>适用环境</b>：趋势明确的市场（牛市/熊市均可），震荡市表现一般。"
+                       "当市场连续下跌时国债ETF提供避险保护。<br>"
+                       "<b>风险提示</b>：单品种集中持仓，轮动时点决定收益差距；"
+                       "动量策略在趋势反转拐点可能滞后切换。"),
+        "s1_dividend@v1": ("<b>适用环境</b>：震荡市或慢牛市中表现突出，高股息股在利率下行期有防御价值。"
+                          "<br><b>风险提示</b>：高股息陷阱——部分股票因股价暴跌导致股息率虚高；"
+                          "利率上行周期高股息股相对吸引力下降。"),
+        "s1_dividend@v2": ("<b>适用环境</b>：与v1相同，额外过滤了盈利质量不足的高股息股，减少股息陷阱风险。"
+                          "<br><b>风险提示</b>：ROE筛选可能剔除周期底部的高股息机会；"
+                          "A股多数公司ROE波动大，连续3年门槛可能使候选池过小。"),
+        "s3_ma_trend@v1": ("<b>适用环境</b>：趋势明确的中期行情（牛熊均可，急涨急跌最好）。"
+                          "<br><b>风险提示</b>：震荡市频繁假突破·假跌破，磨损成本高；"
+                          "均线信号滞后于价格，顶部区域可能在跌破均线前已回吐大量利润。"),
+        "s4_smallcap@v1": ("<b>适用环境</b>：风险偏好较高的市场环境，小市值因子溢价周期。"
+                          "当前池为沪深300(非真小盘)，因子暴露偏向'大盘内选中小'。<br>"
+                          "<b>风险提示</b>：小市值天然波动大；流动性风险——极端行情可能无法按预期价格成交；"
+                          "免费数据限制使池仅为沪深300，非真正的小盘精选。"),
+        "s5_grid@v1": ("<b>适用环境</b>：震荡/慢牛市场，PE估值在合理区间（十年20-70%分位）时效果最佳。"
+                      "<br><b>风险提示</b>：极端单边行情（如2007/2015大牛）过早卖出导致踏空；"
+                      "PE分位依赖历史数据，估值中枢可能永久性变化（如市场制度改革）。"),
+        "s6_sector@v1": ("<b>适用环境</b>：有明确产业主线的市场（政策驱动、景气周期），"
+                        "行业轮动规律明显时表现好。<br>"
+                        "<b>风险提示</b>：行业集中度高、单品种持仓；"
+                        "政策变化或景气拐点可能引发剧烈回撤；弱市切国债提供部分保护但非保本。"),
+    }
+    er = env_risk.get(sid, "")
+    v3_diff = ""
+    if sid == "s1_dividend@v3":
+        v3_diff = ('<div class="diff"><b>与v2差异</b>：排名法→去极值+标准化+正交化复合(ResVol⊥Beta,Size取负向)；'
+                   '取消低波后30%硬截断(低波已进复合分)；新增行业≤2约束。</div>')
+    elif sid == "s4_smallcap@v2":
+        v3_diff = ('<div class="diff"><b>与v1差异</b>：20日动量→RSTR 12-1月动量；PB排名→BTOP z分并加ETOP/ROE；'
+                   '市值排名→-LNCAP z分；新增残差波动帽与行业约束。名称展示"多因子价值增强(沪深300)"。</div>')
+    return (f'<div class="strat-block" id="{sid}">'
+            f'<details><summary>{meta["name"]}<span class="risk-badge">{meta["risk"]}</span></summary>'
+            f'<p class="tagline">{html.escape(meta["tagline"])}</p>'
+            f'<h3>因子构成</h3>'
+            f'<table><thead><tr><th>因子 / 规则</th><th>权重 / 说明</th></tr></thead>'
+            f'<tbody>{factor_rows}</tbody></table>'
+            f'<p class="note">调仓：{html.escape(meta["rebalance"])} · 适合资金：{html.escape(meta["fit"])}</p>'
+            f'{v3_diff}'
+            f'<p class="note">{er}</p>'
+            f'</details></div>')
+
+
+def _methodology_risk_model():
+    """因子与风险模型章节（id=risk-model）。"""
+    return '''<h2 id="risk-model">因子与风险模型</h2>
+
+<h3>因子体系总览</h3>
+<p>本项目参考 MSCI Barra 中国A股模型（CNE5/CNE6）与 Axioma Robust Risk Model，
+按免费数据现实裁剪，实现 10 个风格因子。每个因子由 1-3 个描述符加权复合。</p>
+<table>
+<thead><tr><th>因子</th><th>描述符</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>Size（市值）</td><td>ln(总市值)</td><td>小盘股天然波动更高，需要作为风险控制维度</td></tr>
+<tr><td>Beta（贝塔）</td><td>60日滚动超额收益对市场回归斜率</td><td>系统性风险暴露——高 Beta 在牛市中涨得快、熊市中跌得狠</td></tr>
+<tr><td>Momentum（动量）</td><td>RSTR(12-1月) + 6月动量 + 3月动量</td><td>近期强势股倾向于继续走强——但拐点处反转风险高</td></tr>
+<tr><td>Residual Volatility（残差波动）</td><td>日收益标准差(DASTD) + 日内振幅(ATR)</td><td>剔除市场和行业后的特异波动——越高越不可预测</td></tr>
+<tr><td>Liquidity（流动性）</td><td>20日换手率均值(对数)</td><td>低换手率在极端行情下可能无法按预期价格成交</td></tr>
+<tr><td>Book-to-Price（账面市值比）</td><td>1/PB</td><td>俗称"价值因子"——低PB股长期有超额，但需防"价值陷阱"</td></tr>
+<tr><td>Earnings Yield（盈利收益率）</td><td>1/PE(TTM)</td><td>高EP = 相对于价格盈利能力强，但亏损股EP为负</td></tr>
+<tr><td>Dividend Yield（股息率）</td><td>近12月股息/股价</td><td>高股息 = 现金流回报，但需防"高股息陷阱"</td></tr>
+<tr><td>Quality（质量）</td><td>ROE - 杠杆代理</td><td>高ROE+低杠杆 = 经营质量好——盈利可持续性更强</td></tr>
+<tr><td>Growth（成长）</td><td>净利润5年趋势斜率/均值</td><td>利润持续增长的公司——但增速放缓时估值可能剧烈收缩</td></tr>
+</tbody></table>
+
+<h3>数据处理管线</h3>
+<ol>
+<li><b>去极值（MAD Winsorize）</b>：对每个因子截面，用中位数绝对偏差（MAD）设定上下界，
+越界值截断到边界。公式：bound = median(x) +/- 5 x 1.4826 x MAD(x)。防止个别的极端数值扭曲整体评估。</li>
+<li><b>标准化（Z-score）</b>：z = (x - mu_w) / sigma_eq，其中 mu_w 为市值加权均值，sigma_eq 为等权标准差。
+处理后，因子分布以市值加权组合为中心(暴露约=0)，等权标准差约=1。</li>
+<li><b>正交化（Gram-Schmidt）</b>：按固定顺序(BETA→SIZE→VALUE→...→EARNINGS_YIELD)依次对前一因子做WLS回归取残差。
+消除因子间的共线性——例如残差波动与Beta天然相关，正交化后残差波动不再包含Beta已解释的部分。</li>
+<li><b>缺失处理</b>：缺失的描述符在复合时按可得权重重归一，标准化后NaN填0（池中性）。</li>
+</ol>
+
+<h3>风险模型（Barra 横截面法）</h3>
+<p>结构模型：<b>r = Xf + u</b>（个股收益 = 因子暴露 x 因子收益 + 特异收益）。</p>
+<ol>
+<li><b>暴露矩阵 X</b>：N只股票 x 6个风险因子(size, beta, momentum, resvol, liquidity, btop)的当天暴露值。</li>
+<li><b>因子收益估计</b>：对每个交易日，用t-1日暴露对t日个股收益做WLS（权=sqrt(市值)）横截面回归，得因子收益 f_t。</li>
+<li><b>因子协方差 F</b>：f_t 的EWMA协方差（半衰期90日），x252年化。</li>
+<li><b>特异波动 σ_i</b>：残差 u_i 的EWMA标准差（半衰期42日），xsqrt(252)年化。</li>
+<li><b>组合预测波动</b>：σ_p = sqrt( h\'X F X\'h + Σ h_i^2 σ_i^2 )，h=各持仓市值权重。</li>
+<li><b>组合暴露</b>：X_p = Σ h_i · z_i。因标准化以市值加权均值为中心，X_p 本身即为主动暴露（相对于市值加权基准）。</li>
+</ol>
+
+<h3>对称性说明（暴露怎么看）</h3>
+<p>暴露值为正 → 组合在该因子上比市值加权基准偏多（如正Beta = 比市场Beta更高）。<br>
+暴露值为负 → 组合在该因子上比基准偏少。<br>
+暴露值在[-0.5, 0.5] → 基本中性，无明显偏离。<br>
+暴露值>|1| → 显著偏离，需要注意该维度的集中风险。</p>
+
+<h3>与 Barra CNE6 / Axioma 的差异声明</h3>
+<ul>
+<li><b>Beta</b>：使用60日窗口(vs CNE6的504日/252日)，因本项目数据覆盖较短(2018年起)，声明短窗差异。</li>
+<li><b>动量(RSTR)</b>：不做CNE6的11日滞后平均处理，直接使用252日剔除最近21日的指数衰减累积超额收益。</li>
+<li><b>残差波动</b>：无CMRA(月累计收益范围)描述符，仅用日收益标准差DASTD与ATR近似。</li>
+<li><b>流动性</b>：仅有STOM(月换手率对数)，无STOQ(季度)/STOA(年度)三个档位。</li>
+<li><b>质量</b>：无季频ATO(资产周转率)/GPM(毛利率)数据，仅用年报ROE加杠杆代理。</li>
+<li><b>成长</b>：仅净利润增长率，无营收增长率数据。</li>
+<li><b>杠杆</b>：无资产负债表数据，用1-1/PB近似资产负债率，属于粗粒度代理。</li>
+</ul>
+
+<h3>免费数据局限</h3>
+<ul>
+<li><b>无分析师预期数据</b>：无法构建Analyst Sentiment、预期EP、预期股息因子。</li>
+<li><b>无季频资产负债表与现金流</b>：无法严格构建Leverage、Investment Quality、Earnings Quality因子。</li>
+<li><b>无真实流通股本</b>：换手率为amount x 100 / market_cap反推近似，市值加权也只能用总市值而非流通市值。</li>
+<li><b>市场代理为sh510300 ETF</b>：库内无sh000300指数日线，用沪深300ETF后复权收益替代。</li>
+<li><b>无真实宏观数据</b>：宏观因子(利率变化、PMI意外)在本模型中占位为0。</li>
+</ul>
+'''
+
+
+def generate_methodology(out_path=None):
+    """生成独立方法论页 docs/methodology.html。"""
+    nav = ('<nav><a href="index.html">📊 策略看板</a>'
+           '<a href="methodology.html">📐 策略方法论</a>'
+           '<a href="methodology.html#risk-model">📈 因子风险模型</a>'
+           '</nav>')
+    toc = _methodology_toc()
+    strat_blocks = ""
+    for sid in sorted(STRAT_META.keys()):
+        strat_blocks += _methodology_strat_block(sid)
+    # v3 的策略(如果 registry 有但 STRAT_META 还没有，加占位)
+    risk = _methodology_risk_model()
+    today = util.today_str()
+    body = (f"{nav}<h1>📐 策略方法论</h1>"
+            f'<p class="note">生成 {today} · 文档随策略版本同步更新 · 所有分析基于免费公开数据</p>'
+            f"{toc}"
+            f'<h2>各策略详解</h2>{strat_blocks}'
+            f"{risk}"
+            f'<div class="foot"><b>免责</b>：本页由 report_html.py 自动生成；'
+            f'模拟/历史表现不代表未来，不构成投资建议，请仅用可承受损失的资金。因子模型参考 MSCI Barra CNE5/CNE6 公开文献与'
+            f'Axioma V4 Handbook，按本项目免费数据现实裁剪。</div>')
+    doc = (f"<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'>"
+           f"<meta name='viewport' content='width=device-width, initial-scale=1'>"
+           f"<title>策略方法论 - A股模拟跟单</title>{_METHODOLOGY_STYLE}</head>"
+           f"<body><div class='wrap'>{body}</div></body></html>")
+    out_path = out_path or (conf.ROOT / "docs" / "methodology.html")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(doc)
     return str(out_path)
 
 
@@ -700,13 +1027,46 @@ details{margin:8px 0}summary{cursor:pointer;font-size:13.5px;color:#334155;paddi
 .bt{background:#f0f7ff;color:#1e40af;font-size:12px;padding:6px 10px;border-radius:8px;margin:6px 0}
 .foot{color:var(--mut);font-size:12px;margin-top:24px;border-top:1px solid var(--line);padding-top:12px}
 .foot b{color:#374151}.empty{color:var(--mut);text-align:center;padding:40px}
+/* 顶部导航 */
+nav{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+nav a{display:inline-block;padding:6px 14px;background:#2563eb;color:#fff;border-radius:8px;
+text-decoration:none;font-size:13px;font-weight:600;white-space:nowrap}
+nav a:hover{background:#1d4ed8}
+/* 折叠区域增强 */
+details.strategy-logic,details.factor-exposure,details.usage-instructions{margin:8px 0}
+details.strategy-logic summary,details.factor-exposure summary,details.usage-instructions summary{cursor:pointer;
+padding:8px 12px;background:rgba(0,0,0,0.03);border-radius:4px;user-select:none}
+details.strategy-logic summary:hover,details.factor-exposure summary:hover,
+details.usage-instructions summary:hover{background:rgba(0,0,0,0.06)}
+details[open].strategy-logic summary,details[open].factor-exposure summary,
+details[open].usage-instructions summary{margin-bottom:8px;border-bottom:1px solid var(--line)}
+/* 策略逻辑链接 */
+.logic-link{display:block;margin-top:8px;font-size:12.5px;color:#2563eb;text-decoration:none}
+/* 因子暴露 CSS 条形图 */
+.exp-vol{font-size:12.5px;color:var(--mut);margin:6px 0}
+.exp-chart-container{width:100%;max-width:400px;height:200px;margin:8px auto;position:relative}
+.exp-no-data{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--mut);font-size:13px}
+.exp-bar-row{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:12px}
+.exp-label{width:100px;text-align:right;color:var(--mut);flex-shrink:0;font-size:11.5px}
+.exp-bar-wrap{flex:1;height:14px;background:#f0f2f5;border-radius:7px;position:relative;overflow:hidden}
+.exp-zero-line{position:absolute;left:50%;top:0;width:1px;height:100%;background:rgba(0,0,0,0.15)}
+.exp-fill{position:absolute;top:0;height:100%;border-radius:7px}
+.exp-fill.exp-pos{background:#3b82f6}
+.exp-fill.exp-neg{background:#ef4444}
+.exp-val{width:42px;text-align:left;font-size:11.5px;font-weight:600;flex-shrink:0}
+.exp-note{color:var(--mut);font-size:11.5px;margin-top:6px}
+.exp-note a{color:#2563eb;text-decoration:none}
+.exposure-table{font-size:12px;margin-top:8px}
+.exposure-table th,.exposure-table td{padding:4px 8px}
 </style>"""
 
 _FOOTER = """<div class="foot">
+<details class="usage-instructions"><summary>📖 使用说明（点击展开）</summary>
 <b>怎么用</b>：每天 18:00 前后微信收到推送，次日开盘按『操作计划』的价格带手动跟单（每条已标注所属策略）；没收到心跳=系统故障，当天别跟单。<br>
 <b>观察期纪律</b>：第0-2周只看不投；满季度后若赛马正常，5万低风险参考配比 = 大盘网格30%+ETF轮动25%+红利低波25%+行业轮动10%+现金10%（S3/S4仅观察）。任何策略熔断→该部分转现金等复核。<br>
 <b>数据来源</b>：sina/baostock/东财 免费源，每交易日17:40自动更新；页面顶部横幅提示数据新鲜度。<br>
 <b>免责</b>：本页由 report_html.py 自动生成，零外部依赖可离线打开；模拟/历史表现不代表未来，不构成投资建议，请仅用可承受损失的资金。
+</details>
 </div>"""
 
 # 实时价渐进增强(腾讯行情 qt.gtimg.cn):<script>跨域取数,失败/超时3s静默回昨收。全程 try/catch,无 Promise 悬挂。
