@@ -41,6 +41,28 @@ STRAT_META = {
         "factors": [("股息率排名", "50%"), ("低波动排名(250日)", "50%"),
                     ("入选门槛", "股息率≥4% + 连续3年现金分红 + 波动率位于池内最低30%")],
         "rebalance": "每月最后交易日 · 等权约6-10只 · 池=沪深300"},
+    "s1_dividend@v3": {
+        "name": "红利低波·Barra7因子增强", "risk": "★☆☆☆☆ 低", "fit": "≥3万",
+        "tagline": "在红利低波基础上叠加 7 个 Barra 风格因子（VALUE/QUALITY/-VOLATILITY/SIZE/-BETA/EARNINGS_YIELD/-LEVERAGE）进行去极值·标准化·正交化复合评分，宏观regime自适应权重，行业约束降低集中度。",
+        "factors": [("VALUE(EP+BP+DY复合)", "20%"), ("QUALITY(ROE+低杠杆)", "15%"), ("低波动(-VOLATILITY)", "15%"),
+                    ("SIZE(偏大盘)", "10%"), ("低Beta(-BETA,防御)", "15%"), ("盈利收益(EARNINGS_YIELD)", "15%"),
+                    ("低杠杆(-LEVERAGE)", "10%"),
+                    ("入选门槛", "股息率≥4% + 连续3年分红 + 连续3年ROE>8%且净利>0"),
+                    ("数据处理", "MAD去极值→z-score标准化→Gram-Schmidt正交化(消除共线性)"),
+                    ("宏观自适应", "收缩期自动提高LOW_VOL/BETA/LEVERAGE负向权重"),
+                    ("风险控制", "特质风险>30%降仓+行业≤2只")],
+        "rebalance": "每月最后交易日 · 等权约6-10只 · 池=沪深300"},
+    "s4_smallcap@v2": {
+        "name": "多因子价值增强(沪深300)·7因子", "risk": "★★★★☆ 中高", "fit": "≥5万",
+        "tagline": "在沪深300内用 7 个 Barra 因子选小市值+价值+动量+流动性+高弹性+质优股，宏观regime自适+行业动量倾斜，残差波动帽过滤。",
+        "factors": [("-SIZE(小市值,负向)", "20%"), ("MOMENTUM(RSTR 12-1月)", "20%"), ("VALUE(EP+BP+DY)", "15%"),
+                    ("LIQUIDITY(流动性)", "10%"), ("BETA(牛市弹性)", "15%"), ("EARNINGS_YIELD(盈利收益)", "10%"),
+                    ("QUALITY(ROE+低杠杆)", "10%"),
+                    ("风险过滤", "剔除残差波动z>1.28的高波股"),
+                    ("宏观自适应", "扩张期提MOMENTUM/BETA权重，收缩期提VALUE/QUALITY防御"),
+                    ("行业动量倾斜", "所属行业近60日涨幅前30%获加分"),
+                    ("行业约束", "每行业≤3只")],
+        "rebalance": "每月最后交易日 · 等权约6只 · 池=沪深300"},
     "s1_dividend@v2": {
         "name": "红利低波·质量增强", "risk": "★☆☆☆☆ 低", "fit": "≥3万",
         "tagline": "在红利低波基础上再加盈利质量门槛：只买连续3年ROE>8%、净利润为正的高股息低波股，剔除“高股息陷阱”。",
@@ -273,24 +295,27 @@ def _acct_total(conn, a):
     return total
 
 
-# ---------------- 大盘指数 ----------------
+# ---------------- 大盘指数（东方财富卡片风）---------------
 MARKET_INDEX_CACHE = conf.STATE_DIR / "market_index.json"
 MARKET_INDICES = {
-    "sh.000300": {"label": "沪深300", "color": "#d92b2b"},
-    "sh.000001": {"label": "上证指数", "color": "#2563eb"},
+    "sh.000001": {"label": "上证指数", "code_short": "SH"},
+    "sz.399001": {"label": "深证成指", "code_short": "SZ"},
+    "sz.399006": {"label": "创业板指", "code_short": "CYB"},
 }
 
 
 def _load_market_index(force_refresh=False):
-    """加载沪深300/上证指数日线。优先读缓存 JSON，不存在或 force_refresh 时通过 baostock 拉取。
+    """加载上证/深证/创业板指日线。优先读缓存 JSON，不存在或 force_refresh 时通过 baostock 拉取。
     返回 {code: [(date, close), ...], ...} 或空 dict。"""
     if not force_refresh and MARKET_INDEX_CACHE.exists():
         try:
             raw = json.loads(MARKET_INDEX_CACHE.read_text(encoding="utf-8"))
             out = {}
             for k, v in raw.items():
-                out[k] = [(d, float(c)) for d, c in v]
-            return out
+                if k in MARKET_INDICES:
+                    out[k] = [(d, float(c)) for d, c in v]
+            if len(out) == len(MARKET_INDICES):
+                return out
         except Exception:
             pass
     # 尝试 baostock
@@ -303,7 +328,7 @@ def _load_market_index(force_refresh=False):
         out = {}
         for code, meta in MARKET_INDICES.items():
             rs = bs.query_history_k_data_plus(code, "date,close",
-                                              start_date="2018-01-01",
+                                              start_date="2025-01-01",
                                               end_date=util.today_str(),
                                               frequency="d")
             rows = []
@@ -313,8 +338,9 @@ def _load_market_index(force_refresh=False):
                 out[code] = [(r[0], float(r[1])) for r in rows if r[1]]
         bs.logout()
         if out:
-            # 写缓存
-            cache = {k: [(d, round(c, 2)) for d, c in v] for k, v in out.items()}
+            cache = {}
+            for k, v in out.items():
+                cache[k] = [(d, round(c, 2)) for d, c in v]
             try:
                 MARKET_INDEX_CACHE.parent.mkdir(parents=True, exist_ok=True)
                 MARKET_INDEX_CACHE.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
@@ -325,94 +351,40 @@ def _load_market_index(force_refresh=False):
         return {}
 
 
-def _market_index_chart(index_data, w=720, h=240):
-    """大盘指数 SVG 双线图(沪深300+上证指数,归一化到起始值=1)。"""
+def _market_index_cards(index_data):
+    """生成东方财富风格的三大指数卡片：当前点位、涨跌额、涨跌幅、红绿颜色。
+    涨跌基于最近一个交易日 vs 前一交易日。"""
     if not index_data:
-        return ""
-    # 合并所有日期
-    all_dates = set()
-    for rows in index_data.values():
-        for d, _ in rows:
-            all_dates.add(d)
-    all_dates = sorted(all_dates)
-    if len(all_dates) < 2:
-        return ""
+        return '<div class="pos-empty">指数数据暂不可用（baostock 离线或网络不通），下次生成看板时将自动重试。</div>'
 
-    padL, padR, padT, padB = 50, 16, 12, 32
-    # 为每个指数构建 date->norm 映射
-    series = {}
-    for code, rows in index_data.items():
-        d2c = {d: c for d, c in rows}
-        # 找第一个有效值做基准
-        base = None
-        for d in all_dates:
-            if d in d2c and d2c[d] > 0:
-                base = d2c[d]
-                break
-        if base is None:
+    cards_html = ""
+    for code, meta in MARKET_INDICES.items():
+        rows = index_data.get(code, [])
+        if not rows or len(rows) < 2:
             continue
-        norm = {}
-        for d in all_dates:
-            if d in d2c and d2c[d] > 0:
-                norm[d] = d2c[d] / base
-        series[code] = norm
+        last_date, last_close = rows[-1]
+        prev_date, prev_close = rows[-2]
+        chg = last_close - prev_close
+        chg_pct = (chg / prev_close) if prev_close > 0 else 0
+        color_class = "up" if chg >= 0 else "down"
+        color = "var(--up)" if chg >= 0 else "var(--down)"
+        sign = "+" if chg >= 0 else ""
 
-    if not series:
-        return ""
+        cards_html += (
+            f'<div class="idx-card {color_class}">'
+            f'<div class="idx-name">{meta["label"]}<span class="idx-code">{meta["code_short"]}</span></div>'
+            f'<div class="idx-price" style="color:{color}">{last_close:,.2f}</div>'
+            f'<div class="idx-chg" style="color:{color}">'
+            f'<span class="idx-chg-val">{sign}{chg:,.2f}</span>'
+            f'<span class="idx-chg-pct">{sign}{chg_pct:.2f}%</span>'
+            f'</div>'
+            f'</div>')
 
-    # 合并所有归一化值求 y 范围
-    all_vals = [v for s in series.values() for v in s.values()]
-    lo, hi = min(all_vals), max(all_vals)
-    margin = (hi - lo) * 0.08 or 0.02
-    lo -= margin; hi += margin
-    ys = list(all_vals) + [1.0]
-    lo, hi = min(ys) - margin, max(ys) + margin
-
-    n = len(all_dates)
-    idx = {d: i for i, d in enumerate(all_dates)}
-
-    def xof(d):
-        return padL + (idx[d] / (n - 1)) * (w - padL - padR)
-
-    def yof(v):
-        return padT + (1 - (v - lo) / (hi - lo)) * (h - padT - padB)
-
-    # 网格 + y 刻度(百分比)
-    grid = ""
-    for k in range(5):
-        v = lo + (hi - lo) * k / 4
-        y = yof(v)
-        grid += (f"<line x1='{padL}' y1='{y:.1f}' x2='{w-padR}' y2='{y:.1f}' "
-                 f"stroke='#eef1f4' stroke-width='1'/>")
-        grid += (f"<text x='{padL-6}' y='{y+3:.1f}' text-anchor='end' font-size='10' "
-                 f"fill='#94a3b8'>{(v-1)*100:+.0f}%</text>")
-    # 1.0 基准线
-    y1 = yof(1.0)
-    grid += f"<line x1='{padL}' y1='{y1:.1f}' x2='{w-padR}' y2='{y1:.1f}' stroke='#94a3b8' stroke-width='1' stroke-dasharray='4'/>"
-
-    # 折线
-    lines = ""
-    for code, norm in series.items():
-        meta = MARKET_INDICES.get(code, {})
-        color = meta.get("color", "#64748b")
-        label = meta.get("label", code)
-        ds = sorted(norm.keys())
-        vs = [norm[d] for d in ds]
-        pts = " ".join(f"{xof(d):.1f},{yof(v):.1f}" for d, v in zip(ds, vs))
-        lines += (f"<polyline fill='none' stroke='{color}' stroke-width='2' points='{pts}'/>"
-                  f"<circle cx='{xof(ds[-1]):.1f}' cy='{yof(vs[-1]):.1f}' r='3' fill='{color}'/>")
-        # 末点标签
-        last_v = vs[-1]
-        lx, ly = xof(ds[-1]), yof(last_v)
-        lines += (f"<text x='{lx+5:.1f}' y='{ly-4:.1f}' font-size='10' font-weight='700' "
-                  f"fill='{color}'>{label} {(last_v-1)*100:+.1f}%</text>")
-
-    # x 轴首末日期
-    xlab = (f"<text x='{padL}' y='{h-8}' font-size='10' fill='#94a3b8'>{all_dates[0][:7]}</text>"
-            f"<text x='{w-padR}' y='{h-8}' text-anchor='end' font-size='10' fill='#94a3b8'>{all_dates[-1]}</text>")
-
-    return (f"<svg viewBox='0 0 {w} {h}' width='100%' preserveAspectRatio='xMidYMid meet' "
-            f"style='background:#fff;border-radius:8px'>{grid}{lines}{xlab}</svg>")
+    return (
+        f'<div class="idx-cards">'
+        f'{cards_html}'
+        f'<div class="idx-date">数据更新至 {rows[-1][0] if rows else "—"}</div>'
+        f'</div>')
 
 
 # ---------------- 颜色/格式(盈红亏绿) ----------------
@@ -747,24 +719,13 @@ def generate(out_path=None):
         ops_section = ("<div class='op none'>暂无待执行操作（各策略空仓或未到调仓日）。"
                        "上线首个交易日 2026-07-06 起，有操作时此处按策略列出。</div>")
 
-    # ===== 大盘指数走势 =====
+    # ===== 大盘指数（东方财富风卡片）=====
     market_data = _load_market_index()
-    market_chart = _market_index_chart(market_data)
     market_section = ""
-    if market_chart:
-        # 取最新日期和值做摘要
-        m_summary_parts = []
-        for code, meta in MARKET_INDICES.items():
-            rows = market_data.get(code, [])
-            if rows:
-                last_date, last_close = rows[-1]
-                label = meta["label"]
-                m_summary_parts.append(f"{label} {last_close:,.0f}（{last_date}）")
+    if market_data:
         market_section = (
-            f"<div class='sec'>📈 大盘指数（2018年至今归一化走势）</div>"
-            f"<div style='color:var(--mut);font-size:12.5px;margin:4px 0 8px'>"
-            f"{' · '.join(m_summary_parts)} · 基准=各自序列首日=1.0</div>"
-            f"{market_chart}")
+            f"<div class='sec'>📈 大盘指数</div>"
+            f"{_market_index_cards(market_data)}")
     else:
         market_section = (
             f"<div class='sec'>📈 大盘指数</div>"
@@ -958,11 +919,15 @@ def _methodology_strat_block(sid):
     er = env_risk.get(sid, "")
     v3_diff = ""
     if sid == "s1_dividend@v3":
-        v3_diff = ('<div class="diff"><b>与v2差异</b>：排名法→去极值+标准化+正交化复合(ResVol⊥Beta,Size取负向)；'
-                   '取消低波后30%硬截断(低波已进复合分)；新增行业≤2约束。</div>')
+        v3_diff = ('<div class="diff"><b>P0升级(2026-07-06)</b>：4因子→7因子(BETA反向/EARNINGS_YIELD/LEVERAGE反向)+macro regime自适应权重。'
+                   '扩张期提QUALITY/EARNINGS_YIELD；收缩期自动提高LOW_VOL/BETA/LEVERAGE负向权重增强防御。'
+                   'BETA负向=偏好低Beta防御股, LEVERAGE负向=偏好低杠杆公司。'
+                   '与v2核心差异：排名法→去极值+标准化+正交化复合(ResVol⊥Beta⊥Size)；取消低波后30%硬截断。</div>')
     elif sid == "s4_smallcap@v2":
-        v3_diff = ('<div class="diff"><b>与v1差异</b>：20日动量→RSTR 12-1月动量；PB排名→BTOP z分并加ETOP/ROE；'
-                   '市值排名→-LNCAP z分；新增残差波动帽与行业约束。名称展示"多因子价值增强(沪深300)"。</div>')
+        v3_diff = ('<div class="diff"><b>P0升级(2026-07-06)</b>：4因子→7因子(+BETA/EARNINGS_YIELD/QUALITY)+macro regime自适+行业动量倾斜。'
+                   '扩张期自动提高MOMENTUM/BETA弹性权重；收缩期提高VALUE/EARNINGS_YIELD/QUALITY防御权重。'
+                   '所属行业近60日涨幅前30%获行业动量加分。'
+                   '与v1核心差异：20日动量→RSTR 12-1月动量；PB排名→BTOP z分并加ETOP/ROE/QUALITY；新增残差波动帽。</div>')
     return (f'<div class="strat-block" id="{sid}">'
             f'<details><summary>{meta["name"]}<span class="risk-badge">{meta["risk"]}</span></summary>'
             f'<p class="tagline">{html.escape(meta["tagline"])}</p>'
@@ -981,20 +946,21 @@ def _methodology_risk_model():
 
 <h3>因子体系总览</h3>
 <p>本项目参考 MSCI Barra 中国A股模型（CNE5/CNE6）与 Axioma Robust Risk Model，
-按免费数据现实裁剪，实现 10 个风格因子。每个因子由 1-3 个描述符加权复合。</p>
+按免费数据现实裁剪，实现 10 个风格因子。每个因子由 1-3 个描述符加权复合。
+当前 S1 v3（红利7因子）和 S4 v2（多因子7因子）各使用其中 7 个因子。</p>
 <table>
-<thead><tr><th>因子</th><th>描述符</th><th>说明</th></tr></thead>
+<thead><tr><th>因子</th><th>描述符</th><th>S1 v3</th><th>S4 v2</th><th>说明</th></tr></thead>
 <tbody>
-<tr><td>Size（市值）</td><td>ln(总市值)</td><td>小盘股天然波动更高，需要作为风险控制维度</td></tr>
-<tr><td>Beta（贝塔）</td><td>60日滚动超额收益对市场回归斜率</td><td>系统性风险暴露——高 Beta 在牛市中涨得快、熊市中跌得狠</td></tr>
-<tr><td>Momentum（动量）</td><td>RSTR(12-1月) + 6月动量 + 3月动量</td><td>近期强势股倾向于继续走强——但拐点处反转风险高</td></tr>
-<tr><td>Residual Volatility（残差波动）</td><td>日收益标准差(DASTD) + 日内振幅(ATR)</td><td>剔除市场和行业后的特异波动——越高越不可预测</td></tr>
-<tr><td>Liquidity（流动性）</td><td>20日换手率均值(对数)</td><td>低换手率在极端行情下可能无法按预期价格成交</td></tr>
-<tr><td>Book-to-Price（账面市值比）</td><td>1/PB</td><td>俗称"价值因子"——低PB股长期有超额，但需防"价值陷阱"</td></tr>
-<tr><td>Earnings Yield（盈利收益率）</td><td>1/PE(TTM)</td><td>高EP = 相对于价格盈利能力强，但亏损股EP为负</td></tr>
-<tr><td>Dividend Yield（股息率）</td><td>近12月股息/股价</td><td>高股息 = 现金流回报，但需防"高股息陷阱"</td></tr>
-<tr><td>Quality（质量）</td><td>ROE - 杠杆代理</td><td>高ROE+低杠杆 = 经营质量好——盈利可持续性更强</td></tr>
-<tr><td>Growth（成长）</td><td>净利润5年趋势斜率/均值</td><td>利润持续增长的公司——但增速放缓时估值可能剧烈收缩</td></tr>
+<tr><td>Size（市值）</td><td>ln(总市值)</td><td>✅ 正向</td><td>✅ 负向</td><td>S1偏大盘防御，S4偏小盘弹性</td></tr>
+<tr><td>Beta（贝塔）</td><td>60日滚动超额收益对市场回归斜率</td><td>✅ 负向</td><td>✅ 正向</td><td>S1偏好低Beta防御，S4牛市好高弹性</td></tr>
+<tr><td>Momentum（动量）</td><td>RSTR+6月+3月</td><td>—</td><td>✅ 正向</td><td>12-1月动量+多窗口复合</td></tr>
+<tr><td>Value（价值）</td><td>1/PE+1/PB+DY</td><td>✅ 正向</td><td>✅ 正向</td><td>三描述符合成，红利策略核心因子</td></tr>
+<tr><td>Volatility（波动）</td><td>DASTD+ATR</td><td>✅ 负向</td><td>✅ 过滤</td><td>S1低波加分，S4剔除高残差波动股</td></tr>
+<tr><td>Quality（质量）</td><td>ROE-杠杆代理</td><td>✅ 正向</td><td>✅ 正向</td><td>高ROE+低杠杆=盈利可持续</td></tr>
+<tr><td>Growth（成长）</td><td>净利润5年趋势</td><td>—</td><td>—</td><td>待计入策略（数据覆盖不足）</td></tr>
+<tr><td>Liquidity（流动性）</td><td>STOM(月换手率对数)</td><td>—</td><td>✅ 正向</td><td>偏好高流动性股票</td></tr>
+<tr><td>Leverage（杠杆）</td><td>1-1/PB近似</td><td>✅ 负向</td><td>—</td><td>红利策略偏好低负债公司</td></tr>
+<tr><td>Earnings Yield（盈利收益）</td><td>1/PE(TTM)</td><td>✅ 正向</td><td>✅ 正向</td><td>与VALUE互补衡量估值</td></tr>
 </tbody></table>
 
 <h3>数据处理管线</h3>
@@ -1042,8 +1008,19 @@ def _methodology_risk_model():
 <li><b>无季频资产负债表与现金流</b>：无法严格构建Leverage、Investment Quality、Earnings Quality因子。</li>
 <li><b>无真实流通股本</b>：换手率为amount x 100 / market_cap反推近似，市值加权也只能用总市值而非流通市值。</li>
 <li><b>市场代理为sh510300 ETF</b>：库内无sh000300指数日线，用沪深300ETF后复权收益替代。</li>
-<li><b>无真实宏观数据</b>：宏观因子(利率变化、PMI意外)在本模型中占位为0。</li>
+<li><b>无真实宏观数据</b>：宏观因子(利率变化、PMI意外)在本模型中占位为0；已通过 macro.py detect_regime() 用PE分位+MA方向做regime自适应补偿。</li>
 </ul>
+
+<h3>宏观 Regime 检测</h3>
+<p><b>macro.py detect_regime()</b>：基于沪深300 PE十年分位 + MA20/MA60均线方向判断市场状态。</p>
+<ul>
+<li><b>扩张(expansion)</b>：PE分位≤50% 且 MA20>MA60（估值合理+趋势向上）→ S4提MOMENTUM/BETA弹性权重, S1提QUALITY/EARNINGS_YIELD</li>
+<li><b>收缩(contraction)</b>：PE分位>70% 或 MA20<MA60且PE>50%（高估或下行）→ S1提LOW_VOL/BETA/LEVERAGE负向权重增强防御; S4降MOMENTUM/BETA提VALUE/QUALITY</li>
+<li><b>中性(neutral)</b>：其余情况 → 使用默认因子权重</li>
+</ul>
+
+<h3>行业动量倾斜</h3>
+<p><b>macro.py industry_momentum()</b>：计算申万31行业近60日等权涨幅排名。S4 v2 对属于涨幅前30%行业的个股给予评分加分(+0.15)，实现基本面层面的行业景气度倾斜——不依赖政策文本，利用市场数据体现行业轮动规律。</p>
 '''
 
 
@@ -1191,6 +1168,17 @@ details{margin:8px 0}summary{cursor:pointer;font-size:13.5px;color:#334155;paddi
 .pos{font-size:12.5px}.pos .why td{text-align:left;color:var(--mut);font-size:11.5px;background:#fafafa;padding:4px 8px}
 .pos .sum td{font-weight:600;background:#f8fafc}
 .pos-empty{color:var(--mut);font-size:13px;padding:10px;background:#f8fafc;border-radius:8px}
+/* 大盘指数卡片（东方财富风） */
+.idx-cards{display:flex;gap:10px;margin:8px 0 4px;flex-wrap:wrap}
+.idx-card{flex:1;min-width:180px;background:linear-gradient(135deg,#f8fafc 0%,#fff 100%);
+border-radius:12px;padding:14px 16px;border:1px solid var(--line);text-align:center}
+.idx-card.up{border-left:3px solid var(--up)}.idx-card.down{border-left:3px solid var(--down)}
+.idx-name{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:2px}
+.idx-code{font-size:10px;color:var(--mut);margin-left:4px;opacity:0.7}
+.idx-price{font-size:24px;font-weight:700;margin:4px 0;letter-spacing:-0.5px}
+.idx-chg{font-size:13px;display:flex;justify-content:center;gap:8px}
+.idx-chg-val{font-weight:600}.idx-chg-pct{font-weight:600}
+.idx-date{width:100%;text-align:center;color:var(--mut);font-size:11px;margin-top:2px}
 .bt{background:#f0f7ff;color:#1e40af;font-size:12px;padding:6px 10px;border-radius:8px;margin:6px 0}
 .foot{color:var(--mut);font-size:12px;margin-top:24px;border-top:1px solid var(--line);padding-top:12px}
 .foot b{color:#374151}.empty{color:var(--mut);text-align:center;padding:40px}
