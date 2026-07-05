@@ -273,6 +273,148 @@ def _acct_total(conn, a):
     return total
 
 
+# ---------------- 大盘指数 ----------------
+MARKET_INDEX_CACHE = conf.STATE_DIR / "market_index.json"
+MARKET_INDICES = {
+    "sh.000300": {"label": "沪深300", "color": "#d92b2b"},
+    "sh.000001": {"label": "上证指数", "color": "#2563eb"},
+}
+
+
+def _load_market_index(force_refresh=False):
+    """加载沪深300/上证指数日线。优先读缓存 JSON，不存在或 force_refresh 时通过 baostock 拉取。
+    返回 {code: [(date, close), ...], ...} 或空 dict。"""
+    if not force_refresh and MARKET_INDEX_CACHE.exists():
+        try:
+            raw = json.loads(MARKET_INDEX_CACHE.read_text(encoding="utf-8"))
+            out = {}
+            for k, v in raw.items():
+                out[k] = [(d, float(c)) for d, c in v]
+            return out
+        except Exception:
+            pass
+    # 尝试 baostock
+    try:
+        import baostock as bs
+        lg = bs.login()
+        if lg.error_code != "0":
+            bs.logout()
+            return {}
+        out = {}
+        for code, meta in MARKET_INDICES.items():
+            rs = bs.query_history_k_data_plus(code, "date,close",
+                                              start_date="2018-01-01",
+                                              end_date=util.today_str(),
+                                              frequency="d")
+            rows = []
+            while rs.next():
+                rows.append(rs.get_row_data())
+            if rows:
+                out[code] = [(r[0], float(r[1])) for r in rows if r[1]]
+        bs.logout()
+        if out:
+            # 写缓存
+            cache = {k: [(d, round(c, 2)) for d, c in v] for k, v in out.items()}
+            try:
+                MARKET_INDEX_CACHE.parent.mkdir(parents=True, exist_ok=True)
+                MARKET_INDEX_CACHE.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
+        return out
+    except Exception:
+        return {}
+
+
+def _market_index_chart(index_data, w=720, h=240):
+    """大盘指数 SVG 双线图(沪深300+上证指数,归一化到起始值=1)。"""
+    if not index_data:
+        return ""
+    # 合并所有日期
+    all_dates = set()
+    for rows in index_data.values():
+        for d, _ in rows:
+            all_dates.add(d)
+    all_dates = sorted(all_dates)
+    if len(all_dates) < 2:
+        return ""
+
+    padL, padR, padT, padB = 50, 16, 12, 32
+    # 为每个指数构建 date->norm 映射
+    series = {}
+    for code, rows in index_data.items():
+        d2c = {d: c for d, c in rows}
+        # 找第一个有效值做基准
+        base = None
+        for d in all_dates:
+            if d in d2c and d2c[d] > 0:
+                base = d2c[d]
+                break
+        if base is None:
+            continue
+        norm = {}
+        for d in all_dates:
+            if d in d2c and d2c[d] > 0:
+                norm[d] = d2c[d] / base
+        series[code] = norm
+
+    if not series:
+        return ""
+
+    # 合并所有归一化值求 y 范围
+    all_vals = [v for s in series.values() for v in s.values()]
+    lo, hi = min(all_vals), max(all_vals)
+    margin = (hi - lo) * 0.08 or 0.02
+    lo -= margin; hi += margin
+    ys = list(all_vals) + [1.0]
+    lo, hi = min(ys) - margin, max(ys) + margin
+
+    n = len(all_dates)
+    idx = {d: i for i, d in enumerate(all_dates)}
+
+    def xof(d):
+        return padL + (idx[d] / (n - 1)) * (w - padL - padR)
+
+    def yof(v):
+        return padT + (1 - (v - lo) / (hi - lo)) * (h - padT - padB)
+
+    # 网格 + y 刻度(百分比)
+    grid = ""
+    for k in range(5):
+        v = lo + (hi - lo) * k / 4
+        y = yof(v)
+        grid += (f"<line x1='{padL}' y1='{y:.1f}' x2='{w-padR}' y2='{y:.1f}' "
+                 f"stroke='#eef1f4' stroke-width='1'/>")
+        grid += (f"<text x='{padL-6}' y='{y+3:.1f}' text-anchor='end' font-size='10' "
+                 f"fill='#94a3b8'>{(v-1)*100:+.0f}%</text>")
+    # 1.0 基准线
+    y1 = yof(1.0)
+    grid += f"<line x1='{padL}' y1='{y1:.1f}' x2='{w-padR}' y2='{y1:.1f}' stroke='#94a3b8' stroke-width='1' stroke-dasharray='4'/>"
+
+    # 折线
+    lines = ""
+    for code, norm in series.items():
+        meta = MARKET_INDICES.get(code, {})
+        color = meta.get("color", "#64748b")
+        label = meta.get("label", code)
+        ds = sorted(norm.keys())
+        vs = [norm[d] for d in ds]
+        pts = " ".join(f"{xof(d):.1f},{yof(v):.1f}" for d, v in zip(ds, vs))
+        lines += (f"<polyline fill='none' stroke='{color}' stroke-width='2' points='{pts}'/>"
+                  f"<circle cx='{xof(ds[-1]):.1f}' cy='{yof(vs[-1]):.1f}' r='3' fill='{color}'/>")
+        # 末点标签
+        last_v = vs[-1]
+        lx, ly = xof(ds[-1]), yof(last_v)
+        lines += (f"<text x='{lx+5:.1f}' y='{ly-4:.1f}' font-size='10' font-weight='700' "
+                  f"fill='{color}'>{label} {(last_v-1)*100:+.1f}%</text>")
+
+    # x 轴首末日期
+    xlab = (f"<text x='{padL}' y='{h-8}' font-size='10' fill='#94a3b8'>{all_dates[0][:7]}</text>"
+            f"<text x='{w-padR}' y='{h-8}' text-anchor='end' font-size='10' fill='#94a3b8'>{all_dates[-1]}</text>")
+
+    return (f"<svg viewBox='0 0 {w} {h}' width='100%' preserveAspectRatio='xMidYMid meet' "
+            f"style='background:#fff;border-radius:8px'>{grid}{lines}{xlab}</svg>")
+
+
 # ---------------- 颜色/格式(盈红亏绿) ----------------
 def _col(x):
     """收益/涨跌上色:≥0 红(--up),<0 绿(--down)。"""
@@ -605,6 +747,30 @@ def generate(out_path=None):
         ops_section = ("<div class='op none'>暂无待执行操作（各策略空仓或未到调仓日）。"
                        "上线首个交易日 2026-07-06 起，有操作时此处按策略列出。</div>")
 
+    # ===== 大盘指数走势 =====
+    market_data = _load_market_index()
+    market_chart = _market_index_chart(market_data)
+    market_section = ""
+    if market_chart:
+        # 取最新日期和值做摘要
+        m_summary_parts = []
+        for code, meta in MARKET_INDICES.items():
+            rows = market_data.get(code, [])
+            if rows:
+                last_date, last_close = rows[-1]
+                label = meta["label"]
+                m_summary_parts.append(f"{label} {last_close:,.0f}（{last_date}）")
+        market_section = (
+            f"<div class='sec'>📈 大盘指数（2018年至今归一化走势）</div>"
+            f"<div style='color:var(--mut);font-size:12.5px;margin:4px 0 8px'>"
+            f"{' · '.join(m_summary_parts)} · 基准=各自序列首日=1.0</div>"
+            f"{market_chart}")
+    else:
+        market_section = (
+            f"<div class='sec'>📈 大盘指数</div>"
+            f"<div class='pos-empty'>指数数据暂不可用（baostock 离线或网络不通），"
+            f"下次生成看板时将自动重试。</div>")
+
     # ===== 实盘赛马总览 =====
     ov = ""
     for sid, a in sorted(accts.items()):
@@ -681,6 +847,7 @@ def generate(out_path=None):
         f"{nav}<h1>📊 A股模拟跟单看板</h1>"
         f"<div class='sub'>生成 {today} · 数据最新 {last} · 实盘模拟期自 2026-07-06 起 · 模拟/历史不代表未来，非投资建议，人工跟单</div>"
         f"{banner}"
+        f"{market_section}"
         f"<div class='sec'>{ops_title}</div>{ops_section}"
         f"<div class='sec'>实盘赛马总览（2026-07-06 起算）</div>{overview}"
         f"<div class='sec'>各策略详情</div>{cards}"
