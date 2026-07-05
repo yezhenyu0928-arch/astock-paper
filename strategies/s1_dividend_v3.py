@@ -85,6 +85,8 @@ class S1DividendV3(BaseStrategy):
         # ── 宏观 regime 自适应 ──
         try:
             regime = macro.detect_regime(date, conn=ctx.conn)
+            ms = macro.macro_score(date, conn=ctx.conn)
+            mf = macro.macro_factor(date, conn=ctx.conn)
         except Exception:
             regime = "neutral"
             ms = 0.0
