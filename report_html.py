@@ -1291,6 +1291,14 @@ _LIVE_JS = """<script>
       }
       var de=document.getElementById('idx_date'); if(de) de.textContent='实时行情（腾讯）';
     }
+    function refreshIdx(){
+      var s=document.createElement('script');
+      s.src='https://qt.gtimg.cn/q='+idxMap.map(function(x){return x.qq;}).join(',');
+      s.charset='gbk';
+      s.onload=function(){updateIdx();};
+      document.head.appendChild(s);
+    }
+    // 首次加载:3秒超时兜底
     var it=setTimeout(function(){updateIdx();},3000);
     var is=document.createElement('script');
     is.src='https://qt.gtimg.cn/q='+idxMap.map(function(x){return x.qq;}).join(',');
@@ -1298,6 +1306,8 @@ _LIVE_JS = """<script>
     is.onload=function(){clearTimeout(it);updateIdx();};
     is.onerror=function(){clearTimeout(it);};
     document.head.appendChild(is);
+    // 每10秒自动刷新指数行情
+    setInterval(refreshIdx,10000);
   }catch(e){}
 })();
 (function(){
