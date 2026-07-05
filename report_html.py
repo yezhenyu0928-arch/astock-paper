@@ -371,7 +371,8 @@ def _load_market_index(force_refresh=False):
 
 def _market_index_cards(index_data):
     """生成东方财富风格的三大指数卡片：当前点位、涨跌额、涨跌幅、红绿颜色。
-    涨跌基于最近一个交易日 vs 前一交易日。"""
+    涨跌基于最近一个交易日 vs 前一交易日（t-1 vs t-2）。
+    涨跌额=最近收盘-前日收盘，涨跌幅=(涨跌额/前日收盘)*100%。"""
     if not index_data:
         return '<div class="pos-empty">指数数据暂不可用（baostock 离线或网络不通），下次生成看板时将自动重试。</div>'
 
@@ -383,7 +384,7 @@ def _market_index_cards(index_data):
         last_date, last_close = rows[-1]
         prev_date, prev_close = rows[-2]
         chg = last_close - prev_close
-        chg_pct = (chg / prev_close) if prev_close > 0 else 0
+        chg_pct = (chg / prev_close * 100) if prev_close > 0 else 0
         color_class = "up" if chg >= 0 else "down"
         color = "var(--up)" if chg >= 0 else "var(--down)"
         sign = "+" if chg >= 0 else ""
@@ -391,17 +392,24 @@ def _market_index_cards(index_data):
         cards_html += (
             f'<div class="idx-card {color_class}">'
             f'<div class="idx-name">{meta["label"]}<span class="idx-code">{meta["code_short"]}</span></div>'
-            f'<div class="idx-price" style="color:{color}">{last_close:,.2f}</div>'
-            f'<div class="idx-chg" style="color:{color}">'
+            f'<div class="idx-price">{last_close:,.2f}</div>'
+            f'<div class="idx-chg">'
             f'<span class="idx-chg-val">{sign}{chg:,.2f}</span>'
             f'<span class="idx-chg-pct">{sign}{chg_pct:.2f}%</span>'
             f'</div>'
             f'</div>')
 
+    # 取最新日期用于展示
+    latest_date = ""
+    for code, rows in index_data.items():
+        if rows:
+            latest_date = rows[-1][0]
+            break
+
     return (
         f'<div class="idx-cards">'
         f'{cards_html}'
-        f'<div class="idx-date">数据更新至 {rows[-1][0] if rows else "—"}</div>'
+        f'<div class="idx-date">数据更新至 {latest_date}</div>'
         f'</div>')
 
 
@@ -1191,6 +1199,8 @@ details{margin:8px 0}summary{cursor:pointer;font-size:13.5px;color:#334155;paddi
 .idx-card{flex:1;min-width:180px;background:linear-gradient(135deg,#f8fafc 0%,#fff 100%);
 border-radius:12px;padding:14px 16px;border:1px solid var(--line);text-align:center}
 .idx-card.up{border-left:3px solid var(--up)}.idx-card.down{border-left:3px solid var(--down)}
+.idx-card.up .idx-price,.idx-card.up .idx-chg{color:var(--up)}
+.idx-card.down .idx-price,.idx-card.down .idx-chg{color:var(--down)}
 .idx-name{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:2px}
 .idx-code{font-size:10px;color:var(--mut);margin-left:4px;opacity:0.7}
 .idx-price{font-size:24px;font-weight:700;margin:4px 0;letter-spacing:-0.5px}

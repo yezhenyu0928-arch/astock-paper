@@ -1,14 +1,21 @@
-﻿{
+{
  "strategy_id": "s1_dividend@v3",
  "init_capital": 50000.0,
  "cash": 50000.0,
  "positions": {},
  "frozen": false,
  "nav": 1.0,
- "nav_history": [["2026-07-03", 1.0]],
+ "nav_history": [
+  [
+   "2026-07-03",
+   1.0
+  ]
+ ],
  "pending": [],
  "highest_nav": 1.0,
- "settled_dates": ["2026-07-03"],
+ "settled_dates": [
+  "2026-07-03"
+ ],
  "applied_div": [],
  "aux": {}
 }
