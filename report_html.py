@@ -388,8 +388,7 @@ def _load_market_index(force_refresh=False):
 
 def _market_index_cards(index_data):
     """生成东方财富风格的三大指数卡片：当前点位、涨跌额、涨跌幅、红绿颜色。
-    涨跌基于最近一个交易日 vs 前一交易日（t-1 vs t-2）。
-    涨跌额=最近收盘-前日收盘，涨跌幅=(涨跌额/前日收盘)*100%。"""
+    初始用baostock日线收盘渲染，页面加载后JS从qt.gtimg.cn拉取实时行情覆盖。"""
     if not index_data:
         return '<div class="pos-empty">指数数据暂不可用（baostock 离线或网络不通），下次生成看板时将自动重试。</div>'
 
@@ -407,16 +406,15 @@ def _market_index_cards(index_data):
         sign = "+" if chg >= 0 else ""
 
         cards_html += (
-            f'<div class="idx-card {color_class}">'
+            f'<div class="idx-card {color_class}" id="idx_{code.replace(".","_")}">'
             f'<div class="idx-name">{meta["label"]}<span class="idx-code">{meta["code_short"]}</span></div>'
-            f'<div class="idx-price">{last_close:,.2f}</div>'
-            f'<div class="idx-chg">'
-            f'<span class="idx-chg-val">{sign}{chg:,.2f}</span>'
-            f'<span class="idx-chg-pct">{sign}{chg_pct:.2f}%</span>'
+            f'<div class="idx-price" id="idx_price_{code.replace(".","_")}">{last_close:,.2f}</div>'
+            f'<div class="idx-chg" id="idx_chg_{code.replace(".","_")}">'
+            f'<span class="idx-chg-val" id="idx_chg_val_{code.replace(".","_")}">{sign}{chg:,.2f}</span>'
+            f'<span class="idx-chg-pct" id="idx_chg_pct_{code.replace(".","_")}">{sign}{chg_pct:.2f}%</span>'
             f'</div>'
             f'</div>')
 
-    # 取最新日期用于展示
     latest_date = ""
     for code, rows in index_data.items():
         if rows:
@@ -424,9 +422,9 @@ def _market_index_cards(index_data):
             break
 
     return (
-        f'<div class="idx-cards">'
+        f'<div class="idx-cards" id="idx_cards">'
         f'{cards_html}'
-        f'<div class="idx-date">数据更新至 {latest_date}</div>'
+        f'<div class="idx-date" id="idx_date">数据更新至 {latest_date}（打开页面后自动获取实时行情）</div>'
         f'</div>')
 
 
@@ -1271,6 +1269,40 @@ _FOOTER = """<div class="foot">
 _LIVE_JS = """<script>
 (function(){
   try{
+    // ── 大盘指数实时行情（腾讯 qt.gtimg.cn）──
+    var idxMap=[{qq:'sh000001',id:'sh_000001'},{qq:'sz399001',id:'sz_399001'},{qq:'sz399006',id:'sz_399006'}];
+    function idxFmt(v){return (v&&v!='0.000'&&v!='0.00')?parseFloat(v):null;}
+    function updateIdx(){
+      for(var i=0;i<idxMap.length;i++){
+        var v=window['v_'+idxMap[i].qq];
+        if(!v) continue;
+        var f=v.split('~'); var cur=idxFmt(f[3]); var prev=idxFmt(f[4]);
+        if(!cur||!prev) continue;
+        var chg=cur-prev; var chgPct=prev>0?(chg/prev*100):0;
+        var isUp=chg>=0; var col=isUp?'var(--up)':'var(--down)'; var sign=isUp?'+':'';
+        var pr=document.getElementById('idx_price_'+idxMap[i].id);
+        var cv=document.getElementById('idx_chg_val_'+idxMap[i].id);
+        var cp=document.getElementById('idx_chg_pct_'+idxMap[i].id);
+        var ca=document.getElementById('idx_'+idxMap[i].id);
+        if(pr){pr.textContent=cur.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});pr.style.color=col;}
+        if(cv){cv.textContent=sign+chg.toFixed(2);cv.style.color=col;}
+        if(cp){cp.textContent=sign+chgPct.toFixed(2)+'%';cp.style.color=col;}
+        if(ca){ca.className=ca.className.replace(/\bup\b|\bdown\b/g,'')+' '+(isUp?'up':'down');}
+      }
+      var de=document.getElementById('idx_date'); if(de) de.textContent='实时行情（腾讯）';
+    }
+    var it=setTimeout(function(){updateIdx();},3000);
+    var is=document.createElement('script');
+    is.src='https://qt.gtimg.cn/q='+idxMap.map(function(x){return x.qq;}).join(',');
+    is.charset='gbk';
+    is.onload=function(){clearTimeout(it);updateIdx();};
+    is.onerror=function(){clearTimeout(it);};
+    document.head.appendChild(is);
+  }catch(e){}
+})();
+(function(){
+  try{
+    // ── 个股/ETF 实时价（原有逻辑）──
     var ops=document.querySelectorAll('.op[data-code]');
     if(!ops.length) return;
     var set={}, codes=[];
