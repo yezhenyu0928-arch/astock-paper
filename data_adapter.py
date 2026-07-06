@@ -86,7 +86,9 @@ def _retry_df(fn, tries=3, delay=0.5, what=""):
 
 
 def _bs():
-    global _bs_logged_in
+    global _bs_logged_in, _GLOBAL_ALL_DISABLED
+    if _GLOBAL_ALL_DISABLED:
+        raise ConnectionError("全局短路:国内数据源不可达")
     import baostock as bs
     if not _bs_logged_in:
         bs.login()
