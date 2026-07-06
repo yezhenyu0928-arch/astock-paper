@@ -20,7 +20,9 @@ from engine import Engine
 log = logging.getLogger("run_daily")
 
 # 海外 Runner 数据更新超时(秒)。超时后降级继续跑引擎,不挂死 30 分钟。
-_DATA_TIMEOUT = 300  # 5 分钟
+# ETF 数据(~15个)约 30-60 秒能取完;个股(~300个)yfinance 每个 1-2 秒,
+# 超时后引擎用缓存DB+已有ETF新数据继续,不影响 ETF动量轮动/网格策略。
+_DATA_TIMEOUT = 180  # 3 分钟
 
 
 class TimeoutError(Exception):
