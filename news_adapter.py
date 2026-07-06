@@ -38,25 +38,41 @@ def _retry(fn, what=""):
 
 # ---------------- 抓取 ----------------
 def fetch_flash(since_ts=None) -> pd.DataFrame:
-    """财联社电报快讯。返回 ts,title,content,source。"""
-    import akshare as ak
-    df = _retry(lambda: ak.stock_info_global_cls(symbol="全部"), "flash_cls")
-    if df is None or df.empty:
-        # 备源:央视新闻联播文字稿
-        df2 = _retry(lambda: ak.news_cctv(), "news_cctv")
-        if df2 is None or df2.empty:
-            return pd.DataFrame(columns=["ts", "title", "content", "source"])
-        out = pd.DataFrame({"ts": df2.get("date", "").astype(str),
-                            "title": df2.get("title", ""), "content": df2.get("content", ""),
-                            "source": "news_cctv"})
+    """快讯。用新浪财经新闻 API(稳定,无需 akshare 版本同步)。返回 ts,title,content,source。"""
+    rows = _retry(_fetch_sina_realtime, "flash_sina")
+    if rows:
+        out = pd.DataFrame(rows)
+        if since_ts:
+            out = out[out["ts"] >= since_ts]
         return out
-    # 财联社列:标题/内容/发布日期/发布时间
-    ts = (df.get("发布日期", "").astype(str) + " " + df.get("发布时间", "").astype(str)).str.strip()
-    out = pd.DataFrame({"ts": ts, "title": df.get("标题", ""), "content": df.get("内容", ""),
-                        "source": "cls"})
-    if since_ts:
-        out = out[out["ts"] >= since_ts]
-    return out
+    # 备源:akshare 央视新闻联播文字稿
+    try:
+        import akshare as ak
+        df2 = _retry(lambda: ak.news_cctv(), "news_cctv")
+        if df2 is not None and not df2.empty:
+            return pd.DataFrame({"ts": df2.get("date", "").astype(str),
+                                 "title": df2.get("title", ""), "content": df2.get("content", ""),
+                                 "source": "news_cctv"})
+    except Exception:
+        pass
+    return pd.DataFrame(columns=["ts", "title", "content", "source"])
+
+
+def _fetch_sina_realtime():
+    """新浪财经滚动新闻。返回 list of {ts,title,content,source}。"""
+    import requests
+    r = requests.get("https://feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2509&num=30",
+                     timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+    data = r.json()
+    items = []
+    for entry in (data.get("result", {}) or {}).get("data", []) or []:
+        items.append({
+            "ts": (entry.get("ctime", "") or "")[:19].replace("T", " "),
+            "title": entry.get("title", ""),
+            "content": entry.get("summary", ""),
+            "source": "sina_roll",
+        })
+    return items
 
 
 def fetch_stock_news(code, days=3) -> pd.DataFrame:
