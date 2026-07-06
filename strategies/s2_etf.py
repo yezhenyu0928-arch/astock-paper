@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""S2 ETF 动量轮动(SPEC 模块3+P2升级)。每周最后交易日调仓,持有动量最强的1只ETF;
+"""S2 ETF 动量轮动(SPEC 模块3+P2升级+产业逻辑增强)。每周最后交易日调仓,持有动量最强的1只ETF;
 绝对动量为负则切换国债ETF避险。
 P2升级: macro_score() 调节仓位大小——紧缩期降仓到60%, 扩张期满仓。
+产业逻辑增强: 叠加产业信号,政策利好的ETF获得额外加分。
 策略不做止损/仓位上限(risk.py 统一管)。"""
 import logging
 from models import Order
@@ -37,6 +38,14 @@ class S2EtfMomentum(BaseStrategy):
         extra = (self.config.get("custom") or {}).get("s2_universe_extra", []) or []
         universe = list(dict.fromkeys(list(self.universe) + extra))
 
+        # ── 获取产业信号 ──
+        sector_boosts = {}
+        try:
+            import news_engine as ne
+            sector_boosts = ne.get_all_sector_boosts(date, conn=ctx.conn)
+        except Exception:
+            pass
+
         # 计算各标的各窗口收益率
         rets = {}
         for code in universe:
@@ -47,6 +56,7 @@ class S2EtfMomentum(BaseStrategy):
             return []
 
         # 各窗口降序名次(收益越高名次越小=1),score=均名次,最小者为 best
+        # 叠加产业信号:利好ETF排名提前
         ranks = {c: 0.0 for c in rets}
         for w in windows:
             ordered = sorted(rets, key=lambda c: rets[c][w], reverse=True)
@@ -54,6 +64,11 @@ class S2EtfMomentum(BaseStrategy):
                 ranks[c] += (i + 1)
         for c in ranks:
             ranks[c] /= len(windows)
+            # 产业加分:利好boost>0时排名提前(减小),利空时排名推后(增大)
+            boost = sector_boosts.get(c, 0)
+            if boost != 0:
+                ranks[c] -= boost * 0.3  # 每+1分提前0.3名
+
         best = min(ranks, key=lambda c: ranks[c])
 
         # 绝对动量:best 的最短窗口收益<0 → 切避险(国债ETF)
@@ -70,13 +85,19 @@ class S2EtfMomentum(BaseStrategy):
 
         best_name = ctx.name(best)
         m2_info = f" M2{mf.get('m2_yoy',0) or 0:.0f}%" if mf.get("m2_yoy") else ""
+
+        # 构建产业信号描述
+        boost_info = ""
+        if orig_best in sector_boosts and sector_boosts[orig_best] != 0:
+            boost_info = f"·产业信号{sector_boosts[orig_best]:+.1f}"
+
         orders = []
         for code in held:
             if code != best:
                 if switched_safe:
                     reason = f"动量轮动:换出{ctx.name(code)}(最强{ctx.name(orig_best)}绝对动量转负,避险)"
                 else:
-                    reason = f"动量轮动:换出{ctx.name(code)},轮入更强的{best_name}"
+                    reason = f"动量轮动:换出{ctx.name(code)},轮入更强的{best_name}{boost_info}"
                 orders.append(Order(strategy_id=self.strategy_id, code=code, side="sell",
                                     weight=0.0, reason=reason, signal_date=date))
         if best not in held:
@@ -86,7 +107,7 @@ class S2EtfMomentum(BaseStrategy):
                           f"绝对动量为负,macro{ms:+.1f}{m2_info},全仓避险)")
             else:
                 rtxt = " ".join(f"r{wn}={rets[best][wn]:+.1%}" for wn in windows)
-                reason = f"动量轮动:买入最强 {best_name}({rtxt},{len(rets)}只中第1,macro{ms:+.1f}{m2_info})"
+                reason = f"动量轮动:买入最强 {best_name}({rtxt},{len(rets)}只中第1,macro{ms:+.1f}{m2_info}{boost_info})"
             orders.append(Order(strategy_id=self.strategy_id, code=best, side="buy",
                                 weight=target_w, reason=reason, signal_date=date))
         return orders

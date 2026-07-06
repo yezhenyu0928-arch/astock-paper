@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
-"""S6 行业ETF动量轮动(卡C+P2升级)。每月最后交易日持有综合评分最强的 1 只行业ETF;
-评分 = 动量排名×0.8 + 60日低波排名×0.2(低波加分,名次越小越优);
+"""S6 行业ETF动量轮动(卡C+P2升级+产业逻辑增强)。每月最后交易日持有综合评分最强的 1 只行业ETF;
+评分 = 动量排名×0.6 + 60日低波排名×0.2 + 产业信号×0.2(产业利好加分,利空减分);
 最强者 20 日收益<0 → 切国债ETF避险。风控(止损/仓位)由 risk.py 统一管。
 
 P2升级: 用 macro_score() 调节避险阈值 + 仓位大小。
-- macro_score < -0.5（紧缩）→ 降仓位到50%，更快切国债
-- macro_score > 0.5（扩张）→ 维持满仓，放宽避险阈值
+产业逻辑增强: 叠加 news_engine 的产业主题信号,让策略能抓住政策驱动的行业机会。
 
-设计意图——"政策/行业面"的可验证代理:产业政策利好(设备更新、化债、AI扶持、新能源补贴等)
-最终都会体现为对应行业指数的涨幅动量。用行业ETF动量轮动自动跟随政策与景气主线,无需爬政策文本。"""
+设计意图——动量是产业逻辑的"滞后代理",产业信号是"前瞻补充":
+- 动量排名:已涨的行业(滞后)
+- 产业信号:政策驱动的行业(前瞻,如国务院发文支持存储芯片)
+- 两者叠加:既有趋势确认,又有政策前瞻"""
 import logging
 from statistics import pstdev
 
@@ -45,9 +46,17 @@ class S6SectorMomentum(BaseStrategy):
 
         windows = self.params.get("momentum_windows", [20, 60])
         vol_window = self.params.get("vol_window", 60)
-        weights = self.params.get("weights", {"momentum": 0.8, "low_vol": 0.2})
+        weights = self.params.get("weights", {"momentum": 0.6, "low_vol": 0.2, "industry": 0.2})
         safe = self.params.get("safe_asset", "sh511010")
         universe = list(dict.fromkeys(self.universe))
+
+        # ── 获取产业信号 ──
+        sector_boosts = {}
+        try:
+            import news_engine as ne
+            sector_boosts = ne.get_all_sector_boosts(date, conn=ctx.conn)
+        except Exception as e:
+            log.debug("产业信号获取失败: %s", e)
 
         # 计算各标的动量(各窗口收益)与 60 日波动率;数据不足者跳过(新上市ETF自然被排除)
         rets, vols = {}, {}
@@ -77,9 +86,21 @@ class S6SectorMomentum(BaseStrategy):
         # 低波:波动率升序名次(越低=越优)
         vol_ordered = sorted(vols, key=lambda c: vols[c])
         vol_rank = {c: i + 1 for i, c in enumerate(vol_ordered)}
-        # 综合分(越小越优)= 动量×0.8 + 低波×0.2
-        wl, wv = weights.get("momentum", 0.8), weights.get("low_vol", 0.2)
-        score = {c: wl * mom_rank[c] + wv * vol_rank[c] for c in rets}
+
+        # 产业信号:boost转为排名(越利好名次越小)
+        industry_rank = {}
+        for c in rets:
+            boost = sector_boosts.get(c, 0)
+            # boost范围-2..+2,转为排名分(1..N)
+            # 利好(boost>0)排名靠前,利空(boost<0)排名靠后
+            industry_rank[c] = max(1, len(rets) * (1 - boost / 2) / 2)
+
+        # 综合分(越小越优)= 动量×0.6 + 低波×0.2 + 产业×0.2
+        wl = weights.get("momentum", 0.6)
+        wv = weights.get("low_vol", 0.2)
+        wi = weights.get("industry", 0.2)
+        score = {c: wl * mom_rank[c] + wv * vol_rank[c] + wi * industry_rank.get(c, len(rets))
+                 for c in rets}
         best = min(score, key=lambda c: score[c])
 
         # 绝对动量:best 的最短窗口收益<0 → 切避险(国债ETF)
@@ -103,12 +124,18 @@ class S6SectorMomentum(BaseStrategy):
         best_name = ctx.name(best)
         m2_info = f" M2{mf.get('m2_yoy',0) or 0:.0f}%" if mf.get("m2_yoy") else ""
         orders = []
+
+        # 构建产业信号描述
+        boost_info = ""
+        if best in sector_boosts and sector_boosts[best] != 0:
+            boost_info = f"·产业信号{sector_boosts[best]:+.1f}"
+
         for code in held:
             if code != best:
                 if switched:
                     reason = f"行业轮动:换出{ctx.name(code)}(最强{ctx.name(orig_best)}绝对动量转负,macro{ms:+.1f}{m2_info},避险)"
                 else:
-                    reason = f"行业轮动:换出{ctx.name(code)},轮入更强的{best_name}"
+                    reason = f"行业轮动:换出{ctx.name(code)},轮入更强的{best_name}{boost_info}"
                 orders.append(Order(self.strategy_id, code, "sell", 0.0, reason, date))
         if best not in held:
             if switched:
@@ -118,6 +145,6 @@ class S6SectorMomentum(BaseStrategy):
             else:
                 rtxt = " ".join(f"r{wn}={rets[best][wn]:+.1%}" for wn in windows)
                 reason = (f"行业轮动:买入最强 {best_name}({rtxt}·60日波动池内第{vol_rank[best]}低,"
-                          f"{len(rets)}只中综合第1,macro{ms:+.1f}{m2_info})")
+                          f"{len(rets)}只中综合第1,macro{ms:+.1f}{m2_info}{boost_info})")
             orders.append(Order(self.strategy_id, best, "buy", target_weight, reason, date))
         return orders

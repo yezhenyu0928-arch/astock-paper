@@ -158,9 +158,10 @@ def run(date=None, only=None):
         conn.close()
         da.bs_logout()
 
-    # 消息面:盘后先扫市场分(供风控降敞口),须在 run_strategies 之前
+    # 消息面:盘后先扫市场分(供风控降敞口) + 产业主题扫描(供策略叠加),须在 run_strategies 之前
     news_on = (cfg.get("news_layer") or {}).get("enabled")
     mkt_score = None
+    industry_result = None
     if news_on:
         try:
             import news_adapter as na
@@ -168,6 +169,15 @@ def run(date=None, only=None):
             na.store_news(na.fetch_flash())
             mkt_score, _ = ne.scan_market(today)
             log.info("消息面市场分:%s", mkt_score)
+            # 产业主题扫描(新增)
+            try:
+                industry_result = ne.scan_industry_themes(today)
+                if industry_result and industry_result.get("themes"):
+                    log.info("产业主题:%d个主题,行业信号:%s",
+                             len(industry_result["themes"]),
+                             {k: v for k, v in industry_result.get("sector_score", {}).items() if v != 0})
+            except Exception as e:
+                log.warning("产业主题扫描失败(降级):%s", e)
         except Exception as e:
             log.warning("消息面扫描失败(降级,不阻断):%s", e)
 

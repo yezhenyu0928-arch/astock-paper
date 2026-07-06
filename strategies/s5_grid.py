@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""S5 大盘择时网格(SPEC 模块3)。只操作 sh510300,分5档建/减仓。
+"""S5 大盘择时网格(SPEC 模块3+产业逻辑增强)。只操作 sh510300,分5档建/减仓。
 PE分位(沪深300近10年):<30% 每跌grid_step加1档;>70% 每涨grid_step减1档;中间纯网格±grid_step。
 每日。
 P2升级: macro_score() 调节网格密度——收缩期放宽步长防接飞刀，扩张期收窄步长防踏空。
+产业逻辑增强: 市场面利好时略微放宽步长(更积极建仓),利空时收紧步长(更谨慎)。
 ⚠ 参考价用持仓均价近似"最近操作价";档数 k 由持仓市值反推;PE数据不足期间仅网格不择时。"""
 import logging
 from models import Order
@@ -35,6 +36,25 @@ class S5IndexGrid(BaseStrategy):
             step = step_base * 0.7        # 扩张: 收窄到1.4%
         else:
             step = step_base
+
+        # ── 产业/市场面信号调整 ──
+        news_adjust = 0.0
+        try:
+            import news_engine as ne
+            market_score = 0.0
+            r = ctx.conn.execute("SELECT score FROM news_signal WHERE signal_date=? AND scope='market'",
+                                 (date,)).fetchone()
+            if r:
+                market_score = float(r[0])
+            # 利好时略微放宽步长(更积极建仓), 利空时收紧(更谨慎)
+            if market_score > 0.5:
+                news_adjust = -0.003   # 放宽步长(更易触发加仓)
+            elif market_score < -0.5:
+                news_adjust = 0.005    # 收紧步长(更难触发加仓)
+        except Exception:
+            pass
+        step = max(0.01, step + news_adjust)
+
         # 宏观分越高, 总档数可略多(更积极建仓)
         extra_tranches = max(0, int(ms * 2))  # ms=-1→-2(不减), ms=+1→+2
         eff_tranches = max(3, min(8, tranches + extra_tranches))

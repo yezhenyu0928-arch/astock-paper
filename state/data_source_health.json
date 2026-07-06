@@ -1,0 +1,45 @@
+{
+  "sources": {
+    "best": {
+      "total_calls": 10,
+      "total_success": 10,
+      "disabled": false,
+      "disabled_until": 0,
+      "health_score": 0.875,
+      "status": "healthy"
+    },
+    "good": {
+      "total_calls": 10,
+      "total_success": 10,
+      "disabled": false,
+      "disabled_until": 0,
+      "health_score": 0.875,
+      "status": "healthy"
+    },
+    "bad": {
+      "total_calls": 30,
+      "total_success": 10,
+      "disabled": false,
+      "disabled_until": 0,
+      "health_score": 0.875,
+      "status": "healthy"
+    },
+    "test_a": {
+      "total_calls": 4,
+      "total_success": 2,
+      "disabled": false,
+      "disabled_until": 0,
+      "health_score": 0.875,
+      "status": "healthy"
+    },
+    "akshare_sina": {
+      "total_calls": 18,
+      "total_success": 18,
+      "disabled": false,
+      "disabled_until": 0,
+      "health_score": 0.75,
+      "status": "degraded"
+    }
+  },
+  "saved_at": 1783300161.4611042
+}

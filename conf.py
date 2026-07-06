@@ -37,6 +37,17 @@ _RISK_STRICTER_WHEN_SMALLER = {
     ("market_freeze", "m20_drop"): True,
 }
 
+# 默认数据源优先级配置
+DEFAULT_DATA_SOURCE_PRIORITY = {
+    "etf_daily": ["sina_etf", "baostock", "akshare_em"],
+    "stock_daily": ["baostock", "akshare_em"],
+    "hfq_close": ["baostock", "akshare_em"],
+    "realtime": ["tencent", "sina"],
+    "calendar": ["akshare_sina", "baostock"],
+    "index_daily": ["akshare"],
+    "fundamental": ["baostock"],
+}
+
 
 def _validate_risk_override(base_risk: dict, override: dict) -> dict:
     """把 override 合并进 base_risk,只接受更严的值,放松的拒绝并告警。返回新 risk dict。"""
@@ -73,7 +84,7 @@ _cache = {}
 
 
 def load_config(path=None, use_cache=True) -> dict:
-    """读取 config.yaml,注入秘钥,应用 risk_override。"""
+    """读取 config.yaml,注入秘钥,应用 risk_override,合并数据源优先级配置。"""
     path = Path(path) if path else CONFIG_PATH
     if use_cache and path in _cache:
         return _cache[path]
@@ -86,6 +97,9 @@ def load_config(path=None, use_cache=True) -> dict:
     # risk_override(只许更严)
     override = (cfg.get("custom") or {}).get("risk_override") or {}
     cfg["risk"] = _validate_risk_override(cfg.get("risk", {}), override)
+    # 数据源优先级: 配置文件覆盖默认值
+    cfg["data_source_priority"] = {**DEFAULT_DATA_SOURCE_PRIORITY,
+                                    **(cfg.get("data_source_priority") or {})}
     if use_cache:
         _cache[path] = cfg
     return cfg

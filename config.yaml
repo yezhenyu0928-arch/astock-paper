@@ -42,13 +42,17 @@ strategies:                     # 开关:true 参与赛马。默认全开(赛马
 schedule:
   signal_push_time: "18:00"     # 北京时间,仅用于消息标题展示
 
-news_layer:                   # 消息面层(SPEC_NEWS.md):只降险不追涨
+news_layer:                   # 消息面层:风险过滤 + 产业逻辑驱动
   enabled: true
-  llm: false                  # true 需在 Secrets 配 ANTHROPIC_API_KEY(正式档:L1更保守则采纳)
-  llm_shadow: false           # 卡F:影子评估档。true 时每日算L1但不干预交易,仅记录到 state/news_shadow.csv;
-                              # 需配 ANTHROPIC_API_KEY。跑≥2周后 python eval_news.py 出评估报告,决定是否转正式 llm:true
+  llm: true                   # 启用 LLM 语义分析
+  llm_provider: mimo          # mimo / anthropic
+  llm_base_url: https://api.xiaomimimo.com/anthropic
+  llm_api_key_env: MIMO_API_KEY  # GitHub Secrets 中的环境变量名
+  llm_model: mimo             # 模型名称
+  llm_shadow: false           # 影子评估档(记录但不干预)
   intraday_scan: true         # 盘中10:00/13:30/14:45三次黑天鹅扫描
-  exposure_map: {-2: 0.0, -1: 0.5, 0: 1.0, 1: 1.0, 2: 1.0}
+  industry_boost_weight: 0.2  # 产业信号在S6中的权重(0.2=20%)
+  exposure_map: {-2: 0.0, -1: 0.5, 0: 1.0, 1: 1.1, 2: 1.2}  # 利好也能加仓(+10%/+20%)
 
 custom:                        # 小资金适配与个性化(SPEC_FILL.md)
   min_order_amount: 5000       # 单笔最低金额(最低佣金5元的成本保护)

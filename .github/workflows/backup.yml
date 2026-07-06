@@ -1,0 +1,112 @@
+# 数据备份与校验工作流
+# 每周日创建完整备份,每天创建增量备份,每月执行数据完整性校验
+name: backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'    # 每天凌晨2点: 增量备份(周日为完整备份)
+    - cron: '0 3 1 * *'    # 每月1日凌晨3点: 数据完整性校验
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: '操作类型'
+        required: true
+        default: 'incremental'
+        type: choice
+        options:
+          - full          # 完整备份
+          - incremental   # 增量备份
+          - check         # 数据校验
+          - repair        # 修复数据
+          - cleanup       # 清理过期备份
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache DB
+        id: cache-db
+        uses: actions/cache@v4
+        with:
+          path: db/market.sqlite
+          key: market-db-${{ github.run_id }}
+          restore-keys: |
+            market-db-
+
+      - name: Install dependencies
+        run: |
+          pip install pandas akshare baostock requests pyyaml
+
+      - name: Determine operation
+        id: op
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "operation=${{ github.event.inputs.operation }}" >> $GITHUB_OUTPUT
+          else
+            # 判断是否为周日 (cron表达式中周日是0)
+            day_of_week=$(date +%w)
+            if [ "$day_of_week" = "0" ]; then
+              echo "operation=full" >> $GITHUB_OUTPUT
+            else
+              echo "operation=incremental" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Run backup
+        run: |
+          operation="${{ steps.op.outputs.operation }}"
+          echo "执行操作: $operation"
+
+          if [ "$operation" = "full" ]; then
+            python data_snapshot.py --backup full
+          elif [ "$operation" = "incremental" ]; then
+            python data_snapshot.py --backup incremental
+          elif [ "$operation" = "check" ]; then
+            python data_snapshot.py --check > check_result.json
+            cat check_result.json
+          elif [ "$operation" = "repair" ]; then
+            python data_snapshot.py --repair
+          elif [ "$operation" = "cleanup" ]; then
+            python data_snapshot.py --cleanup
+          fi
+
+      - name: Upload backup artifacts
+        if: steps.op.outputs.operation == 'full' || steps.op.outputs.operation == 'incremental'
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: backups/
+          retention-days: 30
+
+      - name: Check result notification
+        if: steps.op.outputs.operation == 'check'
+        run: |
+          # 解析校验结果
+          errors=$(cat check_result.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(len([i for i in d.get('issues',[]) if i.get('severity')=='error']))")
+          warnings=$(cat check_result.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(len([i for i in d.get('issues',[]) if i.get('severity')=='warning']))")
+
+          echo "数据校验结果: $errors 个错误, $warnings 个警告"
+
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::数据完整性校验发现 $errors 个错误!"
+            # 这里可以添加通知逻辑
+            exit 1
+          fi
+
+      - name: Update DB cache
+        if: steps.op.outputs.operation != 'check'
+        uses: actions/cache@v4
+        with:
+          path: db/market.sqlite
+          key: market-db-${{ github.run_id }}
+
+      - name: Cleanup old backups
+        if: steps.op.outputs.operation == 'full' || steps.op.outputs.operation == 'incremental'
+        run: python data_snapshot.py --cleanup

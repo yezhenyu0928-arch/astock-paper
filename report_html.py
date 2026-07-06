@@ -654,6 +654,9 @@ def _positions_table(conn, a, sid, log_rows):
         shares = p.get("shares", 0)
         avg = p.get("avg_cost", 0)
         last = _latest_close(conn, code)
+        prev = conn.execute("SELECT close FROM daily_bar WHERE code=? AND trade_date<? ORDER BY trade_date DESC LIMIT 1",
+                            (code, today)).fetchone()
+        prev_close = float(prev[0]) if prev else last
         mv = shares * last
         pnl = (last / avg - 1) if avg else None
         posp = (mv / total) if total else 0
@@ -661,19 +664,22 @@ def _positions_table(conn, a, sid, log_rows):
         bdate, reason = _buy_info(sid, code, log_rows, fallback_date=p.get("buy_date", ""))
         hold = _hold_days(bdate, today)
         body += (
-            f"<tr><td class='l'>{util.bare(code)} {html.escape(nm)}</td>"
-            f"<td>{shares}</td><td>{util.r2(avg)}</td><td>{util.r2(last)}</td>"
-            f"<td>{mv:,.0f}</td><td style='color:{_col(pnl)}'>{_pct(pnl)}</td>"
+            f"<tr data-code='{code}' data-avg='{avg}' data-shares='{shares}' data-prev='{prev_close}'>"
+            f"<td class='l'>{util.bare(code)} {html.escape(nm)}</td>"
+            f"<td>{shares}</td><td>{util.r2(avg)}</td><td class='cur'>{util.r2(last)}</td>"
+            f"<td class='mv'>{mv:,.0f}</td>"
+            f"<td class='cpnl' style='color:{_col(pnl)}'>{_pct(pnl)}</td>"
+            f"<td class='dpnl' style='color:var(--mut)'>—</td>"
             f"<td>{posp*100:.0f}%</td></tr>"
-            f"<tr class='why'><td colspan='7'>买入 {bdate or '—'} · 持有{hold}天 · "
+            f"<tr class='why'><td colspan='8'>买入 {bdate or '—'} · 持有{hold}天 · "
             f"理由：{html.escape(reason)}</td></tr>")
     tot_pnl = (total / init - 1) if init else None
-    body += (f"<tr class='sum'><td class='l'>现金</td><td colspan='3'></td>"
-             f"<td>{cash:,.0f}</td><td colspan='2'></td></tr>"
-             f"<tr class='sum'><td class='l'>合计总资产</td><td colspan='3'></td>"
-             f"<td>{total:,.0f}</td><td style='color:{_col(tot_pnl)}'>{_pct(tot_pnl)}</td><td></td></tr>")
+    body += (f"<tr class='sum'><td class='l'>现金</td><td colspan='4'></td>"
+             f"<td colspan='2'></td><td></td></tr>"
+             f"<tr class='sum'><td class='l'>合计总资产</td><td colspan='4'></td>"
+             f"<td style='color:{_col(tot_pnl)}'>{_pct(tot_pnl)}</td><td colspan='2'></td></tr>")
     return ("<table class='pos'><tr><th>标的</th><th>股数</th><th>成本</th><th>最新</th>"
-            "<th>市值</th><th>盈亏</th><th>仓位</th></tr>" + body + "</table>")
+            "<th>市值</th><th>累计盈亏</th><th>当日</th><th>仓位</th></tr>" + body + "</table>")
 
 
 def _hold_days(bdate, today):
@@ -699,6 +705,83 @@ def _exec_date(pendings):
     except Exception:
         return None, "", False
     return d, wd, (d == util.today_str())
+
+
+# ---------------- 新闻/产业信号展示 ----------------
+def _news_industry_section(conn):
+    """生成新闻/产业信号展示区域。"""
+    if not conn:
+        return ""
+    today = util.today_str()
+    try:
+        # 读取市场面信号
+        r = conn.execute("SELECT score, evidence FROM news_signal WHERE signal_date=? AND scope='market'",
+                         (today,)).fetchone()
+        market_score = float(r[0]) if r else None
+        market_ev = r[1] if r else ""
+
+        # 读取行业信号
+        rows = conn.execute("SELECT scope, score, evidence FROM news_signal WHERE signal_date=? AND scope LIKE 'sector:%'",
+                            (today,)).fetchall()
+        sector_signals = []
+        for scope, score, ev in rows:
+            etf_code = scope.replace("sector:", "")
+            if float(score) != 0:
+                sector_signals.append((etf_code, float(score), ev))
+
+        # 读取个股信号
+        rows = conn.execute("SELECT scope, score, evidence FROM news_signal WHERE signal_date=? AND scope LIKE 'stock:%'",
+                            (today,)).fetchall()
+        stock_signals = []
+        for scope, score, ev in rows:
+            code = scope.replace("stock:", "")
+            if float(score) != 0:
+                stock_signals.append((code, float(score), ev))
+
+        # 无信号时静默返回
+        if market_score is None and not sector_signals and not stock_signals:
+            return ""
+
+        # 构建HTML
+        parts = []
+
+        # 市场面
+        if market_score is not None:
+            color = "#0a9e6b" if market_score > 0 else "#d92b2b" if market_score < 0 else "var(--mut)"
+            label = "利好" if market_score > 0.5 else "利空" if market_score < -0.5 else "中性"
+            parts.append(f"<span class='news-tag' style='background:{color}'>市场面 {label}({market_score:+.1f})</span>")
+
+        # 行业面
+        for etf_code, score, ev in sector_signals[:5]:
+            color = "#0a9e6b" if score > 0 else "#d92b2b"
+            nm = _ETF_NAMES.get(etf_code, etf_code)
+            parts.append(f"<span class='news-tag' style='background:{color}'>{nm} {score:+.1f}</span>")
+
+        # 个股面
+        for code, score, ev in stock_signals[:3]:
+            color = "#0a9e6b" if score > 0 else "#d92b2b"
+            nm = ctx_name(conn, code) if conn else util.bare(code)
+            parts.append(f"<span class='news-tag' style='background:{color}'>{nm} {score:+.1f}</span>")
+
+        if not parts:
+            return ""
+
+        tags = " ".join(parts)
+        return (f"<div class='sec'>📰 新闻/产业信号</div>"
+                f"<div class='news-bar'>{tags}</div>")
+
+    except Exception:
+        return ""
+
+
+# ETF名称映射(与data_adapter同步)
+_ETF_NAMES = {
+    "sh510300": "沪深300ETF", "sh510500": "中证500ETF", "sh512890": "红利低波ETF",
+    "sh518880": "黄金ETF", "sh513100": "纳指ETF", "sh511010": "国债ETF",
+    "sh512000": "券商ETF", "sh512480": "半导体ETF", "sh512010": "医药ETF",
+    "sz159928": "消费ETF", "sh512660": "军工ETF", "sh516160": "新能源ETF",
+    "sh512690": "酒ETF", "sh515790": "光伏ETF", "sh512800": "银行ETF",
+}
 
 
 # ---------------- 主生成 ----------------
@@ -848,6 +931,7 @@ def generate(out_path=None):
         f"<div class='sub'>生成 {today} · 数据最新 {last} · 实盘模拟期自 2026-07-06 起 · 模拟/历史不代表未来，非投资建议，人工跟单</div>"
         f"{banner}"
         f"{market_section}"
+        f"{_news_industry_section(conn)}"
         f"<div class='sec'>{ops_title}</div>{ops_section}"
         f"<div class='sec'>实盘赛马总览（2026-07-06 起算）</div>{overview}"
         f"<div class='sec'>各策略详情</div>{cards}"
@@ -1198,6 +1282,9 @@ th{background:#f0f2f5;color:var(--mut);font-weight:600}td.l,th:first-child{text-
 .card{background:var(--card);border-radius:12px;padding:14px;margin:12px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .card-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
 .card-h b{font-size:15.5px}.card-h .risk{color:#a16207;font-size:12px;margin-left:auto}
+.news-bar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0}
+.news-tag{display:inline-block;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;color:#fff}
+.news-tag.positive{background:#0a9e6b}.news-tag.negative{background:#d92b2b}
 .card-h .stat{font-size:12px;color:var(--mut)}
 .tagline{font-size:13px;color:#374151;margin:4px 0 8px}
 .fx{margin:6px 0;font-size:12.5px}.fx th{font-size:12px}
@@ -1312,14 +1399,49 @@ _LIVE_JS = """<script>
 })();
 (function(){
   try{
-    // ── 个股/ETF 实时价（原有逻辑）──
+    // ── 个股/ETF 实时价 —— 操作计划区 + 持仓浮盈浮亏 ──
     var ops=document.querySelectorAll('.op[data-code]');
-    if(!ops.length) return;
+    var posRows=document.querySelectorAll('tr[data-code]');
     var set={}, codes=[];
     ops.forEach(function(el){var c=el.getAttribute('data-code'); if(!set[c]){set[c]=1;codes.push(c);}});
+    posRows.forEach(function(el){var c=el.getAttribute('data-code'); if(!set[c]){set[c]=1;codes.push(c);}});
+    if(!codes.length) return;
     var done=false;
-    function mark(){ops.forEach(function(el){var q=el.querySelector('.q'); if(q&&q.innerHTML.indexOf('昨收参考')<0){q.innerHTML+=" <span class='stale'>(昨收参考)</span>";}});}
+    function mark(){ops.forEach(function(el){var q=el.querySelector('.q'); if(q&&q.innerHTML.indexOf('昨收参考')<0){q.innerHTML+=" <span class='stale'>(昨收参考)</span>";}});_refreshPositions();}
     function ft(t){return (t&&t.length>=12)?(t.substr(8,2)+':'+t.substr(10,2)):'';}
+    function _refreshPositions(){
+      var posRows=document.querySelectorAll('tr[data-code]');
+      if(!posRows.length) return;
+      posRows.forEach(function(tr){try{
+        var code=tr.getAttribute('data-code');
+        var v=window['v_'+code];
+        if(!v) return;
+        var f=v.split('~'); var cur=parseFloat(f[3]); var prev=parseFloat(f[4]);
+        if(!(cur>0)||!(prev>0)) return;
+        var avg=parseFloat(tr.getAttribute('data-avg'))||0;
+        var shares=parseFloat(tr.getAttribute('data-shares'))||0;
+        var lastPrev=parseFloat(tr.getAttribute('data-prev'))||prev;
+        var dailyChg=cur/lastPrev-1;
+        var dailyPnl=shares*cur-shares*lastPrev;
+        var dailyCol=dailyChg>=0?'var(--up)':'var(--down)';
+        var dailySg=dailyChg>=0?'+':'';
+        var cumChg=avg>0?cur/avg:1;
+        var curTd=tr.querySelector('.cur'); if(curTd){curTd.textContent=cur.toFixed(3);curTd.style.color=dailyCol;}
+        var mvTd=tr.querySelector('.mv'); if(mvTd){mvTd.textContent=Math.round(shares*cur).toLocaleString();}
+        var dpnlTd=tr.querySelector('.dpnl');
+        if(dpnlTd){
+          var dTxt=dailySg+(dailyChg*100).toFixed(2)+'%';
+          if(dailyPnl!==0){dTxt+=' ('+(dailyPnl>0?'+':'')+Math.round(dailyPnl).toLocaleString()+')';}
+          dpnlTd.textContent=dTxt;dpnlTd.style.color=dailyCol;
+        }
+        var cpnlTd=tr.querySelector('.cpnl');
+        if(cpnlTd){
+          var cSg=(cumChg-1)>=0?'+':'';
+          cpnlTd.textContent=cSg+((cumChg-1)*100).toFixed(1)+'%';
+          cpnlTd.style.color=Math.abs(cumChg-1)<0.001?'inherit':dailyCol;
+        }
+      }catch(e){}});
+    }
     function apply(){
       ops.forEach(function(el){try{
         var code=el.getAttribute('data-code'); var v=window['v_'+code];
@@ -1337,6 +1459,7 @@ _LIVE_JS = """<script>
         }
         if(q){q.innerHTML=line;}
       }catch(e){}});
+      _refreshPositions();
     }
     var timer=setTimeout(function(){if(!done){done=true;mark();}},3000);
     var s=document.createElement('script');

@@ -7,6 +7,12 @@
   → 抓取时临时摘掉 HTTP(S)_PROXY 直连(_no_proxy),Actions 无代理时是 no-op。
 - akshare 东财接口间歇失败 → 重试 + baostock 兜底(baostock 走裸 socket,稳定)。
 - akshare 成交量单位=手,baostock=股;统一存"股"(akshare ×100)。
+
+数据健康度优化(新增):
+- 集成 data_health 模块,自动监控各数据源成功率/响应时间
+- 支持配置化数据源优先级(config.yaml)
+- 自动数据源故障切换和健康度评分
+- 数据质量校验(价格异常、缺失检测)
 """
 import os
 import time
@@ -16,7 +22,12 @@ import pandas as pd
 import requests
 
 import util
+import conf
 from db import get_conn, init_db
+from data_health import (
+    get_monitor, monitored_call, DataQualityChecker,
+    check_data_source_health, HEALTHY_THRESHOLD, DEGRADED_THRESHOLD
+)
 
 log = logging.getLogger("data_adapter")
 
@@ -187,50 +198,132 @@ def _bs_raw(code, start, end):
     return raw, susp
 
 
-def _fetch_raw(code, start, end):
-    """不复权日线。ETF→akshare(fund_etf_hist_em,全历史可靠)优先;个股→baostock(push2his flaky)优先。
+def _fetch_raw(code, start, end, cfg=None):
+    """不复权日线。支持健康度监控和配置化优先级。
     返回 (df, source, susp_series|None)。"""
+    cfg = cfg or conf.load_config()
     etf = is_etf_code(code)
-    order = [("sina_etf", _sina_etf_raw), ("baostock", _bs_raw), ("akshare_em", _ak_raw)] if etf \
-        else [("baostock", _bs_raw), ("akshare_em", _ak_raw)]
-    for name, fn in order:
+
+    # 获取配置的数据源优先级
+    priority_key = "etf_daily" if etf else "stock_daily"
+    source_priority = cfg.get("data_source_priority", {}).get(priority_key, [])
+
+    # 数据源名称到函数的映射
+    source_map = {
+        "sina_etf": _sina_etf_raw,
+        "baostock": _bs_raw,
+        "akshare_em": _ak_raw,
+    }
+
+    # 获取健康度监控器,按健康度排序
+    monitor = get_monitor()
+    available_sources = []
+    for name in source_priority:
+        if name in source_map:
+            health = monitor.get_health(name)
+            # 跳过被禁用的源
+            if health.disabled or time.time() < health.disabled_until:
+                log.debug("数据源 %s 被禁用,跳过", name)
+                continue
+            available_sources.append((name, source_map[name], health.health_score))
+
+    # 按健康度降序排列
+    available_sources.sort(key=lambda x: x[2], reverse=True)
+
+    if not available_sources:
+        log.warning("所有数据源均被禁用或不可用,尝试使用默认顺序")
+        # 回退到默认顺序
+        if etf:
+            available_sources = [("sina_etf", _sina_etf_raw, 1.0),
+                                ("baostock", _bs_raw, 1.0),
+                                ("akshare_em", _ak_raw, 1.0)]
+        else:
+            available_sources = [("baostock", _bs_raw, 1.0),
+                                ("akshare_em", _ak_raw, 1.0)]
+
+    for name, fn, score in available_sources:
         try:
+            start_time = time.time()
             df, susp = fn(code, start, end)
-            if df is not None and not df.empty:
+            elapsed = time.time() - start_time
+
+            success = df is not None and not df.empty
+            rows = len(df) if success else 0
+
+            # 记录健康度
+            monitor.record_call(name, success, elapsed, rows, rows)
+
+            if success:
+                log.debug("使用数据源 %s (健康度%.2f) 获取 %s 数据, %d 行, %.2fs",
+                         name, score, code, rows, elapsed)
                 return df, name, susp
+
         except Exception as e:
+            elapsed = time.time() - start_time if 'start_time' in dir() else 0
+            monitor.record_call(name, False, elapsed, 0, 0, str(e))
             log.warning("%s 不复权失败 %s: %s", name, code, e)
-    log.error("双源均失败(不复权) %s", code)
+
+    log.error("所有数据源均失败(不复权) %s", code)
     return None, None, None
 
 
-def _fetch_hfq_close(code, start, end):
-    """后复权收盘(仅算 adj_factor 用),个股 baostock 优先。返回 Series(index=trade_date) 或 None。"""
-    for src in ("bs", "ak"):
+def _fetch_hfq_close(code, start, end, cfg=None):
+    """后复权收盘(仅算 adj_factor 用),集成健康度监控。
+    返回 Series(index=trade_date) 或 None。"""
+    cfg = cfg or conf.load_config()
+    monitor = get_monitor()
+
+    # 获取配置的数据源优先级
+    source_priority = cfg.get("data_source_priority", {}).get("hfq_close", ["baostock", "akshare_em"])
+
+    for src in source_priority:
         try:
-            if src == "bs":
+            start_time = time.time()
+            result = None
+
+            if src == "baostock":
                 h = _retry_df(lambda: _bs_kline(code, start, end, 1), what=f"bs_hfq {code}")
                 if h is not None and not h.empty:
-                    return h.set_index("trade_date")["close"]
-            else:
+                    result = h.set_index("trade_date")["close"]
+            elif src == "akshare_em":
                 fn = ak_fund_etf if is_etf_code(code) else ak_stock
                 h = _retry(lambda: _norm_ak(fn(code, start, end, "hfq")), what=f"ak_hfq {code}")
                 if h is not None and not h.empty:
-                    return h.set_index("trade_date")["close"]
-        except Exception:
+                    result = h.set_index("trade_date")["close"]
+
+            elapsed = time.time() - start_time
+            success = result is not None and len(result) > 0
+            rows = len(result) if success else 0
+
+            monitor.record_call(f"{src}_hfq", success, elapsed, rows, rows)
+
+            if success:
+                return result
+
+        except Exception as e:
+            elapsed = time.time() - start_time if 'start_time' in dir() else 0
+            monitor.record_call(f"{src}_hfq", False, elapsed, 0, 0, str(e))
             continue
+
     return None
 
 
-def fetch_daily(code: str, start: str, end: str) -> pd.DataFrame:
+def fetch_daily(code: str, start: str, end: str, validate: bool = True) -> pd.DataFrame:
     """统一日线。列:code,trade_date,open,high,low,close,volume,amount,adj_factor,
     is_suspended,limit_up,limit_down,source。volume 单位=股;金额=元。
+
+    新增:
+    - validate=True 时启用数据质量校验
+    - 集成健康度监控
+    - 价格异常告警
+
     ⚠ ETF 用不复权收盘、adj_factor=1.0(ETF现金分红对动量排名影响可忽略,记为取舍);
        个股用后复权因子(baostock 后复权/不复权)。"""
     code = util.with_prefix(code) if code[:2] not in ("sh", "sz", "bj") else code
     etf = is_etf_code(code)
+    cfg = conf.load_config()
 
-    raw, source, susp = _fetch_raw(code, start, end)
+    raw, source, susp = _fetch_raw(code, start, end, cfg)
     if raw is None or raw.empty:
         return pd.DataFrame()
 
@@ -238,7 +331,7 @@ def fetch_daily(code: str, start: str, end: str) -> pd.DataFrame:
     if etf:
         df["adj_factor"] = 1.0
     else:
-        hclose = _fetch_hfq_close(code, start, end)
+        hclose = _fetch_hfq_close(code, start, end, cfg)
         if hclose is not None:
             df["adj_factor"] = (df["trade_date"].map(hclose) / df["close"]).fillna(1.0)
         else:
@@ -264,31 +357,80 @@ def fetch_daily(code: str, start: str, end: str) -> pd.DataFrame:
     df["source"] = source
     df["volume"] = df["volume"].fillna(0)
     df["amount"] = df["amount"].fillna(0)
+
+    # 数据质量校验
+    if validate:
+        try:
+            quality = DataQualityChecker.validate_daily_data(df, code, start, end)
+            if not quality['valid']:
+                log.warning("数据质量校验未通过 %s: %d 个异常, %d 处缺失",
+                           code, len(quality['anomalies']), len(quality['gaps']))
+                # 记录严重错误到数据源健康度
+                if quality['anomalies']:
+                    critical = [a for a in quality['anomalies'] if a.get('severity') == 'error']
+                    if critical and source:
+                        monitor = get_monitor()
+                        monitor.record_call(f"{source}_quality", False, 0, 0, 0,
+                                          f"数据质量错误: {critical[0]['message']}")
+            else:
+                log.debug("数据质量校验通过 %s: %d 行数据正常", code, len(df))
+        except Exception as e:
+            log.warning("数据质量校验异常 %s: %s", code, e)
+
     cols = ["code", "trade_date", "open", "high", "low", "close", "volume", "amount",
             "adj_factor", "is_suspended", "limit_up", "limit_down", "source"]
     return df[cols]
 
 
 # ============ 交易日历 ============
-def fetch_calendar(start: str, end: str) -> pd.DataFrame:
-    """返回 cal_date,is_open(仅开市日,is_open=1)。"""
-    try:
-        import akshare as ak
-        df = _retry(lambda: ak.tool_trade_date_hist_sina(), what="calendar")
-        df["cal_date"] = df["trade_date"].astype(str).str[:10]
-    except Exception as e:
-        log.warning("akshare 日历失败,转 baostock: %s", e)
-        bs = _bs()
-        rs = bs.query_trade_dates(start_date=start, end_date=end)
-        rows = []
-        while (rs.error_code == "0") and rs.next():
-            rows.append(rs.get_row_data())
-        d = pd.DataFrame(rows, columns=rs.fields)  # calendar_date,is_trading_day
-        d = d[d["is_trading_day"] == "1"]
-        df = pd.DataFrame({"cal_date": d["calendar_date"].astype(str)})
-    df = df[(df["cal_date"] >= start) & (df["cal_date"] <= end)].copy()
-    df["is_open"] = 1
-    return df[["cal_date", "is_open"]].drop_duplicates("cal_date")
+def fetch_calendar(start: str, end: str, cfg=None) -> pd.DataFrame:
+    """返回 cal_date,is_open(仅开市日,is_open=1)。支持健康度监控。"""
+    cfg = cfg or conf.load_config()
+    monitor = get_monitor()
+
+    # 获取配置的数据源优先级
+    source_priority = cfg.get("data_source_priority", {}).get("calendar", ["akshare_sina", "baostock"])
+
+    for src in source_priority:
+        try:
+            start_time = time.time()
+            result = None
+
+            if src == "akshare_sina":
+                import akshare as ak
+                df = _retry(lambda: ak.tool_trade_date_hist_sina(), what="calendar")
+                df["cal_date"] = df["trade_date"].astype(str).str[:10]
+                result = df
+            elif src == "baostock":
+                bs = _bs()
+                rs = bs.query_trade_dates(start_date=start, end_date=end)
+                rows = []
+                while (rs.error_code == "0") and rs.next():
+                    rows.append(rs.get_row_data())
+                d = pd.DataFrame(rows, columns=rs.fields)
+                d = d[d["is_trading_day"] == "1"]
+                result = pd.DataFrame({"cal_date": d["calendar_date"].astype(str)})
+
+            elapsed = time.time() - start_time
+            success = result is not None and not result.empty
+            rows = len(result) if success else 0
+
+            monitor.record_call(src, success, elapsed, rows, rows)
+
+            if success:
+                result = result[(result["cal_date"] >= start) & (result["cal_date"] <= end)].copy()
+                result["is_open"] = 1
+                return result[["cal_date", "is_open"]].drop_duplicates("cal_date")
+
+        except Exception as e:
+            elapsed = time.time() - start_time if 'start_time' in dir() else 0
+            monitor.record_call(src, False, elapsed, 0, 0, str(e))
+            log.warning("日历源 %s 失败: %s", src, e)
+            continue
+
+    # 所有源失败,返回空
+    log.error("所有日历数据源均失败")
+    return pd.DataFrame(columns=["cal_date", "is_open"])
 
 
 # ============ 指数(基准净值 & 成分) ============
@@ -503,20 +645,53 @@ def _fetch_sina(codes):
     return _parse_sina(r.text)
 
 
-def fetch_realtime(codes) -> dict:
-    """实时行情。返回 {code: {price, prev_close, open, time}}。多源兜底,缺失的标的不在返回里。"""
+def fetch_realtime(codes, cfg=None) -> dict:
+    """实时行情。返回 {code: {price, prev_close, open, time}}。
+    多源兜底+健康度监控,缺失的标的不在返回里。"""
+    cfg = cfg or conf.load_config()
     codes = [c for c in dict.fromkeys(codes) if c]
     if not codes:
         return {}
+
+    # 获取配置的数据源优先级
+    source_priority = cfg.get("data_source_priority", {}).get("realtime", ["tencent", "sina"])
+
+    # 数据源名称到函数的映射
+    source_map = {
+        "tencent": _fetch_tencent,
+        "sina": _fetch_sina,
+    }
+
+    monitor = get_monitor()
     out = {}
-    for name, fn in (("tencent", _fetch_tencent), ("sina", _fetch_sina)):
+
+    for name in source_priority:
+        if name not in source_map:
+            continue
+        fn = source_map[name]
         missing = [c for c in codes if c not in out]
         if not missing:
             break
+
         try:
-            out.update(_retry(lambda: fn(missing), tries=2, what=f"realtime_{name}"))
+            start_time = time.time()
+            result = _retry(lambda: fn(missing), tries=2, what=f"realtime_{name}")
+            elapsed = time.time() - start_time
+
+            success = bool(result)
+            rows = len(result) if result else 0
+
+            monitor.record_call(name, success, elapsed, rows, len(missing))
+
+            if result:
+                out.update(result)
+                log.debug("实时行情 %s 获取 %d/%d 只, %.2fs", name, len(result), len(missing), elapsed)
+
         except Exception as e:
+            elapsed = time.time() - start_time if 'start_time' in dir() else 0
+            monitor.record_call(name, False, elapsed, 0, len(missing), str(e))
             log.warning("实时行情 %s 失败: %s", name, e)
+
     return out
 
 
@@ -616,3 +791,25 @@ def bs_logout():
         except Exception:
             pass
         _bs_logged_in = False
+
+
+# ============ 健康度报告接口 ============
+
+def get_data_source_health_report() -> dict:
+    """获取数据源健康度报告"""
+    return check_data_source_health()
+
+
+def reset_data_source_health(source_name: str = None):
+    """重置数据源健康状态
+
+    Args:
+        source_name: 指定源名,None则重置所有
+    """
+    from data_health import get_monitor
+    monitor = get_monitor()
+    if source_name:
+        monitor.reset_source(source_name)
+    else:
+        for name in list(monitor.sources.keys()):
+            monitor.reset_source(name)
