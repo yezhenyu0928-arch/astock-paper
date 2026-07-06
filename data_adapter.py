@@ -793,18 +793,6 @@ def bs_logout():
         _bs_logged_in = False
 
 
-def probe_data_sources(timeout=3) -> bool:
-    """快速探测国内数据源是否可达。海外Runner连不上,返回False。"""
-    try:
-        r = requests.get("https://hq.sinajs.cn/list=sh600519",
-                         headers={"Referer": "https://finance.sina.com.cn"},
-                         timeout=timeout)
-        return r.status_code == 200 and len(r.text) > 50
-    except Exception:
-        pass
-    return False
-
-
 # ============ 健康度报告接口 ============
 
 def get_data_source_health_report() -> dict:

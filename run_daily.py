@@ -142,57 +142,55 @@ def run(date=None, only=None):
         return 1
 
     # 2 更新数据 + 质检
+    data_updated = False  # 跟踪数据更新是否成功,用于质检降级
     conn = get_conn()
     try:
-        # 卡E:快速探测国内数据源是否可达(海外Runner连不上→降级)
-        sources_ok = da.probe_data_sources()
-        if not sources_ok:
-            log.warning("国内数据源不可达(海外Runner),跳过数据更新,使用缓存DB")
-        else:
-            flag, timer = _timeout_guard(_DATA_TIMEOUT)
-            stock_codes = None
-            try:
-                data.update_all(cfg, reg, with_members=True)
-                _check_timeout(flag)
-                stock_codes = _stock_universe(cfg, reg, conn)
-                if stock_codes:
-                    data.update_daily(sorted(stock_codes), conn=conn)
-                    _check_timeout(flag)
-                    data.update_security(stock_codes, conn=conn)
-                    # 基本面增量(S1股息率/S4市值PB;仅个股策略启用时)
-                    fund_ok = True
-                    try:
-                        import fundamental as F
-                        F.update_stock_fundamental(sorted(stock_codes), conn=conn)
-                        if cfg.get("strategies", {}).get("s1_dividend@v2") and util.now_cn().month <= 5:
-                            F.update_annual_roe(sorted(stock_codes), conn=conn)
-                    except Exception as e:
-                        fund_ok = False
-                        log.warning("基本面更新失败(不阻断):%s", e)
-                    _fund_fail_track(not fund_ok, cfg)
-                # 指数PE(S5)
-                if cfg.get("strategies", {}).get("s5_grid@v1"):
-                    try:
-                        import fundamental as F
-                        F.update_index_pe("sh000300", conn=conn)
-                    except Exception as e:
-                        log.warning("指数PE更新失败:%s", e)
-            except TimeoutError:
-                log.warning("数据更新超时(%ds),使用缓存DB继续引擎流程", _DATA_TIMEOUT)
-            finally:
-                timer.cancel()
+        flag, timer = _timeout_guard(_DATA_TIMEOUT)
+        stock_codes = None
         try:
-            chk = data.check(today, conn=conn)
-            for w in chk.get("warnings", []):
-                log.warning(w)
-        except data.DataCheckError as e:
-            if not sources_ok:
-                log.warning("质检跳过(海外Runner无今日数据),使用缓存DB继续: %s", e)
-            else:
+            data.update_all(cfg, reg, with_members=True)
+            _check_timeout(flag)
+            stock_codes = _stock_universe(cfg, reg, conn)
+            if stock_codes:
+                data.update_daily(sorted(stock_codes), conn=conn)
+                _check_timeout(flag)
+                data.update_security(stock_codes, conn=conn)
+                # 基本面增量(S1股息率/S4市值PB;仅个股策略启用时)
+                fund_ok = True
+                try:
+                    import fundamental as F
+                    F.update_stock_fundamental(sorted(stock_codes), conn=conn)
+                    if cfg.get("strategies", {}).get("s1_dividend@v2") and util.now_cn().month <= 5:
+                        F.update_annual_roe(sorted(stock_codes), conn=conn)
+                except Exception as e:
+                    fund_ok = False
+                    log.warning("基本面更新失败(不阻断):%s", e)
+                _fund_fail_track(not fund_ok, cfg)
+            # 指数PE(S5)
+            if cfg.get("strategies", {}).get("s5_grid@v1"):
+                try:
+                    import fundamental as F
+                    F.update_index_pe("sh000300", conn=conn)
+                except Exception as e:
+                    log.warning("指数PE更新失败:%s", e)
+            data_updated = True  # 所有更新完成,标记成功
+        except TimeoutError:
+            log.warning("数据更新超时(%ds),使用缓存DB继续引擎流程", _DATA_TIMEOUT)
+        finally:
+            timer.cancel()
+        # 质检:数据更新成功才严格检查,否则降级(海外Runner数据源不可达)
+        if data_updated:
+            try:
+                chk = data.check(today, conn=conn)
+                for w in chk.get("warnings", []):
+                    log.warning(w)
+            except data.DataCheckError as e:
                 t, c = notify.build_alert(f"数据质检失败:{e},今日暂停跟单")
                 notify.push(t, c, "alert", cfg)
                 log.error("质检FAIL:%s", e)
                 return 1
+        else:
+            log.warning("数据未更新(超时/源不可达),跳过质检,使用缓存DB继续")
     finally:
         conn.close()
         da.bs_logout()
