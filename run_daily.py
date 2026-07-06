@@ -145,11 +145,15 @@ def run(date=None, only=None):
     conn = get_conn()
     try:
         flag, timer = _timeout_guard(_DATA_TIMEOUT)
-        stock_codes = None
         try:
             data.update_all(cfg, reg, with_members=True)
             _check_timeout(flag)
-            stock_codes = _stock_universe(cfg, reg, conn)
+            # 海外Runner:CN源全禁用→跳过个股级更新(yfinance取300股票太慢,缓存DB够用)
+            health = da.get_data_source_health_report()
+            is_overseas = health and health.get("sources") and all(
+                s.get("disabled", False) for s in health["sources"].values()
+            )
+            stock_codes = _stock_universe(cfg, reg, conn) if not is_overseas else None
             if stock_codes:
                 data.update_daily(sorted(stock_codes), conn=conn)
                 _check_timeout(flag)
