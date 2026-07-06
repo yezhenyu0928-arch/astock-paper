@@ -142,7 +142,6 @@ def run(date=None, only=None):
         return 1
 
     # 2 更新数据 + 质检
-    data_updated = False  # 跟踪数据更新是否成功,用于质检降级
     conn = get_conn()
     try:
         flag, timer = _timeout_guard(_DATA_TIMEOUT)
@@ -155,7 +154,6 @@ def run(date=None, only=None):
                 data.update_daily(sorted(stock_codes), conn=conn)
                 _check_timeout(flag)
                 data.update_security(stock_codes, conn=conn)
-                # 基本面增量(S1股息率/S4市值PB;仅个股策略启用时)
                 fund_ok = True
                 try:
                     import fundamental as F
@@ -166,20 +164,21 @@ def run(date=None, only=None):
                     fund_ok = False
                     log.warning("基本面更新失败(不阻断):%s", e)
                 _fund_fail_track(not fund_ok, cfg)
-            # 指数PE(S5)
             if cfg.get("strategies", {}).get("s5_grid@v1"):
                 try:
                     import fundamental as F
                     F.update_index_pe("sh000300", conn=conn)
                 except Exception as e:
                     log.warning("指数PE更新失败:%s", e)
-            data_updated = True  # 所有更新完成,标记成功
         except TimeoutError:
             log.warning("数据更新超时(%ds),使用缓存DB继续引擎流程", _DATA_TIMEOUT)
         finally:
             timer.cancel()
-        # 质检:数据更新成功才严格检查,否则降级(海外Runner数据源不可达)
-        if data_updated:
+        # 质检:验证今天是否有新数据入库(update_all静默吞异常,不会因数据断流抛错)
+        has_today_data = conn.execute(
+            "SELECT count(*) FROM daily_bar WHERE trade_date=?", (today,)
+        ).fetchone()[0] > 0
+        if has_today_data:
             try:
                 chk = data.check(today, conn=conn)
                 for w in chk.get("warnings", []):
@@ -190,7 +189,7 @@ def run(date=None, only=None):
                 log.error("质检FAIL:%s", e)
                 return 1
         else:
-            log.warning("数据未更新(超时/源不可达),跳过质检,使用缓存DB继续")
+            log.warning("今天无新数据入库(海外Runner数据源不可达),跳过质检,使用缓存DB继续")
     finally:
         conn.close()
         da.bs_logout()
