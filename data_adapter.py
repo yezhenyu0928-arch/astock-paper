@@ -375,6 +375,9 @@ def fetch_daily(code: str, start: str, end: str, validate: bool = True) -> pd.Da
     df = raw.copy()
     if etf:
         df["adj_factor"] = 1.0
+    elif source == "yfinance":
+        # yfinance 默认返回复权收盘,不需再算adj_factor
+        df["adj_factor"] = 1.0
     else:
         hclose = _fetch_hfq_close(code, start, end, cfg)
         if hclose is not None:
