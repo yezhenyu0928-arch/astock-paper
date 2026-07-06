@@ -7,6 +7,8 @@
   → 抓取时临时摘掉 HTTP(S)_PROXY 直连(_no_proxy),Actions 无代理时是 no-op。
 - akshare 东财接口间歇失败 → 重试 + baostock 兜底(baostock 走裸 socket,稳定)。
 - akshare 成交量单位=手,baostock=股;统一存"股"(akshare ×100)。
+- 海外 Actions Runner 所有国内源(akshare/baostock/新浪)均不可达，
+  yfinance 作为最终兜底(全球可达,免费,无需key)。
 
 数据健康度优化(新增):
 - 集成 data_health 模块,自动监控各数据源成功率/响应时间
@@ -47,9 +49,6 @@ _ETF_UNIVERSE_NAME = {
 
 _bs_logged_in = False
 
-# 全局短路标志:一旦确认所有国内数据源均不可达(海外Runner),后续所有股票跳过取数。
-_GLOBAL_ALL_DISABLED = False
-
 
 # ============ 重试 ============
 # 说明:本机实测"摘掉代理直连"反而让 akshare 东财接口(push2his)全部失败,
@@ -86,9 +85,7 @@ def _retry_df(fn, tries=3, delay=0.5, what=""):
 
 
 def _bs():
-    global _bs_logged_in, _GLOBAL_ALL_DISABLED
-    if _GLOBAL_ALL_DISABLED:
-        raise ConnectionError("全局短路:国内数据源不可达")
+    global _bs_logged_in
     import baostock as bs
     if not _bs_logged_in:
         bs.login()
@@ -203,12 +200,34 @@ def _bs_raw(code, start, end):
     return raw, susp
 
 
+def _yf_raw(code, start, end):
+    """yfinance 兜底(全球可达)。A股格式: sh600519 → 600519.SS 或 000001.SZ。
+    列 trade_date/open/high/low/close/volume。volume 已是股。"""
+    try:
+        import yfinance as yf
+        bare = util.bare(code)
+        market = util.market(code)
+        suffix = ".SS" if market == "sh" else ".SZ"
+        ticker = yf.Ticker(bare + suffix)
+        df = ticker.history(start=start, end=end)
+        if df.empty:
+            return None, None
+        df = df.reset_index()
+        df["trade_date"] = df["Date"].dt.strftime("%Y-%m-%d") if "Date" in df else df.index.astype(str).str[:10]
+        for c in ("Open", "High", "Low", "Close", "Volume"):
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+        out = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
+        out["amount"] = out["volume"] * out["close"]  # yfinance 无成交额,用量×价估
+        out = out[(out["trade_date"] >= start) & (out["trade_date"] <= end)]
+        return out[["trade_date", "open", "high", "low", "close", "volume", "amount"]].copy(), None
+    except Exception as e:
+        log.warning("yfinance 取数失败 %s: %s", code, e)
+        return None, None
+
+
 def _fetch_raw(code, start, end, cfg=None):
     """不复权日线。支持健康度监控和配置化优先级。
     返回 (df, source, susp_series|None)。"""
-    global _GLOBAL_ALL_DISABLED
-    if _GLOBAL_ALL_DISABLED:
-        return None, None, None
     cfg = cfg or conf.load_config()
     etf = is_etf_code(code)
 
@@ -240,12 +259,15 @@ def _fetch_raw(code, start, end, cfg=None):
 
     if not available_sources:
         log.warning("所有数据源均被禁用或不可用,尝试使用默认顺序")
-        # 回退前再确认所有源是否仍在禁用期——是则直接跳过(海外Runner白费~12秒/股)
+        # 回退前再确认所有源是否仍在禁用期——是则直接试yfinance兜底(海外Runner场景)
         if all(
             monitor.get_health(name).disabled or time.time() < monitor.get_health(name).disabled_until
             for name in source_priority if name in source_map
         ):
-            log.warning("所有数据源仍处于禁用期,跳过 %s", code)
+            log.warning("所有CN数据源均禁用,直跳yfinance兜底 %s", code)
+            df, _ = _yf_raw(code, start, end)
+            if df is not None and not df.empty:
+                return df, "yfinance", None
             return None, None, None
         if etf:
             available_sources = [("sina_etf", _sina_etf_raw, 1.0),
@@ -277,18 +299,18 @@ def _fetch_raw(code, start, end, cfg=None):
             monitor.record_call(name, False, elapsed, 0, 0, str(e))
             log.warning("%s 不复权失败 %s: %s", name, code, e)
 
-    # 所有源全失败 → 全局短路(海外Runner场景)
-    _GLOBAL_ALL_DISABLED = True
-    log.warning("所有数据源均失败(不复权) %s → 全局短路", code)
+    log.warning("所有配置源均失败(不复权) %s,尝试yfinance兜底", code)
+    df, _ = _yf_raw(code, start, end)
+    if df is not None and not df.empty:
+        return df, "yfinance", None
+    log.warning("yfinance兜底也失败(不复权) %s", code)
     return None, None, None
+
 
 
 def _fetch_hfq_close(code, start, end, cfg=None):
     """后复权收盘(仅算 adj_factor 用),集成健康度监控。
     返回 Series(index=trade_date) 或 None。"""
-    global _GLOBAL_ALL_DISABLED
-    if _GLOBAL_ALL_DISABLED:
-        return None
     cfg = cfg or conf.load_config()
     monitor = get_monitor()
 
@@ -324,8 +346,6 @@ def _fetch_hfq_close(code, start, end, cfg=None):
             monitor.record_call(f"{src}_hfq", False, elapsed, 0, 0, str(e))
             continue
 
-    _GLOBAL_ALL_DISABLED = True
-    log.warning("后复权所有源均失败 %s → 全局短路", code)
     return None
 
 
