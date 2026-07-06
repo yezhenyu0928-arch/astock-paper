@@ -162,9 +162,11 @@ def update_dividend(codes, conn=None) -> int:
 
 
 def update_all(cfg=None, registry=None, extra_codes=None, with_members=True,
-               with_dividend=False, stock_codes=None) -> dict:
+               with_dividend=False, stock_codes=None,
+               _timeout_check=None, _timeout_flag=None) -> dict:
     """主更新流程。默认更新:日历 + 核心ETF + 基准指数 + 沪深300成分 + 证券信息。
-    stock_codes:额外要更新日线的个股(S3/S4 池),None 则不拉个股(避免全A重负载)。"""
+    stock_codes:额外要更新日线的个股(S3/S4 池),None 则不拉个股(避免全A重负载)。
+    _timeout_check/_timeout_flag:海外Runner超时提前终止,由 run_daily 传入。"""
     cfg = cfg or conf.load_config()
     registry = registry or conf.load_registry()
     init_db()
@@ -177,12 +179,17 @@ def update_all(cfg=None, registry=None, extra_codes=None, with_members=True,
     conn = get_conn()
     try:
         result["etf_daily"] = update_daily(sorted(etfs), conn=conn)
-        # ETF 份额折算/拆分校正(卡C):防止折算日被当成假暴跌污染动量/NAV。幂等,宽基ETF为no-op。
+        if _timeout_check and _timeout_flag and _timeout_flag["expired"]:
+            log.warning("update_all 超时,跳过指数/成分更新(已有ETF数据)")
+            return result
         try:
             bu, dw = da.reconcile_etf_splits(sorted(etfs), conn=conn)
             result["etf_split_fix"] = {"adj_rows": bu, "div_events": dw}
         except Exception as e:
             log.warning("ETF折算校正失败(不阻断):%s", e)
+        if _timeout_check and _timeout_flag and _timeout_flag["expired"]:
+            log.warning("update_all 超时,跳过指数更新")
+            return result
         result["index_daily"] = update_index_daily(sorted(benchmark_codes(registry)), conn=conn)
         if with_members:
             result["members_sh000300"] = update_members("sh000300", conn=conn)

@@ -148,7 +148,7 @@ def run(date=None, only=None):
     try:
         flag, timer = _timeout_guard(_DATA_TIMEOUT)
         try:
-            data.update_all(cfg, reg, with_members=True)
+            data.update_all(cfg, reg, with_members=True, _timeout_check=_check_timeout, _timeout_flag=flag)
             _check_timeout(flag)
             stock_codes = _stock_universe(cfg, reg, conn)
             if stock_codes:
