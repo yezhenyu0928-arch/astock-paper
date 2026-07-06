@@ -65,13 +65,17 @@ def update_calendar(end_pad_year=1):
     return n
 
 
-def update_daily(codes, conn=None) -> dict:
+def update_daily(codes, conn=None, timeout_flag=None, timeout_check=None) -> dict:
+    """增量更新日线。codes 过多时支持通过 timeout_flag/check 回调提前终止。"""
     own = conn is None
     if own:
         conn = get_conn()
     today = util.today_str()
     summary = {}
-    for code in codes:
+    for i, code in enumerate(codes):
+        if timeout_check and timeout_flag and timeout_flag["expired"]:
+            log.warning("update_daily 超时,提前终止(已处理 %d/%d 个)", i, len(codes))
+            break
         mx = _max_date(conn, code)
         start = cal.next_trade_day(mx) if mx else DEFAULT_START
         if mx and start <= mx:                    # 冗余保护

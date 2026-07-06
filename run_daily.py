@@ -152,7 +152,7 @@ def run(date=None, only=None):
             _check_timeout(flag)
             stock_codes = _stock_universe(cfg, reg, conn)
             if stock_codes:
-                data.update_daily(sorted(stock_codes), conn=conn)
+                data.update_daily(sorted(stock_codes), conn=conn, timeout_flag=flag, timeout_check=_check_timeout)
                 _check_timeout(flag)
                 data.update_security(stock_codes, conn=conn)
                 fund_ok = True
