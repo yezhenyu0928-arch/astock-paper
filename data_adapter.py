@@ -47,6 +47,9 @@ _ETF_UNIVERSE_NAME = {
 
 _bs_logged_in = False
 
+# 全局短路标志:一旦确认所有国内数据源均不可达(海外Runner),后续所有股票跳过取数。
+_GLOBAL_ALL_DISABLED = False
+
 
 # ============ 重试 ============
 # 说明:本机实测"摘掉代理直连"反而让 akshare 东财接口(push2his)全部失败,
@@ -201,6 +204,9 @@ def _bs_raw(code, start, end):
 def _fetch_raw(code, start, end, cfg=None):
     """不复权日线。支持健康度监控和配置化优先级。
     返回 (df, source, susp_series|None)。"""
+    global _GLOBAL_ALL_DISABLED
+    if _GLOBAL_ALL_DISABLED:
+        return None, None, None
     cfg = cfg or conf.load_config()
     etf = is_etf_code(code)
 
@@ -269,13 +275,18 @@ def _fetch_raw(code, start, end, cfg=None):
             monitor.record_call(name, False, elapsed, 0, 0, str(e))
             log.warning("%s 不复权失败 %s: %s", name, code, e)
 
-    log.error("所有数据源均失败(不复权) %s", code)
+    # 所有源全失败 → 全局短路(海外Runner场景)
+    _GLOBAL_ALL_DISABLED = True
+    log.warning("所有数据源均失败(不复权) %s → 全局短路", code)
     return None, None, None
 
 
 def _fetch_hfq_close(code, start, end, cfg=None):
     """后复权收盘(仅算 adj_factor 用),集成健康度监控。
     返回 Series(index=trade_date) 或 None。"""
+    global _GLOBAL_ALL_DISABLED
+    if _GLOBAL_ALL_DISABLED:
+        return None
     cfg = cfg or conf.load_config()
     monitor = get_monitor()
 
@@ -311,6 +322,8 @@ def _fetch_hfq_close(code, start, end, cfg=None):
             monitor.record_call(f"{src}_hfq", False, elapsed, 0, 0, str(e))
             continue
 
+    _GLOBAL_ALL_DISABLED = True
+    log.warning("后复权所有源均失败 %s → 全局短路", code)
     return None
 
 
