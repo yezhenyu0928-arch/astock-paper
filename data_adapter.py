@@ -232,7 +232,13 @@ def _fetch_raw(code, start, end, cfg=None):
 
     if not available_sources:
         log.warning("所有数据源均被禁用或不可用,尝试使用默认顺序")
-        # 回退到默认顺序
+        # 回退前再确认所有源是否仍在禁用期——是则直接跳过(海外Runner白费~12秒/股)
+        if all(
+            monitor.get_health(name).disabled or time.time() < monitor.get_health(name).disabled_until
+            for name in source_priority if name in source_map
+        ):
+            log.warning("所有数据源仍处于禁用期,跳过 %s", code)
+            return None, None, None
         if etf:
             available_sources = [("sina_etf", _sina_etf_raw, 1.0),
                                 ("baostock", _bs_raw, 1.0),
