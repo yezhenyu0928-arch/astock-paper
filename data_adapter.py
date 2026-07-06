@@ -204,16 +204,23 @@ def _yf_raw(code, start, end):
     """yfinance 兜底(全球可达)。A股格式: sh600519 → 600519.SS 或 000001.SZ。
     列 trade_date/open/high/low/close/volume。volume 已是股。"""
     try:
+        import datetime
         import yfinance as yf
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
         bare = util.bare(code)
         market = util.market(code)
         suffix = ".SS" if market == "sh" else ".SZ"
         ticker = yf.Ticker(bare + suffix)
         # yfinance 的 end 为 exclusive(不含当天),而本系统 start/end 均为 inclusive,
         # 故 end 加一天以确保当天数据被包含。
-        import datetime
         _end = (datetime.datetime.strptime(end, "%Y-%m-%d") + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-        df = ticker.history(start=start, end=_end)
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(ticker.history, start=start, end=_end)
+            try:
+                df = fut.result(timeout=10)
+            except FuturesTimeout:
+                log.warning("yfinance 超时 %s(>10s),跳过", code)
+                return None, None
         if df.empty:
             return None, None
         df = df.reset_index()
