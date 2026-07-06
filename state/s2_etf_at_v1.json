@@ -1,35 +1,33 @@
 {
  "strategy_id": "s2_etf@v1",
  "init_capital": 50000.0,
- "cash": 50000.0,
- "positions": {},
+ "cash": 1765.94,
+ "positions": {
+  "sh510500": {
+   "code": "sh510500",
+   "shares": 5400,
+   "avg_cost": 8.93,
+   "buy_date": "2026-07-06",
+   "highest_close": 8.93
+  }
+ },
  "frozen": false,
- "nav": 1.0,
+ "nav": 0.991119,
  "nav_history": [
   [
    "2026-07-03",
    1.0
+  ],
+  [
+   "2026-07-06",
+   0.991119
   ]
  ],
- "pending": [
-  {
-   "strategy_id": "s2_etf@v1",
-   "code": "sh510500",
-   "side": "buy",
-   "weight": 0.98,
-   "reason": "动量轮动:买入最强 中证500ETF(r20=+5.3% r60=+17.1%,6只中第1,macro-0.4 M29%)",
-   "signal_date": "2026-07-03",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 0
-  }
- ],
+ "pending": [],
  "highest_nav": 1.0,
  "settled_dates": [
-  "2026-07-03"
+  "2026-07-03",
+  "2026-07-06"
  ],
  "applied_div": [],
  "aux": {}
