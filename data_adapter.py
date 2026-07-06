@@ -209,7 +209,11 @@ def _yf_raw(code, start, end):
         market = util.market(code)
         suffix = ".SS" if market == "sh" else ".SZ"
         ticker = yf.Ticker(bare + suffix)
-        df = ticker.history(start=start, end=end)
+        # yfinance 的 end 为 exclusive(不含当天),而本系统 start/end 均为 inclusive,
+        # 故 end 加一天以确保当天数据被包含。
+        import datetime
+        _end = (datetime.datetime.strptime(end, "%Y-%m-%d") + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        df = ticker.history(start=start, end=_end)
         if df.empty:
             return None, None
         df = df.reset_index()
