@@ -42,9 +42,9 @@ news_layer:                   # 消息面层:风险过滤 + 产业逻辑驱动
   enabled: true
   llm: true                   # 启用 LLM 语义分析
   llm_provider: mimo          # mimo / anthropic
-  llm_base_url: https://api.xiaomimimo.com/anthropic
+  llm_base_url: https://api.xiaomimimo.com
   llm_api_key_env: MIMO_API_KEY  # GitHub Secrets 中的环境变量名
-  llm_model: mimo             # 模型名称
+  llm_model: mimo-v2.5          # 模型名称
   llm_shadow: false           # 影子评估档(记录但不干预)
   intraday_scan: true         # 盘中10:00/13:30/14:45三次黑天鹅扫描
   industry_boost_weight: 0.2  # 产业信号在S6中的权重(0.2=20%)

@@ -16,8 +16,8 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 # 默认模型配置
 DEFAULT_PROVIDERS = {
     "mimo": {
-        "base_url": "https://api.xiaomimimo.com/anthropic",
-        "model": "mimo",
+        "base_url": "https://api.xiaomimimo.com",
+        "model": "mimo-v2.5",
         "api_key_env": "MIMO_API_KEY",
     },
     "anthropic": {
