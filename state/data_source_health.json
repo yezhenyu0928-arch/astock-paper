@@ -33,11 +33,11 @@
       "status": "healthy"
     },
     "akshare_sina": {
-      "total_calls": 798,
-      "total_success": 798,
+      "total_calls": 846,
+      "total_success": 846,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.969,
+      "health_score": 0.931,
       "status": "healthy"
     },
     "sina_etf": {
@@ -45,19 +45,19 @@
       "total_success": 0,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.15,
-      "status": "unhealthy"
-    },
-    "baostock": {
-      "total_calls": 488,
-      "total_success": 478,
-      "disabled": false,
-      "disabled_until": 1783319575.448091,
-      "health_score": 0.928,
+      "health_score": 0.875,
       "status": "healthy"
     },
+    "baostock": {
+      "total_calls": 489,
+      "total_success": 479,
+      "disabled": false,
+      "disabled_until": 1783319575.448091,
+      "health_score": 0.75,
+      "status": "degraded"
+    },
     "akshare_em": {
-      "total_calls": 86,
+      "total_calls": 87,
       "total_success": 67,
       "disabled": false,
       "disabled_until": 1783319600.3353353,
@@ -69,7 +69,7 @@
       "total_success": 433,
       "disabled": false,
       "disabled_until": 1783323801.057886,
-      "health_score": 0.93,
+      "health_score": 0.875,
       "status": "healthy"
     },
     "akshare_em_hfq": {
@@ -79,7 +79,31 @@
       "disabled_until": 0,
       "health_score": 0.875,
       "status": "healthy"
+    },
+    "tencent": {
+      "total_calls": 46,
+      "total_success": 46,
+      "disabled": false,
+      "disabled_until": 0,
+      "health_score": 0.75,
+      "status": "degraded"
+    },
+    "tushare": {
+      "total_calls": 1,
+      "total_success": 0,
+      "disabled": false,
+      "disabled_until": 0,
+      "health_score": 0.15,
+      "status": "unhealthy"
+    },
+    "tencent_hfq": {
+      "total_calls": 47,
+      "total_success": 47,
+      "disabled": false,
+      "disabled_until": 0,
+      "health_score": 0.75,
+      "status": "degraded"
     }
   },
-  "saved_at": 1783599864.8194969
+  "saved_at": 1783601182.8027112
 }
