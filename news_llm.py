@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""L1 大模型消息面档(SPEC_NEWS N2,可选)。支持 MiMo / Anthropic 双通道。
+"""L1 大模型消息面档(SPEC_NEWS N2,可选)。支持 GLM-4.7-Flash / Anthropic / MiMo 多通道(OpenAI 兼容)。
 需 config news_layer.llm=true + 对应 API KEY。
 只评估已发生事实,不预测、不荐股(见 prompts/news_daily.txt)。"""
 import json
@@ -15,8 +15,13 @@ PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 # 默认模型配置
 DEFAULT_PROVIDERS = {
-    "mimo": {
-        "base_url": "https://api.xiaomimimo.com",
+    "glm": {   # 智谱 GLM-4.7-Flash(免费、OpenAI 兼容);当前默认通道
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "model": "glm-4.7-flash",
+        "api_key_env": "GLM_API_KEY",
+    },
+    "mimo": {  # 兼容旧配置(api.xiaomimimo.com 端点已停用,勿作默认)
+        "base_url": "https://api.xiaomimimo.com/v1",
         "model": "mimo-v2.5",
         "api_key_env": "MIMO_API_KEY",
     },
@@ -33,8 +38,8 @@ MAX_TITLES = 200
 def _get_llm_config(cfg):
     """获取 LLM 配置(从 config 或默认值)。"""
     nl = cfg.get("news_layer") or {}
-    provider = nl.get("llm_provider", "mimo")
-    defaults = DEFAULT_PROVIDERS.get(provider, DEFAULT_PROVIDERS["mimo"])
+    provider = nl.get("llm_provider", "glm")
+    defaults = DEFAULT_PROVIDERS.get(provider, DEFAULT_PROVIDERS["glm"])
     return {
         "provider": provider,
         "base_url": nl.get("llm_base_url", defaults["base_url"]),
@@ -55,21 +60,24 @@ def _get_api_key(api_key_env):
     return key
 
 
-def _call_mimo(base_url, model, api_key, messages, max_tokens=1024):
-    """调用 MiMo API (OpenAI 兼容格式)。"""
+def _call_openai_compatible(base_url, model, api_key, messages, max_tokens=1024, provider=""):
+    """调用 OpenAI 兼容的 /chat/completions 端点(GLM-4.7-Flash / MiMo 等)。
+    base_url 需含到版本前缀(GLM: .../api/paas/v4;MiMo: .../v1),本函数只补 /chat/completions。"""
     import requests
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    # MiMo 使用 /v1/chat/completions 端点
-    url = base_url.rstrip("/") + "/v1/chat/completions"
+    url = base_url.rstrip("/") + "/chat/completions"
     payload = {
         "model": model,
         "messages": messages,
         "max_tokens": max_tokens,
         "temperature": 0.1,
     }
+    # GLM-4.7-Flash 默认开启深度思考;禁用以拿到干净 JSON、更快更省 token
+    if provider == "glm":
+        payload["thinking"] = {"type": "disabled"}
     resp = requests.post(url, json=payload, headers=headers, timeout=60)
     resp.raise_for_status()
     data = resp.json()
@@ -107,10 +115,11 @@ def _call_llm(prompt, cfg, max_tokens=1024):
     messages = [{"role": "user", "content": prompt}]
     provider = llm_cfg["provider"]
 
-    if provider == "mimo":
-        return _call_mimo(llm_cfg["base_url"], llm_cfg["model"], api_key, messages, max_tokens)
-    else:
+    if provider == "anthropic":
         return _call_anthropic(llm_cfg["model"], api_key, messages, max_tokens)
+    # glm / mimo / 其它 OpenAI 兼容端点
+    return _call_openai_compatible(llm_cfg["base_url"], llm_cfg["model"], api_key,
+                                   messages, max_tokens, provider=provider)
 
 
 def market_score(date, titles, cfg, holdings=None):

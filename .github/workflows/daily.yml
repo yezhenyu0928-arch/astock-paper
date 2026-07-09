@@ -35,6 +35,8 @@ jobs:
           SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: python run_daily.py
       - name: alert on failure
         if: failure()

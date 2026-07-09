@@ -14,8 +14,8 @@
 4. macro_score(date, conn) → float
    综合评分(-1~+1)，策略可用此调整仓位或因子权重。
 
-数据来源: baostock query_money_supply_data_month + query_history_k_data_plus(国债指数sh.000012)
-+ fundamental PE分位 + stock_industry + daily_bar。
+数据来源: akshare macro_china_supply_of_money(M2同比) + 国债ETF sh511010(利率方向,库内即有)
++ fundamental PE分位 + stock_industry + daily_bar。(原 baostock 从海外 Actions 会 login 挂死,已弃用)
 """
 import logging
 import numpy as np
@@ -172,68 +172,34 @@ def macro_factor(date, conn=None):
     if own:
         conn = get_conn()
     try:
-        # ── 1. M2 同比增速 ──
+        # ── 1. M2 同比增速(akshare 替换 baostock:baostock.login 从海外 Actions 会挂死) ──
         try:
-            import baostock as bs
-            lg = bs.login()
-            if lg.error_code == "0":
-                date_str = util.to_date_str(date)
-                # 取最近6个月的 M2 数据
-                year = int(date_str[:4])
-                month = int(date_str[5:7])
-                start_ym = f"{year - 1}-{month:02d}"
-                end_ym = f"{year}-{month:02d}"
-                rs = bs.query_money_supply_data_month(start_date=start_ym, end_date=end_ym)
-                if rs.error_code == "0":
-                    m2_rows = []
-                    while rs.next():
-                        r = rs.get_row_data()
-                        if r[9]:  # m2YOY
-                            m2_rows.append((r[0] + "-" + r[1], float(r[9])))
-                    if m2_rows:
-                        result["m2_yoy"] = m2_rows[-1][1]  # 最新 M2 同比
-                bs.logout()
+            import akshare as ak
+            m2df = ak.macro_china_supply_of_money()
+            col = "货币和准货币（广义货币M2）同比增长"
+            if m2df is not None and col in m2df.columns:
+                s = pd.to_numeric(m2df[col], errors="coerce").dropna()
+                if len(s):
+                    result["m2_yoy"] = float(s.iloc[0])   # 行首为最新月
         except Exception as e:
-            log.debug("M2 数据获取失败: %s", e)
-            try:
-                bs.logout()
-            except Exception:
-                pass
+            log.debug("M2(akshare) 获取失败: %s", e)
 
-        # ── 2. 国债指数收益(收益率代理) ──
-        # 国债指数 sh.000012 涨 ≈ 国债收益率降 ≈ 宽松
+        # ── 2. 利率方向(国债ETF sh511010,库内即有,替换 baostock 国债指数,避免挂死) ──
+        # 国债价格涨 ≈ 收益率降 ≈ 宽松;MA20>MA60 → easing。sh511010 是 s2/s6 避险资产,必在库。
         try:
-            import baostock as bs
-            lg = bs.login()
-            if lg.error_code == "0":
-                rs = bs.query_history_k_data_plus(
-                    "sh.000012", "date,close",
-                    start_date="2024-01-01",
-                    end_date=util.to_date_str(date),
-                    frequency="d")
-                if rs.error_code == "0":
-                    bond_rows = []
-                    while rs.next():
-                        r = rs.get_row_data()
-                        if r[1]:
-                            bond_rows.append((r[0], float(r[1])))
-                    if len(bond_rows) >= 60:
-                        # 60 日收益
-                        result["bond_60d_ret"] = (bond_rows[-1][1] / bond_rows[-60][1] - 1) * 100
-                        # MA20 vs MA60 方向
-                        closes = [r[1] for r in bond_rows]
-                        ma20 = np.mean(closes[-20:])
-                        ma60 = np.mean(closes[-60:])
-                        result["rate_direction"] = "easing" if ma20 > ma60 else "tightening"
-                        result["bond_ma20"] = round(ma20, 4)
-                        result["bond_ma60"] = round(ma60, 4)
-                bs.logout()
+            rows = conn.execute(
+                "SELECT close FROM daily_bar WHERE code='sh511010' AND trade_date<=? "
+                "ORDER BY trade_date DESC LIMIT 60", (util.to_date_str(date),)).fetchall()
+            if len(rows) >= 60:
+                closes = [float(r[0]) for r in rows][::-1]   # 转升序
+                result["bond_60d_ret"] = (closes[-1] / closes[0] - 1) * 100
+                ma20 = float(np.mean(closes[-20:]))
+                ma60 = float(np.mean(closes[-60:]))
+                result["rate_direction"] = "easing" if ma20 > ma60 else "tightening"
+                result["bond_ma20"] = round(ma20, 4)
+                result["bond_ma60"] = round(ma60, 4)
         except Exception as e:
-            log.debug("国债指数数据获取失败: %s", e)
-            try:
-                bs.logout()
-            except Exception:
-                pass
+            log.debug("国债ETF 利率方向失败: %s", e)
     except Exception as e:
         log.warning("macro_factor 失败: %s", e)
     finally:
@@ -271,6 +237,185 @@ def macro_score(date, conn=None) -> float:
         score -= 0.2
 
     return max(-1.0, min(1.0, score))
+
+
+# ============ 市场 regime(移植自 K线机 lib/marketRegime.ts) ============
+# 多基准价格趋势 + MA20/50/200 + 市场广度 + 风险比 → regime(强势/震荡/转弱/风险) + 0-100 分。
+# 纯价格、免费、可回测,比原 L0 词表市场分更全面。接入:看板"市场信号"卡 + s7 赛道旗舰评分。
+_REGIME_BENCHES = [("sh510300", "沪深300"), ("sh510500", "中证500"),
+                   ("sh512480", "半导体"), ("sh512000", "券商")]
+
+# 行业ETF池(同 S6/S7):库内即有,个股行业动量缺数据时用它兜底算"利好板块"
+_SECTOR_ETF_NAMES = {
+    "sh512000": "券商", "sh512480": "半导体", "sh512010": "医药", "sz159928": "消费",
+    "sh512660": "军工", "sh516160": "新能源", "sh512690": "酒", "sh515790": "光伏",
+    "sh512800": "银行",
+}
+
+
+def _bench_closes(conn, code, date, n):
+    """某代码截至 date 的最近 n 个收盘(升序)。ETF adj_factor=1,直接用 close。"""
+    rows = conn.execute(
+        "SELECT close FROM daily_bar WHERE code=? AND trade_date<=? ORDER BY trade_date DESC LIMIT ?",
+        (code, util.to_date_str(date), int(n))).fetchall()
+    if not rows:
+        return None
+    return [float(r[0]) for r in rows][::-1]
+
+
+def _ret(closes, days):
+    """closes[-1]/closes[-1-days]-1(百分数);不足返回 None。"""
+    if closes is None or len(closes) < days + 1 or not closes[-1 - days]:
+        return None
+    return round((closes[-1] / closes[-1 - days] - 1) * 100, 2)
+
+
+def _market_breadth(conn, date, pool=None):
+    """沪深300成分中 收盘 > MA20 且 > MA50 的占比(广度%);及 收盘 < MA200 的占比(风险比)。
+    数据不足返回 (None, None)。依赖库内个股日线(re-backfill 后齐备)。"""
+    try:
+        import factors
+        if pool is None:
+            pool = [r[0] for r in conn.execute(
+                "SELECT code FROM index_members WHERE index_code='sh000300'").fetchall()]
+        if not pool:
+            return None, None
+        prices, _ = factors._pool_bars(conn, pool, date, lookback=210)
+        if prices is None or prices.shape[1] < 20:
+            return None, None
+        above, total, below200, total200 = 0, 0, 0, 0
+        for code in prices.columns:
+            s = prices[code].dropna()
+            if len(s) < 50:
+                continue
+            last = float(s.iloc[-1])
+            ma20 = float(s.iloc[-20:].mean())
+            ma50 = float(s.iloc[-50:].mean())
+            total += 1
+            if last > ma20 and last > ma50:
+                above += 1
+            if len(s) >= 200:
+                total200 += 1
+                if last < float(s.iloc[-200:].mean()):
+                    below200 += 1
+        breadth = round(above / total * 100) if total else None
+        risk_ratio = round(below200 / total200, 3) if total200 else None
+        return breadth, risk_ratio
+    except Exception as e:
+        log.debug("市场广度计算失败: %s", e)
+        return None, None
+
+
+def _classify_regime(ret1m, ret3m, above20, above50, above200, breadth, risk_ratio):
+    """K线机 classify() 同款打分(0-100)+ 分档。ret 为百分数。"""
+    score = 50.0
+    score += (ret1m or 0) * 1.6
+    score += (ret3m or 0) * 0.55
+    if above20:
+        score += 8
+    if above50:
+        score += 10
+    if above200:
+        score += 8
+    if breadth is not None:
+        score += (breadth - 50) * 0.35
+    if risk_ratio is not None:
+        score -= risk_ratio * 45
+    score = int(max(0, min(100, round(score))))
+    weak = (above50 is False) or ((ret1m or 0) < -4) or ((risk_ratio or 0) >= 0.32)
+    if score >= 68 and above50 is not False and (breadth or 0) >= 50:
+        return score, "强势"
+    if weak and score < 45:
+        return score, "风险"
+    if weak or score < 52:
+        return score, "转弱"
+    return score, "震荡"
+
+
+def compute_market_regime(date, conn=None):
+    """综合市场 regime。返回 dict{regime, score, ret_1w/1m/3m, aboveMa20/50/200,
+    breadth, risk_ratio, benchmarks:[{code,name,ret_1m,aboveMa50}], summary}。数据不足则 regime='数据不足'。"""
+    own = conn is None
+    if own:
+        conn = get_conn()
+    try:
+        primary, pname = _REGIME_BENCHES[0]
+        closes = _bench_closes(conn, primary, date, 260)
+        if closes is None or len(closes) < 25:
+            return {"regime": "数据不足", "score": 50, "summary": "基准数据不足,无法判定 regime",
+                    "benchmarks": [], "breadth": None}
+        last = closes[-1]
+        ma20 = float(np.mean(closes[-20:]))
+        ma50 = float(np.mean(closes[-50:])) if len(closes) >= 50 else None
+        ma200 = float(np.mean(closes[-200:])) if len(closes) >= 200 else None
+        above20 = last > ma20
+        above50 = (last > ma50) if ma50 is not None else None
+        above200 = (last > ma200) if ma200 is not None else None
+        ret1w, ret1m, ret3m = _ret(closes, 5), _ret(closes, 21), _ret(closes, 63)
+        breadth, risk_ratio = _market_breadth(conn, date)
+        score, regime = _classify_regime(ret1m, ret3m, above20, above50, above200, breadth, risk_ratio)
+
+        benchmarks = []
+        for code, name in _REGIME_BENCHES:
+            c = _bench_closes(conn, code, date, 60)
+            if c and len(c) >= 21:
+                m50 = float(np.mean(c[-50:])) if len(c) >= 50 else None
+                benchmarks.append({"code": code, "name": name, "ret_1m": _ret(c, 21),
+                                   "aboveMa50": (c[-1] > m50) if m50 is not None else None})
+
+        r1 = "1月收益数据不足" if ret1m is None else f"近1月{pname}{ret1m:+.1f}%"
+        b1 = "广度数据不足" if breadth is None else f"强势广度{breadth}%"
+        summary = f"市场状态：{regime}(分{score})，{r1}，{b1}。"
+        return {"regime": regime, "score": score, "ret_1w": ret1w, "ret_1m": ret1m, "ret_3m": ret3m,
+                "aboveMa20": above20, "aboveMa50": above50, "aboveMa200": above200,
+                "breadth": breadth, "risk_ratio": risk_ratio, "benchmarks": benchmarks, "summary": summary}
+    except Exception as e:
+        log.warning("compute_market_regime 失败: %s", e)
+        return {"regime": "数据不足", "score": 50, "summary": f"regime 计算异常: {e}",
+                "benchmarks": [], "breadth": None}
+    finally:
+        if own:
+            conn.close()
+
+
+def top_bullish_sectors(date, conn=None, top=6):
+    """近期利好行业板块排行:行业动量(价格,库内) 合并 GLM 产业信号(news_signal)。
+    返回 [{name, momentum_pct, news_score}],按综合强度降序。供看板"利好板块"展示。"""
+    own = conn is None
+    if own:
+        conn = get_conn()
+    try:
+        ind_mom = industry_momentum(date, lookback=60, conn=conn)   # {行业名: 60日涨幅}
+        # GLM 行业ETF信号(sector:<etf>);映射到行业名展示
+        sector_news = {}
+        try:
+            rows = conn.execute(
+                "SELECT scope, score FROM news_signal WHERE signal_date<=? AND scope LIKE 'sector:%' "
+                "ORDER BY signal_date DESC LIMIT 40", (util.to_date_str(date),)).fetchall()
+            for scope, score in rows:
+                sector_news.setdefault(scope.replace("sector:", ""), float(score))
+        except Exception:
+            pass
+        items = []
+        if ind_mom:
+            for name, mom in ind_mom.items():
+                items.append({"name": name, "momentum_pct": round(mom * 100, 1),
+                              "news_score": 0.0})
+        else:
+            # 回退:个股行业动量无数据(库内缺沪深300成分)→ 用行业ETF池60日动量(库内即有)
+            for code, name in _SECTOR_ETF_NAMES.items():
+                r = _ret(_bench_closes(conn, code, date, 61), 60)
+                if r is not None:
+                    items.append({"name": name, "momentum_pct": r,
+                                  "news_score": sector_news.get(code, 0.0)})
+        items.sort(key=lambda x: x["momentum_pct"], reverse=True)
+        return items[:top], sector_news
+    except Exception as e:
+        log.debug("top_bullish_sectors 失败: %s", e)
+        return [], {}
+    finally:
+        if own:
+            conn.close()
 
 
 # ── 简易自检 ──

@@ -3,6 +3,7 @@
 铁律:消息层是保险不是引擎,任何抓取失败都不得阻断主流程 → 全部 try/except 静默降级。"""
 import hashlib
 import logging
+import threading
 import pandas as pd
 
 import util
@@ -37,25 +38,68 @@ def _retry(fn, what=""):
 
 
 # ---------------- 抓取 ----------------
+def _with_timeout(fn, timeout=10):
+    """线程硬超时(消息层是保险,慢源不得阻塞主流程)。返回 fn() 或 None(超时/异常)。"""
+    box = {}
+
+    def _run():
+        try:
+            box["r"] = fn()
+        except Exception as e:  # noqa
+            box["e"] = e
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout)
+    return box.get("r")
+
+
+def _fetch_em_global():
+    """东财全球快讯(权威、量大~200条)。返回 list of {ts,title,content,source}。"""
+    import akshare as ak
+    df = ak.stock_info_global_em()
+    if df is None or df.empty:
+        return []
+    items = []
+    for _, r in df.iterrows():
+        items.append({
+            "ts": str(r.get("发布时间", "")),
+            "title": str(r.get("标题", "")),
+            "content": str(r.get("摘要", "")),
+            "source": "em_global",
+        })
+    return items
+
+
 def fetch_flash(since_ts=None) -> pd.DataFrame:
-    """快讯。用新浪财经新闻 API(稳定,无需 akshare 版本同步)。返回 ts,title,content,source。"""
-    rows = _retry(_fetch_sina_realtime, "flash_sina")
-    if rows:
-        out = pd.DataFrame(rows)
-        if since_ts:
-            out = out[out["ts"] >= since_ts]
-        return out
-    # 备源:akshare 央视新闻联播文字稿
-    try:
-        import akshare as ak
-        df2 = _retry(lambda: ak.news_cctv(), "news_cctv")
-        if df2 is not None and not df2.empty:
-            return pd.DataFrame({"ts": df2.get("date", "").astype(str),
-                                 "title": df2.get("title", ""), "content": df2.get("content", ""),
-                                 "source": "news_cctv"})
-    except Exception:
-        pass
-    return pd.DataFrame(columns=["ts", "title", "content", "source"])
+    """快讯(多源合并去重,权威且全面,解决"一家之言")。返回 ts,title,content,source。
+    源:新浪财经滚动(稳定快) + 东财全球快讯(权威~200条,10s硬超时保护) + 央视(全失败兜底)。
+    铁律:消息层是保险,慢源一律套硬超时,任何失败都静默降级、不阻断主流程。"""
+    rows = []
+    sina = _retry(_fetch_sina_realtime, "flash_sina")
+    if sina:
+        rows.extend(sina)
+    # 东财全球快讯:量大权威,但偶发慢 → 10s 硬超时,超时即跳过(不拖累主流程)
+    em = _with_timeout(lambda: _retry(_fetch_em_global, "flash_em"), timeout=10)
+    if em:
+        rows.extend(em)
+    if not rows:
+        # 全失败兜底:央视新闻联播文字稿
+        try:
+            import akshare as ak
+            df2 = _with_timeout(lambda: _retry(lambda: ak.news_cctv(), "news_cctv"), timeout=10)
+            if df2 is not None and not df2.empty:
+                return pd.DataFrame({"ts": df2.get("date", "").astype(str),
+                                     "title": df2.get("title", ""), "content": df2.get("content", ""),
+                                     "source": "news_cctv"})
+        except Exception:
+            pass
+        return pd.DataFrame(columns=["ts", "title", "content", "source"])
+    out = pd.DataFrame(rows)
+    out = out[out["title"].astype(str).str.len() > 0].drop_duplicates(subset=["title"])
+    if since_ts:
+        out = out[out["ts"] >= since_ts]
+    return out.reset_index(drop=True)
 
 
 def _fetch_sina_realtime():

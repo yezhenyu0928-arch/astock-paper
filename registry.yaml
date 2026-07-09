@@ -119,3 +119,17 @@ s4_smallcap@v2:
     hold_n: 20
   universe: dynamic
   rebalance: monthly
+
+s7_track@v1:
+  class: strategies.s7_track.S7TrackFlagship
+  benchmark: sh510300
+  frozen_date: 2026-07-09       # 赛道旗舰:GLM政策+行业动量+市场regime,集中1-2赛道(冷眼局中人式)
+  params:
+    momentum_windows: [60, 120] # 3月/6月行业动量(趋势确认)
+    weights: {momentum: 0.5, industry: 0.5}  # 产业/政策信号(GLM)与动量各半 → 信息驱动
+    hold_n: 2                   # 集中持有综合最强 1-2 条赛道
+    rebalance: monthly          # 耐心持仓、低换手
+    safe_asset: sh511010        # 市场风险/无正动量时转国债ETF避险
+  # 行业ETF池(同S6):券商/半导体/医药/消费/军工/新能源/酒/光伏/银行 + 国债(避险)
+  universe: [sh512000, sh512480, sh512010, sz159928, sh512660, sh516160,
+             sh512690, sh515790, sh512800, sh511010]

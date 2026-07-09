@@ -430,8 +430,10 @@ def _market_index_cards(index_data):
 
 # ---------------- 颜色/格式(盈红亏绿) ----------------
 def _col(x):
-    """收益/涨跌上色:≥0 红(--up),<0 绿(--down)。"""
-    return "var(--up)" if (x is not None and x >= 0) else "var(--down)"
+    """收益/涨跌上色:>0 红(--up),<0 绿(--down),=0或空 灰(--mut)(A股习惯,零值中性)。"""
+    if x is None or abs(x) < 1e-9:
+        return "var(--mut)"
+    return "var(--up)" if x > 0 else "var(--down)"
 
 
 def _pct(x, plus=True):
@@ -674,9 +676,12 @@ def _positions_table(conn, a, sid, log_rows):
             f"<tr class='why'><td colspan='8'>买入 {bdate or '—'} · 持有{hold}天 · "
             f"理由：{html.escape(reason)}</td></tr>")
     tot_pnl = (total / init - 1) if init else None
-    body += (f"<tr class='sum'><td class='l'>现金</td><td colspan='4'></td>"
-             f"<td colspan='2'></td><td></td></tr>"
-             f"<tr class='sum'><td class='l'>合计总资产</td><td colspan='4'></td>"
+    cash_p = (cash / total) if total else 0
+    body += (f"<tr class='sum'><td class='l'>现金</td><td colspan='3'></td>"
+             f"<td class='mv'>{cash:,.0f}</td><td colspan='2'></td>"
+             f"<td>{cash_p*100:.0f}%</td></tr>"
+             f"<tr class='sum'><td class='l'>合计总资产</td><td colspan='3'></td>"
+             f"<td class='mv'>{total:,.0f}</td>"
              f"<td style='color:{_col(tot_pnl)}'>{_pct(tot_pnl)}</td><td colspan='2'></td></tr>")
     return ("<table class='pos'><tr><th>标的</th><th>股数</th><th>成本</th><th>最新</th>"
             "<th>市值</th><th>累计盈亏</th><th>当日</th><th>仓位</th></tr>" + body + "</table>")
@@ -705,6 +710,69 @@ def _exec_date(pendings):
     except Exception:
         return None, "", False
     return d, wd, (d == util.today_str())
+
+
+# ---------------- 市场信号(regime + 利好板块,移植自 K线机 marketRegime) ----------------
+def _market_regime_section(conn):
+    """市场信号卡:牛熊 regime + 0-100 分 + 关键指标 + 基准迷你行 + 近期利好行业板块排行。"""
+    if not conn:
+        return ""
+    try:
+        import macro
+        today = util.today_str()
+        reg = macro.compute_market_regime(today, conn=conn)
+        if not reg or reg.get("regime") == "数据不足":
+            return ""
+        regime = reg["regime"]
+        score = reg.get("score", 50)
+        # regime 配色(A股习惯:强势偏多=红,风险偏空=绿;转弱=橙警示,震荡=灰中性)
+        rc = {"强势": "var(--up)", "风险": "var(--down)", "转弱": "#f59e0b", "震荡": "var(--mut)"}
+        color = rc.get(regime, "var(--mut)")
+        chips = []
+        if reg.get("ret_1m") is not None:
+            chips.append(f"近1月 {reg['ret_1m']:+.1f}%")
+        if reg.get("breadth") is not None:
+            chips.append(f"强势广度 {reg['breadth']}%")
+        ma = []
+        for k, lbl in (("aboveMa20", "MA20"), ("aboveMa50", "MA50"), ("aboveMa200", "MA200")):
+            v = reg.get(k)
+            if v is not None:
+                ma.append(lbl + ("↑" if v else "↓"))
+        if ma:
+            chips.append(" ".join(ma))
+        chips_html = " · ".join(html.escape(c) for c in chips)
+        # 基准迷你行
+        bench_parts = []
+        for b in reg.get("benchmarks", []):
+            r1 = b.get("ret_1m")
+            bcol = _col(r1 / 100 if r1 is not None else None)
+            rtxt = f"{r1:+.1f}%" if r1 is not None else "—"
+            bench_parts.append(f"<span class='rg-bench'>{html.escape(b['name'])} "
+                               f"<b style='color:{bcol}'>{rtxt}</b></span>")
+        bench_html = ("<div class='rg-benches'>" + " ".join(bench_parts) + "</div>") if bench_parts else ""
+        # 近期利好行业板块
+        try:
+            sectors, _ = macro.top_bullish_sectors(today, conn=conn, top=6)
+        except Exception:
+            sectors = []
+        sec_parts = []
+        for s in sectors:
+            mp = s.get("momentum_pct")
+            scol = _col(mp / 100 if mp is not None else None)
+            sec_parts.append(f"<span class='rg-sec'>{html.escape(str(s['name']))} "
+                             f"<b style='color:{scol}'>{mp:+.1f}%</b></span>")
+        sec_html = ("<div class='rg-sectors'><span class='rg-lbl'>近60日利好行业</span>"
+                    + " ".join(sec_parts) + "</div>") if sec_parts else ""
+        return (
+            f"<div class='sec'>🧭 市场信号</div>"
+            f"<div class='rg-card'>"
+            f"<div class='rg-head'><span class='rg-badge' style='background:{color}'>{html.escape(regime)} · {score}</span>"
+            f"<span class='rg-metrics'>{chips_html}</span></div>"
+            f"{bench_html}{sec_html}"
+            f"<div class='rg-note'>{html.escape(reg.get('summary', ''))}</div>"
+            f"</div>")
+    except Exception:
+        return ""
 
 
 # ---------------- 新闻/产业信号展示 ----------------
@@ -747,19 +815,19 @@ def _news_industry_section(conn):
 
         # 市场面
         if market_score is not None:
-            color = "#0a9e6b" if market_score > 0 else "#d92b2b" if market_score < 0 else "var(--mut)"
+            color = "var(--up)" if market_score > 0.5 else "var(--down)" if market_score < -0.5 else "var(--mut)"
             label = "利好" if market_score > 0.5 else "利空" if market_score < -0.5 else "中性"
             parts.append(f"<span class='news-tag' style='background:{color}'>市场面 {label}({market_score:+.1f})</span>")
 
         # 行业面
         for etf_code, score, ev in sector_signals[:5]:
-            color = "#0a9e6b" if score > 0 else "#d92b2b"
+            color = "var(--up)" if score > 0 else "var(--down)"
             nm = _ETF_NAMES.get(etf_code, etf_code)
             parts.append(f"<span class='news-tag' style='background:{color}'>{nm} {score:+.1f}</span>")
 
         # 个股面
         for code, score, ev in stock_signals[:3]:
-            color = "#0a9e6b" if score > 0 else "#d92b2b"
+            color = "var(--up)" if score > 0 else "var(--down)"
             nm = ctx_name(conn, code) if conn else util.bare(code)
             parts.append(f"<span class='news-tag' style='background:{color}'>{nm} {score:+.1f}</span>")
 
@@ -881,7 +949,8 @@ def generate(out_path=None):
         ls = _live_stats(a)
         st = "🔴熔断" if a.get("frozen") else "🟢正常"
         dates, pcts = _live_series(a)
-        up_color = "#d92b2b" if (pcts and pcts[-1] >= 0) else "#0a9e6b"
+        _last = pcts[-1] if pcts else None
+        up_color = "#6b7280" if (_last is None or abs(_last) < 1e-9) else ("#d92b2b" if _last > 0 else "#0a9e6b")
         bench_d2v, _ = _bench_series(conn, dates[0], dates[-1]) if (conn and dates) else ({}, [])
         chart = _chart_svg(dates, pcts, bench_d2v, up_color) if dates else "<div class='pos-empty'>曲线将于 2026-07-06 起累积</div>"
         cur_txt = _pct(ls["total"]) if ls["started"] else "今日起步"
@@ -931,6 +1000,7 @@ def generate(out_path=None):
         f"<div class='sub'>生成 {today} · 数据最新 {last} · 实盘模拟期自 2026-07-06 起 · 模拟/历史不代表未来，非投资建议，人工跟单</div>"
         f"{banner}"
         f"{market_section}"
+        f"{_market_regime_section(conn)}"
         f"{_news_industry_section(conn)}"
         f"<div class='sec'>{ops_title}</div>{ops_section}"
         f"<div class='sec'>实盘赛马总览（2026-07-06 起算）</div>{overview}"
@@ -1181,7 +1251,7 @@ def generate_methodology(out_path=None):
 
 def generate_trades(conn, out_path=None, cap=800):
     """历史交易页:实盘成交(2026-07-06 起)置顶展开 + 各策略回测成交折叠靠后。买红卖绿。"""
-    sids = ["s2_etf@v1", "s1_dividend@v1", "s3_ma_trend@v1", "s4_smallcap@v1", "s5_grid@v1", "s6_sector@v1"]
+    sids = ["s2_etf@v1", "s1_dividend@v2", "s4_smallcap@v1", "s6_sector@v1", "s7_track@v1"]
     live_rows = []
     live_csv = conf.STATE_DIR / "trade_log.csv"
     if live_csv.exists():
@@ -1285,6 +1355,15 @@ th{background:#f0f2f5;color:var(--mut);font-weight:600}td.l,th:first-child{text-
 .news-bar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0}
 .news-tag{display:inline-block;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;color:#fff}
 .news-tag.positive{background:#0a9e6b}.news-tag.negative{background:#d92b2b}
+.rg-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:6px 0}
+.rg-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.rg-badge{color:#fff;font-weight:700;font-size:14px;padding:4px 12px;border-radius:8px}
+.rg-metrics{color:var(--mut);font-size:12.5px}
+.rg-benches{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:12.5px}
+.rg-sectors{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:12.5px;align-items:center}
+.rg-lbl{color:var(--mut);font-weight:600;margin-right:2px}
+.rg-sec,.rg-bench{background:#f3f4f6;border-radius:6px;padding:2px 8px}
+.rg-note{color:var(--mut);font-size:12px;margin-top:8px}
 .card-h .stat{font-size:12px;color:var(--mut)}
 .tagline{font-size:13px;color:#374151;margin:4px 0 8px}
 .fx{margin:6px 0;font-size:12.5px}.fx th{font-size:12px}

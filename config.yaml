@@ -28,16 +28,18 @@ risk:
     m20_drop: 0.10              # 20日累计跌幅
   min_avg_amount: 50000000      # 个股20日日均成交额下限(元)
 
-strategies:                     # 开关:true 参与赛马。默认全开(赛马),小资金见README资金分档表。
-  s2_etf@v1: true
-  s1_dividend@v1: true
-  s3_ma_trend@v1: true
-  s4_smallcap@v1: true
-  s5_grid@v1: true
-  s6_sector@v1: true            # 卡C:行业ETF动量轮动(政策/行业面代理)
-  s1_dividend@v2: true          # 卡D:红利低波·质量增强(加ROE门槛,与v1并行赛马)
-  s1_dividend@v3: true          # 卡J:红利低波·Barra增强(12个风格因子;V3并行赛马)
-  s4_smallcap@v2: true          # 卡J:多因子价值增强(沪深300)(Barra因子;V2并行赛马)
+strategies:                     # 精选阵容(2026-07 优化):删负收益、归档重复变体、新增赛道旗舰
+  s2_etf@v1: true               # ETF动量轮动(全期年化~9%)
+  s1_dividend@v2: true          # 红利低波·质量增强(年化~12%,取代 v1/v3)
+  s4_smallcap@v1: true          # 小市值多因子(年化~25%,最强)
+  s6_sector@v1: true            # 行业ETF动量(年化~7.5%,政策/行业面代理)
+  s7_track@v1: true             # 赛道旗舰:GLM政策+行业动量+市场regime,集中1-2赛道(冷眼局中人式)
+  # ↓ 已下线(2026-07 优化):负收益或与保留版本重复,曲线归档、不再参与赛马
+  s3_ma_trend@v1: false         # 删:全期年化 -0.2%(双均线趋势在震荡市持续 whipsaw)
+  s5_grid@v1: false             # 删:全期年化 -3.3%(PE网格全期负收益)
+  s1_dividend@v1: false         # 归档:被 v2 质量增强版取代(v2 年化12% > v1 11%)
+  s1_dividend@v3: false         # 归档:与 v2 高度重复,Barra 增强边际提升有限
+  s4_smallcap@v2: false         # 归档:被 v1 取代(v1 年化25% > v2)
 
 schedule:
   signal_push_time: "18:00"     # 北京时间,仅用于消息标题展示
@@ -45,10 +47,10 @@ schedule:
 news_layer:                   # 消息面层:风险过滤 + 产业逻辑驱动
   enabled: true
   llm: true                   # 启用 LLM 语义分析
-  llm_provider: mimo          # mimo / anthropic
-  llm_base_url: https://api.xiaomimimo.com
-  llm_api_key_env: MIMO_API_KEY  # GitHub Secrets 中的环境变量名
-  llm_model: mimo-v2.5          # 模型名称
+  llm_provider: glm           # glm / anthropic / mimo
+  llm_base_url: https://open.bigmodel.cn/api/paas/v4
+  llm_api_key_env: GLM_API_KEY   # GitHub Secrets 中的环境变量名(值放 Secrets,勿写库)
+  llm_model: glm-4.7-flash      # 智谱 GLM-4.7-Flash(免费)
   llm_shadow: false           # 影子评估档(记录但不干预)
   intraday_scan: true         # 盘中10:00/13:30/14:45三次黑天鹅扫描
   industry_boost_weight: 0.2  # 产业信号在S6中的权重(0.2=20%)

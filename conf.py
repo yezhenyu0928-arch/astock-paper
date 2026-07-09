@@ -24,7 +24,8 @@ for _d in (DB_DIR, STATE_DIR, REPORTS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # 秘钥:环境变量名 → config 里的挂载路径(仅用于运行期,不落盘)
-SECRET_ENVS = ("PUSHPLUS_TOKEN", "SMTP_AUTH_CODE", "DASHBOARD_PASSWORD", "ANTHROPIC_API_KEY")
+SECRET_ENVS = ("PUSHPLUS_TOKEN", "SMTP_AUTH_CODE", "DASHBOARD_PASSWORD", "ANTHROPIC_API_KEY",
+               "GLM_API_KEY", "TUSHARE_TOKEN")
 
 # risk_override 校验方向:True=值越小越严(只接受更小),False=值越大越严(只接受更大)
 _RISK_STRICTER_WHEN_SMALLER = {
@@ -37,15 +38,17 @@ _RISK_STRICTER_WHEN_SMALLER = {
     ("market_freeze", "m20_drop"): True,
 }
 
-# 默认数据源优先级配置
+# 默认数据源优先级配置。
+# 云端 GitHub Actions(海外 Runner)现实:baostock/东财 push2his 常不可达;腾讯 gtimg CDN 可达。
+# 故个股主源改腾讯(tencent,免费无 token),Tushare 次之(需积分,无则自动跳过),baostock 降为最后(本地仍可用)。
 DEFAULT_DATA_SOURCE_PRIORITY = {
-    "etf_daily": ["sina_etf", "baostock", "akshare_em"],
-    "stock_daily": ["baostock", "akshare_em"],
-    "hfq_close": ["baostock", "akshare_em"],
+    "etf_daily": ["sina_etf", "akshare_em", "baostock"],
+    "stock_daily": ["tencent", "tushare", "akshare_em", "baostock"],
+    "hfq_close": ["tencent", "akshare_em", "baostock"],
     "realtime": ["tencent", "sina"],
     "calendar": ["akshare_sina", "baostock"],
     "index_daily": ["akshare"],
-    "fundamental": ["baostock"],
+    "fundamental": ["tushare", "akshare_em", "baostock"],
 }
 
 

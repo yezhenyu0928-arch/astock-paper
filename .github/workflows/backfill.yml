@@ -2,7 +2,12 @@ name: backfill
 # 手动触发:构建/刷新历史数据 DB(首次部署,或 cache 被淘汰后重建)。
 # 跑完把 DB 存入 cache,供 daily/intraday 复用。
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      reset_stock_bars:
+        description: "清空个股(非ETF)daily_bar后重建(切主数据源为腾讯时勾选一次;新旧复权基准不可混用)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -22,6 +27,21 @@ jobs:
           path: db/market.sqlite
           key: db-${{ github.run_id }}
           restore-keys: db-
+      - name: reset stock bars(数据源迁移用,仅勾选时执行,ETF不受影响)
+        if: ${{ inputs.reset_stock_bars }}
+        run: |
+          python -c "
+          import data_adapter as da
+          from db import get_conn
+          conn = get_conn()
+          codes = [r[0] for r in conn.execute('SELECT DISTINCT code FROM daily_bar').fetchall()]
+          stock_codes = [c for c in codes if not da.is_etf_code(c)]
+          if stock_codes:
+              conn.executemany('DELETE FROM daily_bar WHERE code=?', [(c,) for c in stock_codes])
+              conn.commit()
+          print(f'已清空 {len(stock_codes)} 个个股 daily_bar(ETF保留),下一步用新数据源重建')
+          conn.close()
+          "
       - name: backfill (ETF + 沪深300 个股/基本面/分红)
         run: |
           python -c "import data,conf; data.update_all(conf.load_config(), conf.load_registry(), with_members=True)"

@@ -6,9 +6,12 @@
 - 数据源均为国内主机,本不该走代理;本机代理会间歇性掐断东财接口。
   → 抓取时临时摘掉 HTTP(S)_PROXY 直连(_no_proxy),Actions 无代理时是 no-op。
 - akshare 东财接口间歇失败 → 重试 + baostock 兜底(baostock 走裸 socket,稳定)。
-- akshare 成交量单位=手,baostock=股;统一存"股"(akshare ×100)。
-- 海外 Actions Runner 所有国内源(akshare/baostock/新浪)均不可达，
-  yfinance 作为最终兜底(全球可达,免费,无需key)。
+- akshare 成交量单位=手,baostock=股;统一存"股"(akshare/腾讯 ×100)。
+- 云端 GitHub Actions(海外 Runner):baostock/东财 push2his 常不可达,但腾讯 gtimg CDN 可达。
+  → 个股主源改腾讯(stock_zh_a_hist_tx,免费无 token),Tushare(需积分)次之,东财/baostock 兜底,
+  yfinance 最终兜底;ETF 仍走新浪(sina_etf,稳)。腾讯无成交额字段 → 用 量(股)×收盘 估算。
+  ⚠ 首次升级须清空个股 daily_bar 后重跑 backfill,令 adj_factor 统一为腾讯(IPO)基准;
+    切勿与旧 baostock 基准混用(两者绝对量级差~27倍,混用会在切换日产生复权跳变)。
 
 数据健康度优化(新增):
 - 集成 data_health 模块,自动监控各数据源成功率/响应时间
@@ -244,6 +247,93 @@ def _yf_raw(code, start, end):
         return None, None
 
 
+# ============ 腾讯历史行情(海外 Actions 可达,免费无 token,个股主力源) ============
+# gtimg CDN 与现有实时行情同一基础设施,海外 GitHub Actions 可达(baostock/东财 push2his 常不可达)。
+# akshare stock_zh_a_hist_tx 封装该源;列 date/open/close/high/low/amount,其中 amount 实为
+# 成交量(手)(已用东财同股同日核对 ratio=1.0),无成交额 → 用 量(股)×收盘 估算(与 yfinance 兜底一致)。
+def _tencent_raw(code, start, end):
+    """腾讯不复权日线。返回 (df[trade_date,open,high,low,close,volume,amount], None)。ETF 跳过(tx 仅个股)。"""
+    if is_etf_code(code):
+        return None, None
+    import akshare as ak
+    df = _retry_df(lambda: ak.stock_zh_a_hist_tx(
+        symbol=code, start_date=start.replace("-", ""),
+        end_date=end.replace("-", ""), adjust=""), what=f"tencent {code}")
+    if df is None or getattr(df, "empty", True):
+        return None, None
+    df = df.rename(columns={"date": "trade_date", "amount": "volume"})
+    df["trade_date"] = df["trade_date"].astype(str).str[:10]
+    for c in ("open", "high", "low", "close", "volume"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["volume"] = df["volume"] * _VOL_LOTS_TO_SHARES          # 手→股
+    df["amount"] = df["volume"] * df["close"]                  # tx 无成交额,量×价估算
+    df = df[(df["trade_date"] >= start) & (df["trade_date"] <= end)]
+    return df[["trade_date", "open", "high", "low", "close", "volume", "amount"]].copy(), None
+
+
+def _tencent_hfq(code, start, end):
+    """腾讯后复权收盘(算 adj_factor 用)。返回 Series(index=trade_date) 或 None。"""
+    if is_etf_code(code):
+        return None
+    import akshare as ak
+    df = _retry_df(lambda: ak.stock_zh_a_hist_tx(
+        symbol=code, start_date=start.replace("-", ""),
+        end_date=end.replace("-", ""), adjust="hfq"), what=f"tencent_hfq {code}")
+    if df is None or getattr(df, "empty", True):
+        return None
+    df = df.rename(columns={"date": "trade_date"})
+    df["trade_date"] = df["trade_date"].astype(str).str[:10]
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    return df.set_index("trade_date")["close"]
+
+
+# ============ Tushare(可选增强源:需 TUSHARE_TOKEN + 积分;无则自动跳过、回退下一源) ============
+# 免费版 daily 接口需 2000 积分(注册仅得~120),多数用户无积分 → 本源会抛错并被 _fetch_raw 优雅回退。
+# 本地未安装 tushare 时 import 失败同样优雅跳过。腾讯源已覆盖个股日线,Tushare 仅作有积分用户的增强。
+_ts_pro = None
+
+
+def _has_tushare_token():
+    return bool(os.environ.get("TUSHARE_TOKEN", "") or conf.secret("TUSHARE_TOKEN"))
+
+
+def _tushare_pro():
+    global _ts_pro
+    if _ts_pro is None:
+        import tushare as ts
+        token = os.environ.get("TUSHARE_TOKEN", "") or conf.secret("TUSHARE_TOKEN")
+        if not token:
+            raise RuntimeError("无 TUSHARE_TOKEN")
+        ts.set_token(token)
+        _ts_pro = ts.pro_api()
+    return _ts_pro
+
+
+def _ts_code(code):
+    """sh600519 -> 600519.SH"""
+    return f"{util.bare(code)}.{util.market(code).upper()}"
+
+
+def _tushare_raw(code, start, end):
+    """Tushare 不复权日线(可选)。vol 手→股,amount 千元→元。无 token/模块/积分 → (None,None) 优雅跳过。"""
+    if not _has_tushare_token() or is_etf_code(code):
+        return None, None
+    pro = _tushare_pro()
+    df = pro.daily(ts_code=_ts_code(code), start_date=start.replace("-", ""),
+                   end_date=end.replace("-", ""))
+    if df is None or df.empty:
+        return None, None
+    df = df.rename(columns={"vol": "volume"})
+    df["trade_date"] = df["trade_date"].astype(str).str.replace(
+        r"(\d{4})(\d{2})(\d{2})", r"\1-\2-\3", regex=True)
+    for c in ("open", "high", "low", "close", "volume", "amount"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    df["volume"] = df["volume"] * 100          # 手→股
+    df["amount"] = df["amount"] * 1000          # 千元→元
+    df = df[(df["trade_date"] >= start) & (df["trade_date"] <= end)]
+    return df[["trade_date", "open", "high", "low", "close", "volume", "amount"]].copy(), None
+
+
 def _fetch_raw(code, start, end, cfg=None):
     """不复权日线。支持健康度监控和配置化优先级。
     返回 (df, source, susp_series|None)。"""
@@ -257,6 +347,8 @@ def _fetch_raw(code, start, end, cfg=None):
     # 数据源名称到函数的映射
     source_map = {
         "sina_etf": _sina_etf_raw,
+        "tencent": _tencent_raw,
+        "tushare": _tushare_raw,
         "baostock": _bs_raw,
         "akshare_em": _ak_raw,
     }
@@ -290,11 +382,13 @@ def _fetch_raw(code, start, end, cfg=None):
             return None, None, None
         if etf:
             available_sources = [("sina_etf", _sina_etf_raw, 1.0),
-                                ("baostock", _bs_raw, 1.0),
-                                ("akshare_em", _ak_raw, 1.0)]
+                                ("akshare_em", _ak_raw, 1.0),
+                                ("baostock", _bs_raw, 1.0)]
         else:
-            available_sources = [("baostock", _bs_raw, 1.0),
-                                ("akshare_em", _ak_raw, 1.0)]
+            available_sources = [("tencent", _tencent_raw, 1.0),
+                                ("tushare", _tushare_raw, 1.0),
+                                ("akshare_em", _ak_raw, 1.0),
+                                ("baostock", _bs_raw, 1.0)]
 
     for name, fn, score in available_sources:
         try:
@@ -341,7 +435,11 @@ def _fetch_hfq_close(code, start, end, cfg=None):
             start_time = time.time()
             result = None
 
-            if src == "baostock":
+            if src == "tencent":
+                s = _tencent_hfq(code, start, end)
+                if s is not None and len(s) > 0:
+                    result = s
+            elif src == "baostock":
                 h = _retry_df(lambda: _bs_kline(code, start, end, 1), what=f"bs_hfq {code}")
                 if h is not None and not h.empty:
                     result = h.set_index("trade_date")["close"]

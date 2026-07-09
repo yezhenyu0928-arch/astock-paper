@@ -6,5 +6,6 @@ pyyaml
 requests
 streamlit>=1.35
 plotly
-anthropic        # 仅 P14 大模型消息档(config news_layer.llm=true)才用;不启用可忽略
+anthropic        # 可选:Anthropic 消息面档(备用通道);默认走 GLM(requests HTTP,无需额外包)
+tushare          # 可选:个股数据增强源,需 TUSHARE_TOKEN+积分;无则自动跳过、回退腾讯/东财
 yfinance         # 海外Actions Runner兜底数据源(全球可达)

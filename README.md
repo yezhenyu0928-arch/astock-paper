@@ -11,7 +11,7 @@
 2. 准备一个邮箱,开启 SMTP 服务,拿到授权码(推送失败时的备用通知)。
 3. 新建 **私有** GitHub 仓库,上传本项目全部文件。
 4. 仓库 Settings → Secrets and variables → Actions,添加 Secret:
-   `PUSHPLUS_TOKEN` / `SMTP_AUTH_CODE`(必填);`ANTHROPIC_API_KEY`(选填,仅启用大模型消息档时)
+   `PUSHPLUS_TOKEN` / `SMTP_AUTH_CODE`(必填);`GLM_API_KEY`(选填,启用大模型消息面档,免费,见 open.bigmodel.cn)
 5. 复制 `config.example.yaml` 为 `config.yaml`,按需改:
    - `capital`: 你计划将来实盘投入的金额(模拟按此建账,并据此自动压缩持仓数/剔碎单)
    - `smtp.user`: 你的邮箱地址
