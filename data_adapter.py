@@ -52,6 +52,24 @@ _ETF_UNIVERSE_NAME = {
 
 _bs_logged_in = False
 
+# baostock 走裸 socket 通信,标准库 socket 默认无超时:若海外 Runner 连上国内主机后对方只是
+# "不回应"(不同于连接被拒/重置那种能立刻报错的失败),login 之后的 query/rs.next() 逐行取数
+# 会无限期挂起,_timeout_guard 的协作式检查(只在每次循环迭代间探测)永远等不到这一行返回,
+# 整个 daily 卡死不动。2026-07-10 实测复现:处理 sz302132 后续步骤挂起。
+# 修法:进程启动 baostock 前,一次性把 socket 默认超时设为有限值——此后 baostock 内部所有
+# socket 通信(login + 每次 query)均继承此超时,不需要每个调用点单独包裹。
+# 本项目其余网络调用(requests.get)均已显式传 timeout=,不受此全局默认值影响,可安全常驻设置。
+_BS_SOCKET_TIMEOUT = 20  # 秒。国内-国内正常<1s,海外Runner慢也不该超此值,超时即判定不可达
+_bs_socket_timeout_applied = False
+
+
+def _ensure_bs_socket_timeout():
+    global _bs_socket_timeout_applied
+    if not _bs_socket_timeout_applied:
+        import socket
+        socket.setdefaulttimeout(_BS_SOCKET_TIMEOUT)
+        _bs_socket_timeout_applied = True
+
 
 # ============ 重试 ============
 # 说明:本机实测"摘掉代理直连"反而让 akshare 东财接口(push2his)全部失败,
@@ -89,6 +107,7 @@ def _retry_df(fn, tries=3, delay=0.5, what=""):
 
 def _bs():
     global _bs_logged_in
+    _ensure_bs_socket_timeout()
     import baostock as bs
     if not _bs_logged_in:
         bs.login()
