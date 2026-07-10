@@ -97,6 +97,15 @@ STRAT_META = {
                     ("绝对动量门槛", "最强者60日收益<阈值 → 全仓切国债ETF"),
                     ("宏观调节(macro_score)", "仓位调节+避险阈值+M2数据")],
         "rebalance": "每月最后交易日 · 持1只 · 池=券商/半导体/医药/消费/军工/新能源/酒/光伏/银行/国债"},
+    "s7_track@v1": {
+        "name": "赛道旗舰", "risk": "★★★★☆ 中高", "fit": "≥3万",
+        "tagline": "冷眼局中人式：选中1-2个有政策/景气主线的行业赛道，集中持有。综合市场regime判断仓位，风险市果断切国债避险。",
+        "factors": [("60日行业动量", "50%"), ("120日行业动量", "加权"),
+                    ("GLM产业/政策信号", "50% · 国家级利好+2/+1分，利空-1/-2分"),
+                    ("市场regime判断", "强势98%仓/震荡80%仓/转弱50%仓/风险0%全切国债"),
+                    ("绝对动量过滤", "短窗收益<0的赛道剔除，顺势不逆势"),
+                    ("入选池", "券商/半导体/医药/消费/军工/新能源/酒/光伏/银行/国债")],
+        "rebalance": "每月最后交易日 · 持1-2只 · 赛道集中"},
 }
 
 
@@ -113,19 +122,28 @@ def _cn(sid):
 
 # ---------------- 数据装载 ----------------
 def _load_accounts():
-    """加载 state/*.json 中的策略账户。同时补入 registry 中已注册但尚无 state 文件的策略（占位，净值1.0）。"""
+    """加载 state/*.json 中的策略账户，仅保留 config.yaml strategies 当前置 true 的（已下线/归档策略
+    的历史文件仍留在磁盘供回测/存档，只是不在看板赛马总览/策略卡/操作计划里展示）。
+    同时补入 registry 中已注册但尚无 state 文件的新策略（占位，净值1.0）。"""
+    try:
+        enabled = {sid for sid, on in (conf.load_config().get("strategies") or {}).items() if on}
+    except Exception:
+        enabled = None   # config 读取异常时不过滤，保留原有全量展示(降级安全)
     out = {}
     for f in glob.glob(str(conf.STATE_DIR / "*.json")):
         try:
             d = json.load(open(f, encoding="utf-8"))
-            if "strategy_id" in d:
-                out[d["strategy_id"]] = d
+            sid = d.get("strategy_id")
+            if sid and (enabled is None or sid in enabled):
+                out[sid] = d
         except Exception:
             pass
     # 补入 registry 中已注册但无 state 的新策略（占位展示）
     try:
         reg = conf.load_registry()
         for sid, entry in reg.items():
+            if enabled is not None and sid not in enabled:
+                continue
             if sid not in out:
                 out[sid] = {
                     "strategy_id": sid, "cash": 50000, "nav": 1.0, "nav_history": [],
@@ -1064,11 +1082,26 @@ background:#fef3c7;color:#92400e;margin-left:6px}
 </style>"""
 
 
+def _enabled_strategy_ids():
+    """当前 config.yaml strategies 置 true 的策略集合；读取异常返回 None(调用方应视为"不过滤")。"""
+    try:
+        return {sid for sid, on in (conf.load_config().get("strategies") or {}).items() if on}
+    except Exception:
+        return None
+
+
 def _methodology_toc():
-    """目录锚点导航。"""
-    items = ""
+    """目录锚点导航：当前参赛策略在前，已下线/归档策略标注后置。"""
+    enabled = _enabled_strategy_ids()
+    live_items, retired_items = "", ""
     for sid, meta in sorted(STRAT_META.items()):
-        items += f'<a href="#{sid}">{meta["name"]}</a>\n'
+        tag = "" if (enabled is None or sid in enabled) else "（已下线）"
+        line = f'<a href="#{sid}">{meta["name"]}{tag}</a>\n'
+        if enabled is not None and sid not in enabled:
+            retired_items += line
+        else:
+            live_items += line
+    items = live_items + retired_items
     items += '<a href="#risk-model">因子与风险模型</a>\n'
     return f'<div class="toc"><b>📑 目录</b>\n{items}</div>'
 
@@ -1108,6 +1141,11 @@ def _methodology_strat_block(sid):
                         "行业轮动规律明显时表现好。<br>"
                         "<b>风险提示</b>：行业集中度高、单品种持仓；"
                         "政策变化或景气拐点可能引发剧烈回撤；弱市切国债提供部分保护但非保本。"),
+        "s7_track@v1": ("<b>适用环境</b>：产业主线明确、政策与景气共振的结构性行情（AI/半导体/设备更新等），"
+                        "或宏观趋势清晰的阶段。<br>"
+                        "<b>风险提示</b>：集中持仓1-2只，赛道错误时回撤大；"
+                        "GLM政策信号只在实盘可得，回测退化为动量骨架；"
+                        "建议作为观察级策略，实盘验证后再给真金白银。"),
     }
     er = env_risk.get(sid, "")
     v3_diff = ""
@@ -1121,8 +1159,11 @@ def _methodology_strat_block(sid):
                    '扩张期自动提高MOMENTUM/BETA弹性权重；收缩期提高VALUE/EARNINGS_YIELD/QUALITY防御权重。'
                    '所属行业近60日涨幅前30%获行业动量加分。'
                    '与v1核心差异：20日动量→RSTR 12-1月动量；PB排名→BTOP z分并加ETOP/ROE/QUALITY；新增残差波动帽。</div>')
+    enabled = _enabled_strategy_ids()
+    retired_badge = ('<span class="risk-badge" style="background:#e5e7eb;color:#6b7280">已下线/归档</span>'
+                     if (enabled is not None and sid not in enabled) else "")
     return (f'<div class="strat-block" id="{sid}">'
-            f'<details><summary>{meta["name"]}<span class="risk-badge">{meta["risk"]}</span></summary>'
+            f'<details><summary>{meta["name"]}<span class="risk-badge">{meta["risk"]}</span>{retired_badge}</summary>'
             f'<p class="tagline">{html.escape(meta["tagline"])}</p>'
             f'<h3>因子构成</h3>'
             f'<table><thead><tr><th>因子 / 规则</th><th>权重 / 说明</th></tr></thead>'
@@ -1224,8 +1265,12 @@ def generate_methodology(out_path=None):
            '<a href="methodology.html#risk-model">📈 因子风险模型</a>'
            '</nav>')
     toc = _methodology_toc()
+    enabled = _enabled_strategy_ids()
+    all_sids = sorted(STRAT_META.keys())
+    ordered_sids = ([s for s in all_sids if enabled is None or s in enabled]
+                    + [s for s in all_sids if enabled is not None and s not in enabled])
     strat_blocks = ""
-    for sid in sorted(STRAT_META.keys()):
+    for sid in ordered_sids:
         strat_blocks += _methodology_strat_block(sid)
     # v3 的策略(如果 registry 有但 STRAT_META 还没有，加占位)
     risk = _methodology_risk_model()
@@ -1425,8 +1470,8 @@ details[open].usage-instructions summary{margin-bottom:8px;border-bottom:1px sol
 _FOOTER = """<div class="foot">
 <details class="usage-instructions"><summary>📖 使用说明（点击展开）</summary>
 <b>怎么用</b>：每天 18:00 前后微信收到推送，次日开盘按『操作计划』的价格带手动跟单（每条已标注所属策略）；没收到心跳=系统故障，当天别跟单。<br>
-<b>观察期纪律</b>：第0-2周只看不投；满季度后若赛马正常，5万低风险参考配比 = 大盘网格30%+ETF轮动25%+红利低波25%+行业轮动10%+现金10%（S3/S4仅观察）。任何策略熔断→该部分转现金等复核。<br>
-<b>数据来源</b>：sina/baostock/东财 免费源，每交易日17:40自动更新；页面顶部横幅提示数据新鲜度。<br>
+<b>观察期纪律</b>：第0-2周只看不投；满季度后若赛马正常，5万低风险参考配比 = ETF轮动25%+红利低波25%+小市值多因子20%+行业轮动15%+现金15%（S7赛道旗舰仅观察，待实盘验证）。任何策略熔断→该部分转现金等复核。<br>
+<b>数据来源</b>：腾讯/新浪/东财 免费源为主，baostock/yfinance为辅，每交易日17:40自动更新；页面顶部横幅提示数据新鲜度。<br>
 <b>免责</b>：本页由 report_html.py 自动生成，零外部依赖可离线打开；模拟/历史表现不代表未来，不构成投资建议，请仅用可承受损失的资金。
 </details>
 </div>"""
