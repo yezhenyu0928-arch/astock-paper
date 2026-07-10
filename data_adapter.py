@@ -203,48 +203,75 @@ def _bs_raw(code, start, end):
     return raw, susp
 
 
-def _yf_raw(code, start, end):
-    """yfinance 兜底(全球可达)。A股格式: sh600519 → 600519.SS 或 000001.SZ。
-    列 trade_date/open/high/low/close/volume。volume 已是股。"""
-    try:
-        import datetime
-        import signal
+def _yf_raw_once(code, start, end, timeout_s=10):
+    """yfinance 单次尝试(内部用)。返回 (df, None) 或 (None, None)。"""
+    import datetime
+    import signal
 
-        class _TimeoutError(Exception):
-            pass
+    class _TimeoutError(Exception):
+        pass
 
-        def _handler(signum, frame):
-            raise _TimeoutError("timeout")
+    def _handler(signum, frame):
+        raise _TimeoutError("timeout")
 
-        signal.signal(signal.SIGALRM, _handler)
-        signal.alarm(10)  # 10 秒超时
-
+    # signal.alarm 仅主线程可用;非主线程(如未来改造)直接跳过硬超时,交由上层重试/超时预算兜底
+    can_alarm = hasattr(signal, "SIGALRM") and hasattr(signal, "alarm")
+    if can_alarm:
         try:
-            import yfinance as yf
-            bare = util.bare(code)
-            market = util.market(code)
-            suffix = ".SS" if market == "sh" else ".SZ"
-            ticker = yf.Ticker(bare + suffix)
-            _end = (datetime.datetime.strptime(end, "%Y-%m-%d") + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
-            df = ticker.history(start=start, end=_end)
+            signal.signal(signal.SIGALRM, _handler)
+            signal.alarm(timeout_s)
+        except ValueError:
+            can_alarm = False  # 非主线程调用 signal 会抛 ValueError,降级为不设硬超时
+
+    try:
+        import yfinance as yf
+        bare = util.bare(code)
+        market = util.market(code)
+        suffix = ".SS" if market == "sh" else ".SZ"
+        ticker = yf.Ticker(bare + suffix)
+        _end = (datetime.datetime.strptime(end, "%Y-%m-%d") + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        df = ticker.history(start=start, end=_end)
+        if can_alarm:
             signal.alarm(0)
-        except _TimeoutError:
+    except _TimeoutError:
+        log.warning("yfinance 超时 %s(>%ds)", code, timeout_s)
+        return None
+    finally:
+        if can_alarm:
             signal.alarm(0)
-            log.warning("yfinance 超时 %s(>10s),跳过", code)
-            return None, None
-        if df.empty:
-            return None, None
-        df = df.reset_index()
-        df["trade_date"] = df["Date"].dt.strftime("%Y-%m-%d") if "Date" in df else df.index.astype(str).str[:10]
-        for c in ("Open", "High", "Low", "Close", "Volume"):
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-        out = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
-        out["amount"] = out["volume"] * out["close"]  # yfinance 无成交额,用量×价估
-        out = out[(out["trade_date"] >= start) & (out["trade_date"] <= end)]
-        return out[["trade_date", "open", "high", "low", "close", "volume", "amount"]].copy(), None
-    except Exception as e:
-        log.warning("yfinance 取数失败 %s: %s", code, e)
-        return None, None
+    if df is None or df.empty:
+        return None
+    df = df.reset_index()
+    df["trade_date"] = df["Date"].dt.strftime("%Y-%m-%d") if "Date" in df else df.index.astype(str).str[:10]
+    for c in ("Open", "High", "Low", "Close", "Volume"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    out = df.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
+    out["amount"] = out["volume"] * out["close"]  # yfinance 无成交额,用量×价估
+    out = out[(out["trade_date"] >= start) & (out["trade_date"] <= end)]
+    # ⚠ Yahoo 偶发返回"当日有成交量但OHLC全NaN"(数据源侧延迟/异常),不能当正常收盘价入库,
+    # 否则质检只查"有无该行"而不查值是否有效,会误判通过、放行垃圾价格。剔除后若当日整行被删,
+    # 视同"当日无数据",交由上层质检 FAIL(比带假数据跟单更安全)。
+    out = out.dropna(subset=["close"])
+    return out[["trade_date", "open", "high", "low", "close", "volume", "amount"]].copy()
+
+
+def _yf_raw(code, start, end, tries=2):
+    """yfinance 兜底(全球可达,ETF/个股通用)。A股格式: sh600519 → 600519.SS 或 000001.SZ。
+    列 trade_date/open/high/low/close/volume。volume 已是股。
+    ⚠ 这是核心ETF(如sh510300)全部CN源失败时的最后一道防线,单次网络抖动不该导致整只标的当天无数据
+    → 重试 tries 次(默认2),每次独立10秒硬超时,失败原因(异常类型)记入日志便于排查。"""
+    last_err = None
+    for i in range(tries):
+        try:
+            df = _yf_raw_once(code, start, end)
+            if df is not None and not df.empty:
+                return df, None
+        except Exception as e:
+            last_err = e
+            log.warning("yfinance 取数失败 %s (%d/%d): %s: %s", code, i + 1, tries, type(e).__name__, e)
+    if last_err is None:
+        log.warning("yfinance 无数据 %s(该标的在 yfinance 上确实无历史,非网络问题)", code)
+    return None, None
 
 
 # ============ 腾讯历史行情(海外 Actions 可达,免费无 token,个股主力源) ============
