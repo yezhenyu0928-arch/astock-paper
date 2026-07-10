@@ -123,7 +123,7 @@ s4_smallcap@v2:
 s7_track@v1:
   class: strategies.s7_track.S7TrackFlagship
   benchmark: sh510300
-  frozen_date: 2026-07-09       # 赛道旗舰:GLM政策+行业动量+市场regime,集中1-2赛道(冷眼局中人式)
+  frozen_date: 2026-07-09       # 赛道旗舰:GLM政策+行业动量+市场regime,集中1-2赛道
   params:
     momentum_windows: [60, 120] # 3月/6月行业动量(趋势确认)
     weights: {momentum: 0.5, industry: 0.5}  # 产业/政策信号(GLM)与动量各半 → 信息驱动
