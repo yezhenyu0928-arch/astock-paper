@@ -151,6 +151,23 @@ def industry_momentum(date, lookback=60, conn=None):
             conn.close()
 
 
+_M2_DF_CACHE = []   # 进程级单元素缓存哨兵:[]=未拉取, [df_or_None]=已拉取
+
+
+def _cached_m2_df():
+    """M2 全历史(akshare)进程级缓存。原实现每次 macro_factor 调用都联网拉全历史 M2,
+    回测数百个调仓日重复联网是回测缓慢的主因(本机/CI 皆然);缓存后同一进程仅联网一次。
+    同一进程内 M2 视为不变(回测期统一用最新月,与原 s.iloc[0] 行为一致)。"""
+    if not _M2_DF_CACHE:
+        try:
+            import akshare as ak
+            _M2_DF_CACHE.append(ak.macro_china_supply_of_money())
+        except Exception as e:
+            log.debug("M2(akshare) 获取失败: %s", e)
+            _M2_DF_CACHE.append(None)
+    return _M2_DF_CACHE[0]
+
+
 def macro_factor(date, conn=None):
     """获取真实宏观因子数据。
 
@@ -174,8 +191,7 @@ def macro_factor(date, conn=None):
     try:
         # ── 1. M2 同比增速(akshare 替换 baostock:baostock.login 从海外 Actions 会挂死) ──
         try:
-            import akshare as ak
-            m2df = ak.macro_china_supply_of_money()
+            m2df = _cached_m2_df()               # 进程级缓存,回测不再每调仓日联网(见 _cached_m2_df)
             col = "货币和准货币（广义货币M2）同比增长"
             if m2df is not None and col in m2df.columns:
                 s = pd.to_numeric(m2df[col], errors="coerce").dropna()

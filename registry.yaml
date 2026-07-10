@@ -133,3 +133,17 @@ s7_track@v1:
   # 行业ETF池(同S6):券商/半导体/医药/消费/军工/新能源/酒/光伏/银行 + 国债(避险)
   universe: [sh512000, sh512480, sh512010, sz159928, sh512660, sh516160,
              sh512690, sh515790, sh512800, sh511010]
+
+s2_etf@v2:
+  class: strategies.s2_etf.S2EtfMomentumV2
+  benchmark: sh510300
+  frozen_date: 2026-07-10       # 卡N(V4):动量崩溃防护——MA200趋势过滤+20日波动目标降仓;与v1并行赛马
+  params:
+    momentum_windows: [20, 60]  # 同v1:双窗口收益排名取最强
+    hold_n: 1
+    rebalance: weekly
+    safe_asset: sh511010        # 绝对动量<0 或 趋势过滤不过 时切国债ETF
+    ma_filter: 200              # 趋势过滤:候选第一名须 close>MA200,否则切避险
+    vol_cap: 0.25               # 波动目标:所选ETF年化波动>25% 触发降仓
+    vol_scale: 0.6              # 超阈值仓位缩放系数(与macro调节相乘,下限0.30)
+  universe: [sh510300, sh510500, sh512890, sh518880, sh513100, sh511010]

@@ -1,0 +1,102 @@
+name: backtest
+# CI 全量库回测(OPTIMIZE_V4.md 四点五节:个股策略本机建不起库,回测统一在 CI 跑)。
+# 触发:①手动 workflow_dispatch(可指定 sids);②push 改动根目录 .backtest-trigger 戳文件时。
+#   —— 用独立戳文件而非 strategies/ 路径触发,避免每次改策略/回填 reports 都误触发或自触发死循环。
+# 流程:restore DB cache → 个股库不足则内联 backfill 重建 → 逐 sid 跑五关+蒙卡 → 报告 commit 回 main。
+on:
+  workflow_dispatch:
+    inputs:
+      sids:
+        description: "回测策略(逗号分隔;留空=下列默认新策略集)"
+        required: false
+        default: "s1_dividend@v3,s4_smallcap@v2,s8_checklist@v1,s9_stage2@v1,s2_etf@v2"
+  push:
+    paths:
+      - '.backtest-trigger'
+      - '.github/workflows/backtest.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backtest
+  cancel-in-progress: false      # 回测耗时长,不被后续 push 取消
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt
+
+      - name: restore DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: db/market.sqlite
+          key: db-${{ github.run_id }}
+          restore-keys: db-
+
+      - name: ensure full DB (个股库不足则重建)
+        run: |
+          covered=$(python - <<'PY'
+          import sqlite3, os
+          n = 0
+          if os.path.exists("db/market.sqlite"):
+              try:
+                  c = sqlite3.connect("db/market.sqlite")
+                  members = [r[0] for r in c.execute(
+                      "SELECT code FROM index_members WHERE index_code='sh000300'")]
+                  cnt = {code: k for code, k in c.execute(
+                      "SELECT code, COUNT(1) FROM daily_bar GROUP BY code")}
+                  n = sum(1 for m in members if cnt.get(m, 0) >= 500)
+                  c.close()
+              except Exception:
+                  n = 0
+          print(n)
+          PY
+          )
+          echo "沪深300成分中日线≥500行的: $covered 只"
+          if [ "$covered" -lt 250 ]; then
+            echo "个股库不足($covered<250),内联 backfill 重建(约48分钟)..."
+            python -c "import data,conf; data.update_all(conf.load_config(), conf.load_registry(), with_members=True)"
+            python backfill.py
+          else
+            echo "个股库充分,跳过 backfill"
+          fi
+
+      - name: save DB cache
+        uses: actions/cache/save@v4
+        with:
+          path: db/market.sqlite
+          key: db-${{ github.run_id }}
+
+      - name: run backtests + monte-carlo
+        run: |
+          SIDS="${{ github.event.inputs.sids }}"
+          if [ -z "$SIDS" ]; then
+            SIDS="s1_dividend@v3,s4_smallcap@v2,s8_checklist@v1,s9_stage2@v1,s2_etf@v2"
+          fi
+          echo "回测集: $SIDS"
+          IFS=',' read -ra ARR <<< "$SIDS"
+          for sid in "${ARR[@]}"; do
+            sid="$(echo "$sid" | xargs)"    # 去空格
+            echo "===== 五关回测 $sid ====="
+            python backtest.py report "$sid" || echo "::warning::report $sid 失败"
+            echo "===== 蒙特卡洛 validate $sid ====="
+            python validate.py "$sid" || echo "::warning::validate $sid 失败"
+          done
+
+      - name: commit reports
+        run: |
+          git config user.name "astock-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add reports/ || true
+          git commit -m "backtest reports $(date -u +%F) [ci]" || { echo "nothing to commit"; exit 0; }
+          for i in 1 2 3; do
+            git pull --rebase --autostash || true
+            if git push; then echo "pushed"; break; fi
+            echo "push 第 $i 次失败,重试..."; sleep 5
+          done

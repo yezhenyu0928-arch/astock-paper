@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """批量生成个股策略的五关验证报告 + 蒙特卡洛稳健性报告(reports/)。
-数据须先 backfill。用法:python gen_reports.py [sid1 sid2 ...](默认 s1/s3/s4/s5)。"""
+数据须先 backfill。用法:python gen_reports.py [sid1 sid2 ...](默认读取 registry.yaml 全量已注册sid,卡L.4)。"""
 import sys
 import io
 import time
@@ -17,7 +17,7 @@ import util
 import backtest
 import validate
 
-SIDS = sys.argv[1:] or ["s2_etf@v1", "s3_ma_trend@v1", "s1_dividend@v1", "s4_smallcap@v1", "s5_grid@v1"]
+SIDS = sys.argv[1:] or sorted(conf.load_registry().keys())   # 卡L.4:默认sid动态读registry全量,不再手写过期列表
 TODAY = util.today_str()
 
 for sid in SIDS:

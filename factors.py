@@ -82,7 +82,15 @@ def standardize(s: pd.Series, cap_weight: pd.Series = None) -> pd.Series:
 
 def orthogonalize(y: pd.Series, X: pd.DataFrame, w: pd.Series = None) -> pd.Series:
     """Gram-Schmidt 正交化: y 对 X 各列依次回归取残差。
-    w = √市值（WLS 权重）。返回残差后再标准化。"""
+    w = √市值（WLS 权重）。返回残差后再标准化。
+    健壮性(卡L.1修复): 先剔除 X 中全 NaN / 有效样本<5 的自变量列。否则任一全 NaN 自变量
+    (如短历史下 RAW 即失效的 MOMENTUM)会令 X.notna().all(axis=1) 全 False → valid 全空 →
+    当前因子被拖成 NaN,并沿 Gram-Schmidt 顺序级联拖垮其后所有因子(exposures.json 早期采样
+    7 列全 NaN 的根因)。剔除坏列后正交化只依赖有效基,长历史下无全 NaN 列故行为完全不变。"""
+    if X is not None and X.shape[1] > 0:
+        X = X[[c for c in X.columns if X[c].notna().sum() >= 5]]
+    if X is None or X.shape[1] == 0:
+        return y.copy()                          # 无有效自变量可正交化,保留原值(外层再标准化)
     valid = y.notna() & X.notna().all(axis=1)
     if valid.sum() < 5:
         return y * np.nan

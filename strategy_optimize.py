@@ -193,8 +193,8 @@ class WalkForwardOptimizer:
                 # 训练集回测
                 train_result = run_backtest(
                     self.strategy_id,
-                    start_date=window.train_start,
-                    end_date=window.train_end,
+                    start=window.train_start,
+                    end=window.train_end,
                     param_override=params
                 )
 
@@ -209,8 +209,8 @@ class WalkForwardOptimizer:
                 # 测试集回测
                 test_result = run_backtest(
                     self.strategy_id,
-                    start_date=window.test_start,
-                    end_date=window.test_end,
+                    start=window.test_start,
+                    end=window.test_end,
                     param_override=params
                 )
 

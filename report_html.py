@@ -215,6 +215,20 @@ def _backtest_summary(sid):
     return bt_line, verdict
 
 
+def _verdict_badge(verdict):
+    """验证徽章(卡P/V4):validate 蒙特卡洛判定 → 策略卡头徽章。
+    入池/观察取自 reports/<sid>_validate.md;无报告=未验证。用中性色(蓝/琥珀/灰),
+    不用盈红亏绿(徽章表状态非盈亏)。"""
+    v = (verdict or "").strip()
+    base = ("display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;"
+            "font-weight:700;margin-left:6px;vertical-align:middle;")
+    if "入池" in v:
+        return f"<span style='{base}background:#e0edff;color:#1d4ed8' title='蒙特卡洛双压5%分位达标'>✅入池</span>"
+    if "观察" in v:
+        return f"<span style='{base}background:#fef3c7;color:#b45309' title='蒙卡下界未达标,仅观察'>👀观察</span>"
+    return f"<span style='{base}background:#f1f1f4;color:#6b7280' title='尚无 validate 蒙卡报告'>⚠️未验证</span>"
+
+
 def _load_factor_exposures():
     """读取 state/factor_exposure.json。不存在或异常返回 None。"""
     path = conf.STATE_DIR / "factor_exposure.json"
@@ -972,7 +986,7 @@ def generate(out_path=None):
         bench_d2v, _ = _bench_series(conn, dates[0], dates[-1]) if (conn and dates) else ({}, [])
         chart = _chart_svg(dates, pcts, bench_d2v, up_color) if dates else "<div class='pos-empty'>曲线将于 2026-07-06 起累积</div>"
         cur_txt = _pct(ls["total"]) if ls["started"] else "今日起步"
-        bt_line, _ = _backtest_summary(sid)
+        bt_line, verdict = _backtest_summary(sid)
         bt_html = f"<div class='bt'>📈 回测(2022→今)：{html.escape(bt_line)}</div>" if bt_line else ""
         # 该策略今日操作
         op_items = []
@@ -997,6 +1011,7 @@ def generate(out_path=None):
         cards += (
             f"<div class='card'>"
             f"<div class='card-h'><b>{meta['name']}</b><span class='risk'>{meta['risk']}</span>"
+            f"{_verdict_badge(verdict)}"
             f"<span class='stat'>{st}</span></div>"
             f"{logic_block}"
             f"<details><summary>📈 实盘收益率曲线（07-06 起）当前 "

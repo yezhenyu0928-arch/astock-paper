@@ -38,7 +38,7 @@ jobs:
           path: db/market.sqlite
           key: market-db-${{ github.run_id }}
           restore-keys: |
-            market-db-
+            db-
 
       - name: Install dependencies
         run: |

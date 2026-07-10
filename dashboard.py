@@ -15,8 +15,23 @@ import backtest as bt
 
 st.set_page_config(page_title="A股模拟跟单", layout="centered", initial_sidebar_state="collapsed")
 
-STRAT_CN = {"s2_etf@v1": "ETF动量轮动", "s1_dividend@v1": "红利低波", "s3_ma_trend@v1": "双均线趋势",
-            "s4_smallcap@v1": "小市值多因子", "s5_grid@v1": "大盘网格"}
+def _load_strat_cn():
+    """策略中文名字典(卡L.4 双轨同步):sid 全量动态读自 registry.yaml(只增不改的注册档案,
+    新策略注册后自动出现,无需再改本文件);中文名优先取 report_html.STRAT_META(import 安全无
+    副作用,已核实),取不到则回退 sid 原文。"""
+    try:
+        reg = conf.load_registry()
+    except Exception:
+        reg = {}
+    try:
+        import report_html
+        meta = report_html.STRAT_META
+    except Exception:
+        meta = {}
+    return {sid: (meta.get(sid, {}).get("name") or sid) for sid in reg}
+
+
+STRAT_CN = _load_strat_cn()
 
 
 # ---------------- 数据加载 ----------------
