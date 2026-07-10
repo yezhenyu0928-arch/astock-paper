@@ -33,35 +33,35 @@
       "status": "healthy"
     },
     "akshare_sina": {
-      "total_calls": 848,
-      "total_success": 848,
+      "total_calls": 893,
+      "total_success": 893,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.75,
-      "status": "degraded"
+      "health_score": 0.946,
+      "status": "healthy"
     },
     "sina_etf": {
-      "total_calls": 8,
+      "total_calls": 9,
       "total_success": 0,
       "disabled": false,
       "disabled_until": 1783646862.6052418,
-      "health_score": 0.0,
+      "health_score": 0.15,
       "status": "unhealthy"
     },
     "baostock": {
-      "total_calls": 492,
-      "total_success": 479,
+      "total_calls": 507,
+      "total_success": 494,
       "disabled": false,
       "disabled_until": 1783646871.5594883,
-      "health_score": 0.0,
-      "status": "unhealthy"
+      "health_score": 0.75,
+      "status": "degraded"
     },
     "akshare_em": {
-      "total_calls": 90,
+      "total_calls": 91,
       "total_success": 67,
       "disabled": false,
       "disabled_until": 1783646866.6894424,
-      "health_score": 0.0,
+      "health_score": 0.15,
       "status": "unhealthy"
     },
     "baostock_hfq": {
@@ -81,29 +81,29 @@
       "status": "healthy"
     },
     "tencent": {
-      "total_calls": 49,
-      "total_success": 46,
+      "total_calls": 78,
+      "total_success": 75,
       "disabled": false,
       "disabled_until": 1783646908.6373591,
-      "health_score": 0.0,
-      "status": "unhealthy"
+      "health_score": 0.75,
+      "status": "degraded"
     },
     "tushare": {
-      "total_calls": 4,
+      "total_calls": 5,
       "total_success": 0,
       "disabled": false,
       "disabled_until": 1783646908.6380217,
-      "health_score": 0.0,
+      "health_score": 0.15,
       "status": "unhealthy"
     },
     "tencent_hfq": {
-      "total_calls": 47,
-      "total_success": 47,
+      "total_calls": 76,
+      "total_success": 76,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.875,
-      "status": "healthy"
+      "health_score": 0.75,
+      "status": "degraded"
     }
   },
-  "saved_at": 1783646643.0700905
+  "saved_at": 1783685906.526194
 }
