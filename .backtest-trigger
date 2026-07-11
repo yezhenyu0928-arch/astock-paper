@@ -1,3 +1,3 @@
 # CI 回测触发戳。修改本文件内容并 push,即触发 .github/workflows/backtest.yml 在 CI 全量库上
 # 跑指定策略的五关回测+蒙特卡洛,报告 commit 回 main。见 docs/OPTIMIZE_V4.md 四点五节。
-trigger: 2026-07-11T00:00 v4-rerun-after-standardize-fix (s1v3 zero-trade root cause fixed, re-verify s1v3/s4v2/s8/s9/s2v2)
+trigger: 2026-07-11T02:30 v4-diag-run (standardize fix did NOT change s1v3 CI result byte-for-byte; added gate-level counters in generate_orders, need reports/s1v3_diag.txt from real CI DB)
