@@ -11,7 +11,6 @@
 - 延续 v2 门槛: 股息率>=4% + 连续3年分红 + ROE>8%
 - 月末调仓, 等权持有
 """
-import atexit
 import logging
 import numpy as np
 import pandas as pd
@@ -25,26 +24,6 @@ from strategies import common
 
 log = logging.getLogger("s1")
 POOL_INDEX = "sh000300"
-
-# ── TEMP-DIAG(排查CI全程零交易根因,查完即删,见 docs/OPTIMIZE_V4.md 附录) ──
-_DIAG = {"calls": 0, "gate_no_pool": 0, "gate_valid_codes_too_few": 0,
-         "gate_exposures_empty": 0, "gate_dropna_empty": 0, "gate_smax_zero": 0,
-         "success": 0, "valid_codes_samples": [], "eff_samples": [],
-         "exposures_shape_samples": [], "smax_samples": []}
-
-
-def _diag_dump():
-    try:
-        import datetime
-        with open("reports/s1v3_diag.txt", "a", encoding="utf-8") as f:
-            f.write(f"\n=== dump @ {datetime.datetime.now().isoformat()} pid={__import__('os').getpid()} ===\n")
-            for k, v in _DIAG.items():
-                f.write(f"{k}: {v}\n")
-    except Exception as e:
-        pass
-
-
-atexit.register(_diag_dump)
 
 
 class S1DividendV3(BaseStrategy):
@@ -80,89 +59,27 @@ class S1DividendV3(BaseStrategy):
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
         w = common.target_weight(eff)
 
-        if _DIAG["calls"] == 0:   # 只在第一次调用时记录实际生效的参数值(排查参数加载问题)
-            try:
-                with open("reports/s1v3_diag.txt", "a", encoding="utf-8") as fp:
-                    # 新假设排查:stock_annual 表在当前CI库的真实覆盖度(不经roe_quality间接推断,直查表)
-                    try:
-                        total_rows = ctx.conn.execute("SELECT COUNT(1) FROM stock_annual").fetchone()[0]
-                        distinct_codes = ctx.conn.execute("SELECT COUNT(DISTINCT code) FROM stock_annual").fetchone()[0]
-                        date_range = ctx.conn.execute("SELECT MIN(pub_date), MAX(pub_date) FROM stock_annual WHERE pub_date IS NOT NULL AND pub_date<>''").fetchone()
-                        sh600000_rows = ctx.conn.execute("SELECT stat_year, roe, net_profit, pub_date FROM stock_annual WHERE code='sh600000' ORDER BY stat_year DESC").fetchall()
-                        stat_year_range = ctx.conn.execute("SELECT MIN(stat_year), MAX(stat_year) FROM stock_annual").fetchone()
-                        fp.write(f"\n=== stock_annual 表真实覆盖度诊断(直查,不经roe_quality) ===\n"
-                                 f"  总行数={total_rows}  不同code数={distinct_codes}\n"
-                                 f"  pub_date范围={date_range}  stat_year范围={stat_year_range}\n"
-                                 f"  sh600000(浦发银行)全部年报行={sh600000_rows}\n")
-                    except Exception as e:
-                        fp.write(f"\n=== stock_annual诊断查询异常: {e} ===\n")
-                    fp.write(f"\n--- params@first-call date={date} ---\n"
-                             f"  self.params raw = {dict(self.params)}\n"
-                             f"  min_dy={min_dy!r} div_years={div_years!r} "
-                             f"roe_years={roe_years!r} roe_min={roe_min!r}\n"
-                             f"  hold_n={hold_n!r} eff={eff!r} capital={account.init_capital!r}\n"
-                             f"  strategy_id={self.strategy_id!r}\n")
-            except Exception:
-                pass
-
         # ── 股票池 ──
-        _DIAG["calls"] += 1
         pool = ctx.members(POOL_INDEX, date)
         if not pool:
-            _DIAG["gate_no_pool"] += 1
             return []
 
         # ── 门槛过滤（复用 v2 逻辑） ──
-        detail = _DIAG["calls"] <= 2   # 只对前2次调用做逐股细分,避免输出过大
-        if detail:
-            reasons = {"not_tradable": 0, "no_fund_or_dy_low": 0, "div_years_fail": 0,
-                       "roe_fail": 0, "pass": 0, "fund_none": 0, "dy_missing_key": 0,
-                       "sample_fund": None, "sample_roe": None}
         valid_codes = []
         for code in pool:
             if not ctx.is_tradable(code, date):
-                if detail:
-                    reasons["not_tradable"] += 1
                 continue
             f = ctx.fundamental(code)
-            if detail and reasons["sample_fund"] is None and f:
-                reasons["sample_fund"] = (code, dict(f))
             if not f or not f.get("dividend_yield") or f["dividend_yield"] < min_dy:
-                if detail:
-                    if not f:
-                        reasons["fund_none"] += 1
-                    elif not f.get("dividend_yield"):
-                        reasons["dy_missing_key"] += 1
-                    else:
-                        reasons["no_fund_or_dy_low"] += 1
                 continue
             if ctx.dividend_years(code, div_years) < div_years:
-                if detail:
-                    reasons["div_years_fail"] += 1
                 continue
             ok, roe = F.roe_quality(code, date, years=roe_years, min_roe=roe_min, conn=ctx.conn)
-            if detail and reasons["sample_roe"] is None:
-                reasons["sample_roe"] = (code, ok, roe)
             if not ok:
-                if detail:
-                    reasons["roe_fail"] += 1
                 continue
-            if detail:
-                reasons["pass"] += 1
             valid_codes.append(code)
-        if detail:
-            try:
-                with open("reports/s1v3_diag.txt", "a", encoding="utf-8") as fp:
-                    fp.write(f"\n--- detail call#{_DIAG['calls']} date={date} pool_n={len(pool)} ---\n")
-                    for k, v in reasons.items():
-                        fp.write(f"  {k}: {v}\n")
-            except Exception:
-                pass
 
         if len(valid_codes) < eff:
-            _DIAG["gate_valid_codes_too_few"] += 1
-            if len(_DIAG["valid_codes_samples"]) < 20:
-                _DIAG["valid_codes_samples"].append((str(date), len(valid_codes), eff, len(pool)))
             return []
 
         # ── 宏观 regime 自适应 ──
@@ -178,18 +95,13 @@ class S1DividendV3(BaseStrategy):
 
         # ── 因子暴露（全池截面，pipeline: 去极值→标准化→正交化） ──
         all_exposures = factors.compute_factor_exposures(pool, date, conn=ctx.conn)
-        if len(_DIAG["exposures_shape_samples"]) < 20:
-            _DIAG["exposures_shape_samples"].append((str(date), all_exposures.shape,
-                                                       list(all_exposures.columns)[:3]))
         if all_exposures.empty:
             log.warning("s1_v3: 因子暴露为空, date=%s", date)
-            _DIAG["gate_exposures_empty"] += 1
             return []
 
         # 筛选到通过门槛的股票
         exposures = all_exposures.reindex(valid_codes)
         if exposures.dropna(how="all").empty:
-            _DIAG["gate_dropna_empty"] += 1
             return []
 
         # ── 宏观 regime 自适应权重调整 ──
@@ -243,14 +155,10 @@ class S1DividendV3(BaseStrategy):
 
         # 归一化到 -1~1
         smax = score.abs().max()
-        if len(_DIAG["smax_samples"]) < 20:
-            _DIAG["smax_samples"].append((str(date), None if smax is None else float(smax), len(valid_codes)))
         if smax is not None and smax > 1e-9:
             score = score / smax
         else:
-            _DIAG["gate_smax_zero"] += 1
             return []
-        _DIAG["success"] += 1
 
         # ── 行业约束贪心选取 ──
         industry_map = factors.get_industry(ctx.conn, valid_codes)
@@ -269,9 +177,7 @@ class S1DividendV3(BaseStrategy):
                 break
 
         if not target:
-            _DIAG["gate_target_empty"] = _DIAG.get("gate_target_empty", 0) + 1
             return []
-        _DIAG["target_nonempty"] = _DIAG.get("target_nonempty", 0) + 1
 
         # ── 风险控制：特质风险占比 > 30% 则降仓位 ──
         orig_eff = eff
