@@ -66,12 +66,24 @@ def winsorize_mad(s: pd.Series, n: float = N_MAD) -> pd.Series:
 def standardize(s: pd.Series, cap_weight: pd.Series = None) -> pd.Series:
     """Barra 式截面标准化：z = (x - μ_w) / σ_eq。
     其中 μ_w = 市值加权均值, σ_eq = 等权标准差。
-    若 cap_weight 未提供则退化为普通 z-score。"""
+    若 cap_weight 未提供则退化为普通 z-score。
+    健壮性修复: cap_weight 常来自 fund_df(索引=请求的全池代码), 而部分调用方(如
+    compute_momentum/compute_volatility/compute_liquidity)的 s 索引来自 ret_df.columns
+    (仅当日实际有行情数据的子集,池内新股/停牌股会被自然剔除)。两者索引不一致时
+    `cap_weight[valid]` 直接布尔索引会抛 "Unalignable boolean Series provided as
+    indexer",被上层 try/except 吞掉后整因子退化为全 NaN(级联拖垮 orthogonalize 之后的
+    因子)。先按 s.index reindex 对齐,缺失的权重不应让整条均值计算失败,回退为其余
+    有效权重的中位数(仍是"按市值加权"的近似,而非静默退化成等权)。"""
     s = s.copy()
     valid = s.notna()
     if valid.sum() < 3:
         return s * np.nan
-    mu = np.average(s[valid], weights=cap_weight[valid] if cap_weight is not None else None)
+    cw = None
+    if cap_weight is not None:
+        cw = cap_weight.reindex(s.index)
+        if cw.isna().any():
+            cw = cw.fillna(cw.median()) if cw.notna().any() else None
+    mu = np.average(s[valid], weights=cw[valid] if cw is not None else None)
     sigma = s[valid].std(ddof=0)             # 等权标准差（总体）
     if sigma < 1e-12:
         return s * 0.0

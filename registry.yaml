@@ -120,6 +120,28 @@ s4_smallcap@v2:
   universe: dynamic
   rebalance: monthly
 
+s8_checklist@v1:
+  class: strategies.s8_checklist.S8ValueChecklist
+  benchmark: sh510300
+  frozen_date: 2026-07-10       # V4卡M:UZI-Skill加权规则清单范式(R1-R9,ROE/PE/净利/股息/波动/动量/52周区间)
+  params:
+    hold_n: 10
+    keep_n: 15
+    max_per_industry: 2
+    vol_window: 60
+  universe: dynamic
+  rebalance: monthly
+
+s9_stage2@v1:
+  class: strategies.s9_stage2.S9Stage2Trend
+  benchmark: sh510300
+  frozen_date: 2026-07-10       # V4卡M:Minervini Stage2趋势模板,周频,结构性替代震荡市whipsaw的s3
+  params:
+    hold_n: 6
+    min_avg_amount: 50000000
+  universe: dynamic
+  rebalance: weekly
+
 s7_track@v1:
   class: strategies.s7_track.S7TrackFlagship
   benchmark: sh510300
