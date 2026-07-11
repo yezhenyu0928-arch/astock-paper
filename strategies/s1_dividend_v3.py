@@ -80,6 +80,18 @@ class S1DividendV3(BaseStrategy):
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
         w = common.target_weight(eff)
 
+        if _DIAG["calls"] == 0:   # 只在第一次调用时记录实际生效的参数值(排查参数加载问题)
+            try:
+                with open("reports/s1v3_diag.txt", "a", encoding="utf-8") as fp:
+                    fp.write(f"\n--- params@first-call date={date} ---\n"
+                             f"  self.params raw = {dict(self.params)}\n"
+                             f"  min_dy={min_dy!r} div_years={div_years!r} "
+                             f"roe_years={roe_years!r} roe_min={roe_min!r}\n"
+                             f"  hold_n={hold_n!r} eff={eff!r} capital={account.init_capital!r}\n"
+                             f"  strategy_id={self.strategy_id!r}\n")
+            except Exception:
+                pass
+
         # ── 股票池 ──
         _DIAG["calls"] += 1
         pool = ctx.members(POOL_INDEX, date)
@@ -88,19 +100,51 @@ class S1DividendV3(BaseStrategy):
             return []
 
         # ── 门槛过滤（复用 v2 逻辑） ──
+        detail = _DIAG["calls"] <= 2   # 只对前2次调用做逐股细分,避免输出过大
+        if detail:
+            reasons = {"not_tradable": 0, "no_fund_or_dy_low": 0, "div_years_fail": 0,
+                       "roe_fail": 0, "pass": 0, "fund_none": 0, "dy_missing_key": 0,
+                       "sample_fund": None, "sample_roe": None}
         valid_codes = []
         for code in pool:
             if not ctx.is_tradable(code, date):
+                if detail:
+                    reasons["not_tradable"] += 1
                 continue
             f = ctx.fundamental(code)
+            if detail and reasons["sample_fund"] is None and f:
+                reasons["sample_fund"] = (code, dict(f))
             if not f or not f.get("dividend_yield") or f["dividend_yield"] < min_dy:
+                if detail:
+                    if not f:
+                        reasons["fund_none"] += 1
+                    elif not f.get("dividend_yield"):
+                        reasons["dy_missing_key"] += 1
+                    else:
+                        reasons["no_fund_or_dy_low"] += 1
                 continue
             if ctx.dividend_years(code, div_years) < div_years:
+                if detail:
+                    reasons["div_years_fail"] += 1
                 continue
             ok, roe = F.roe_quality(code, date, years=roe_years, min_roe=roe_min, conn=ctx.conn)
+            if detail and reasons["sample_roe"] is None:
+                reasons["sample_roe"] = (code, ok, roe)
             if not ok:
+                if detail:
+                    reasons["roe_fail"] += 1
                 continue
+            if detail:
+                reasons["pass"] += 1
             valid_codes.append(code)
+        if detail:
+            try:
+                with open("reports/s1v3_diag.txt", "a", encoding="utf-8") as fp:
+                    fp.write(f"\n--- detail call#{_DIAG['calls']} date={date} pool_n={len(pool)} ---\n")
+                    for k, v in reasons.items():
+                        fp.write(f"  {k}: {v}\n")
+            except Exception:
+                pass
 
         if len(valid_codes) < eff:
             _DIAG["gate_valid_codes_too_few"] += 1
