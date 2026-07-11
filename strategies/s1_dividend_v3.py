@@ -83,6 +83,19 @@ class S1DividendV3(BaseStrategy):
         if _DIAG["calls"] == 0:   # 只在第一次调用时记录实际生效的参数值(排查参数加载问题)
             try:
                 with open("reports/s1v3_diag.txt", "a", encoding="utf-8") as fp:
+                    # 新假设排查:stock_annual 表在当前CI库的真实覆盖度(不经roe_quality间接推断,直查表)
+                    try:
+                        total_rows = ctx.conn.execute("SELECT COUNT(1) FROM stock_annual").fetchone()[0]
+                        distinct_codes = ctx.conn.execute("SELECT COUNT(DISTINCT code) FROM stock_annual").fetchone()[0]
+                        date_range = ctx.conn.execute("SELECT MIN(pub_date), MAX(pub_date) FROM stock_annual WHERE pub_date IS NOT NULL AND pub_date<>''").fetchone()
+                        sh600000_rows = ctx.conn.execute("SELECT stat_year, roe, net_profit, pub_date FROM stock_annual WHERE code='sh600000' ORDER BY stat_year DESC").fetchall()
+                        stat_year_range = ctx.conn.execute("SELECT MIN(stat_year), MAX(stat_year) FROM stock_annual").fetchone()
+                        fp.write(f"\n=== stock_annual 表真实覆盖度诊断(直查,不经roe_quality) ===\n"
+                                 f"  总行数={total_rows}  不同code数={distinct_codes}\n"
+                                 f"  pub_date范围={date_range}  stat_year范围={stat_year_range}\n"
+                                 f"  sh600000(浦发银行)全部年报行={sh600000_rows}\n")
+                    except Exception as e:
+                        fp.write(f"\n=== stock_annual诊断查询异常: {e} ===\n")
                     fp.write(f"\n--- params@first-call date={date} ---\n"
                              f"  self.params raw = {dict(self.params)}\n"
                              f"  min_dy={min_dy!r} div_years={div_years!r} "

@@ -9,7 +9,7 @@ on:
       sids:
         description: "回测策略(逗号分隔;留空=下列默认新策略集)"
         required: false
-        default: "s1_dividend@v3,s4_smallcap@v2,s8_checklist@v1,s9_stage2@v1,s2_etf@v2"
+        default: "s1_dividend@v3,s1_dividend@v2,s4_smallcap@v2,s8_checklist@v1,s9_stage2@v1,s2_etf@v2"
   push:
     paths:
       - '.backtest-trigger'
@@ -77,7 +77,7 @@ jobs:
         run: |
           SIDS="${{ github.event.inputs.sids }}"
           if [ -z "$SIDS" ]; then
-            SIDS="s1_dividend@v3,s4_smallcap@v2,s8_checklist@v1,s9_stage2@v1,s2_etf@v2"
+            SIDS="s1_dividend@v3,s1_dividend@v2,s4_smallcap@v2,s8_checklist@v1,s9_stage2@v1,s2_etf@v2"
           fi
           echo "回测集: $SIDS"
           IFS=',' read -ra ARR <<< "$SIDS"
