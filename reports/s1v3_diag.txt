@@ -1,0 +1,92 @@
+
+=== stock_annual 表真实覆盖度诊断(直查,不经roe_quality) ===
+  总行数=0  不同code数=0
+  pub_date范围=<sqlite3.Row object at 0x7fa62451bee0>  stat_year范围=<sqlite3.Row object at 0x7fa624519a80>
+  sh600000(浦发银行)全部年报行=[]
+
+--- params@first-call date=2022-01-28 ---
+  self.params raw = {'min_dividend_yield': 0.04, 'dividend_years': 3, 'roe_years': 3, 'roe_min': 0.08, 'factor_weights': {'VALUE': 0.2, 'QUALITY': 0.15, 'LOW_VOL': 0.15, 'SIZE': 0.1, 'BETA': 0.15, 'EARNINGS_YIELD': 0.15, 'LEVERAGE': 0.1}, 'hold_n': 10, 'max_per_industry': 2}
+  min_dy=0.04 div_years=3 roe_years=3 roe_min=0.08
+  hold_n=10 eff=6 capital=50000.0
+  strategy_id='s1_dividend@v3'
+
+--- detail call#1 date=2022-01-28 pool_n=300 ---
+  not_tradable: 61
+  no_fund_or_dy_low: 178
+  div_years_fail: 3
+  roe_fail: 35
+  pass: 0
+  fund_none: 0
+  dy_missing_key: 23
+  sample_fund: ('sh600000', {'pe': 4.478523, 'pb': 0.448954, 'market_cap': 248336649146.09738, 'dividend_yield': 0.057075})
+  sample_roe: ('sh600000', False, None)
+
+--- detail call#2 date=2022-02-28 pool_n=300 ---
+  not_tradable: 61
+  no_fund_or_dy_low: 179
+  div_years_fail: 3
+  roe_fail: 34
+  pass: 0
+  fund_none: 0
+  dy_missing_key: 23
+  sample_fund: ('sh600000', {'pe': 4.467873, 'pb': 0.447887, 'market_cap': 246193781681.3049, 'dividend_yield': 0.057211})
+  sample_roe: ('sh600000', False, None)
+
+=== dump @ 2026-07-11T05:21:20.278263 pid=2458 ===
+calls: 342
+gate_no_pool: 0
+gate_valid_codes_too_few: 342
+gate_exposures_empty: 0
+gate_dropna_empty: 0
+gate_smax_zero: 0
+success: 0
+valid_codes_samples: [('2022-01-28', 0, 6, 300), ('2022-02-28', 0, 6, 300), ('2022-03-31', 0, 6, 300), ('2022-04-29', 0, 6, 300), ('2022-05-31', 0, 6, 300), ('2022-06-30', 0, 6, 300), ('2022-07-29', 0, 6, 300), ('2022-08-31', 0, 6, 300), ('2022-09-30', 0, 6, 300), ('2022-10-31', 0, 6, 300), ('2022-11-30', 0, 6, 300), ('2022-12-30', 0, 6, 300), ('2023-01-31', 0, 6, 300), ('2023-02-28', 0, 6, 300), ('2023-03-31', 0, 6, 300), ('2023-04-28', 0, 6, 300), ('2023-05-31', 0, 6, 300), ('2023-06-30', 0, 6, 300), ('2023-07-31', 0, 6, 300), ('2023-08-31', 0, 6, 300)]
+eff_samples: []
+exposures_shape_samples: []
+smax_samples: []
+
+=== stock_annual 表真实覆盖度诊断(直查,不经roe_quality) ===
+  总行数=0  不同code数=0
+  pub_date范围=<sqlite3.Row object at 0x7f6928c18700>  stat_year范围=<sqlite3.Row object at 0x7f6928c18ca0>
+  sh600000(浦发银行)全部年报行=[]
+
+--- params@first-call date=2022-01-28 ---
+  self.params raw = {'min_dividend_yield': 0.04, 'dividend_years': 3, 'roe_years': 3, 'roe_min': 0.08, 'factor_weights': {'VALUE': 0.2, 'QUALITY': 0.15, 'LOW_VOL': 0.15, 'SIZE': 0.1, 'BETA': 0.15, 'EARNINGS_YIELD': 0.15, 'LEVERAGE': 0.1}, 'hold_n': 10, 'max_per_industry': 2}
+  min_dy=0.04 div_years=3 roe_years=3 roe_min=0.08
+  hold_n=10 eff=6 capital=50000.0
+  strategy_id='s1_dividend@v3'
+
+--- detail call#1 date=2022-01-28 pool_n=300 ---
+  not_tradable: 61
+  no_fund_or_dy_low: 178
+  div_years_fail: 3
+  roe_fail: 35
+  pass: 0
+  fund_none: 0
+  dy_missing_key: 23
+  sample_fund: ('sh600000', {'pe': 4.478523, 'pb': 0.448954, 'market_cap': 248336649146.09738, 'dividend_yield': 0.057075})
+  sample_roe: ('sh600000', False, None)
+
+--- detail call#2 date=2022-02-28 pool_n=300 ---
+  not_tradable: 61
+  no_fund_or_dy_low: 179
+  div_years_fail: 3
+  roe_fail: 34
+  pass: 0
+  fund_none: 0
+  dy_missing_key: 23
+  sample_fund: ('sh600000', {'pe': 4.467873, 'pb': 0.447887, 'market_cap': 246193781681.3049, 'dividend_yield': 0.057211})
+  sample_roe: ('sh600000', False, None)
+
+=== dump @ 2026-07-11T05:21:29.840931 pid=2471 ===
+calls: 108
+gate_no_pool: 0
+gate_valid_codes_too_few: 108
+gate_exposures_empty: 0
+gate_dropna_empty: 0
+gate_smax_zero: 0
+success: 0
+valid_codes_samples: [('2022-01-28', 0, 6, 300), ('2022-02-28', 0, 6, 300), ('2022-03-31', 0, 6, 300), ('2022-04-29', 0, 6, 300), ('2022-05-31', 0, 6, 300), ('2022-06-30', 0, 6, 300), ('2022-07-29', 0, 6, 300), ('2022-08-31', 0, 6, 300), ('2022-09-30', 0, 6, 300), ('2022-10-31', 0, 6, 300), ('2022-11-30', 0, 6, 300), ('2022-12-30', 0, 6, 300), ('2023-01-31', 0, 6, 300), ('2023-02-28', 0, 6, 300), ('2023-03-31', 0, 6, 300), ('2023-04-28', 0, 6, 300), ('2023-05-31', 0, 6, 300), ('2023-06-30', 0, 6, 300), ('2023-07-31', 0, 6, 300), ('2023-08-31', 0, 6, 300)]
+eff_samples: []
+exposures_shape_samples: []
+smax_samples: []
