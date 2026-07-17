@@ -38,6 +38,23 @@ jobs:
           GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: python run_daily.py
+      - name: bundle Chart.js locally (no CDN dependency)
+        # CI 有外网:把 Chart.js 抓到 docs/vendor/,使 Pages 自带该文件,不再依赖用户浏览器访问境外 CDN。
+        run: |
+          mkdir -p docs/vendor
+          for url in \
+            "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" \
+            "https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.7/chart.umd.min.js" \
+            "https://unpkg.com/chart.js@4.4.7/dist/chart.umd.min.js" ; do
+            if curl -fsSL --max-time 30 -o docs/vendor/chart.umd.min.js "$url"; then
+              echo "Chart.js fetched from $url"; break
+            fi
+          done
+          if [ -s docs/vendor/chart.umd.min.js ]; then
+            echo "vendor size: $(wc -c < docs/vendor/chart.umd.min.js) bytes"
+          else
+            echo "::warning::Chart.js 下载失败,看板图表将回退为空白(页面其余正常)"
+          fi
       - name: alert on failure
         if: failure()
         env:

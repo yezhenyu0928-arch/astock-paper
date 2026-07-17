@@ -111,6 +111,19 @@ def _render_fill_items(eng, ctx, reports):
     return items
 
 
+def _annual_coverage(conn):
+    """沪深300成分中 stock_annual 已覆盖比例(0..1),用于判断是否需要补年报ROE。"""
+    try:
+        total = conn.execute(
+            "SELECT count(*) FROM index_members WHERE index_code='sh000300'").fetchone()[0] or 1
+        have = conn.execute(
+            "SELECT count(DISTINCT code) FROM stock_annual WHERE code IN "
+            "(SELECT code FROM index_members WHERE index_code='sh000300')").fetchone()[0] or 0
+        return have / total
+    except Exception:
+        return 0.0
+
+
 def run(date=None, only=None):
     cfg = conf.load_config()
     reg = conf.load_registry()
@@ -159,8 +172,12 @@ def run(date=None, only=None):
                 try:
                     import fundamental as F
                     F.update_stock_fundamental(sorted(stock_codes), conn=conn)
-                    if cfg.get("strategies", {}).get("s1_dividend@v2") and util.now_cn().month <= 5:
-                        F.update_annual_roe(sorted(stock_codes), conn=conn)
+                    # 年报ROE补齐:覆盖不足80%时随时补(修复"仅month<=5才跑导致7月后永不补、候选池空"),
+                    # 或在年报季(1-6月)例行刷新;其余时间跳过以节省API额度
+                    if cfg.get("strategies", {}).get("s1_dividend@v2"):
+                        cov = _annual_coverage(conn)
+                        if cov < 0.8 or (1 <= util.now_cn().month <= 6):
+                            F.update_annual_roe(sorted(stock_codes), conn=conn)
                 except Exception as e:
                     fund_ok = False
                     log.warning("基本面更新失败(不阻断):%s", e)

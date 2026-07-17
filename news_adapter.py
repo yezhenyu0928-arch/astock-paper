@@ -13,16 +13,38 @@ log = logging.getLogger("news_adapter")
 
 NEWS_DDL = """
 CREATE TABLE IF NOT EXISTS news_raw (
-  id TEXT PRIMARY KEY, ts TEXT, source TEXT, code TEXT, title TEXT, content TEXT);
+  id TEXT PRIMARY KEY, ts TEXT, source TEXT, code TEXT, title TEXT, content TEXT,
+  source_tier TEXT, scope TEXT);
 CREATE INDEX IF NOT EXISTS idx_news_ts ON news_raw(ts);
 CREATE TABLE IF NOT EXISTS news_signal (
   signal_date TEXT, scope TEXT, score REAL, level TEXT, evidence TEXT,
   PRIMARY KEY(signal_date, scope));
 """
 
+# 信源分级(用于市场分加权,参考新联财通四维/信源可信度矩阵/经济体温计):
+#   S0 最高权威(国务院/央行/证监会/新华社/央视通稿) > S1 交易所/部委 > S2 主流财经
+#   > S3 市场快讯 > S4 自媒体。global=国际快讯(对A股影响需折扣,避免误冻全市场)
+SOURCE_META = {
+    "em_global": ("S3", "global"),    # 东财全球快讯:国际为主,折扣计入
+    "sina_roll": ("S3", "domestic"),  # 新浪滚动:国内财经快讯
+    "news_cctv": ("S0", "domestic"), # 央视新闻联播:官方通稿级
+}
+DEFAULT_TIER, DEFAULT_SCOPE = "S3", "domestic"
+
 
 def ensure():
     ensure_table(NEWS_DDL)
+    # 迁移:旧库补列(对已含该列的库 ALTER 会抛错,静默忽略)
+    conn = get_conn()
+    try:
+        for col in ("source_tier", "scope"):
+            try:
+                conn.execute(f"ALTER TABLE news_raw ADD COLUMN {col} TEXT")
+            except Exception:
+                pass
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _hash(source, ts, title):
@@ -168,11 +190,14 @@ def store_news(df, conn=None) -> int:
     n = 0
     for _, r in df.iterrows():
         src, ts, title = str(r.get("source", "")), str(r.get("ts", "")), str(r.get("title", ""))
+        tier, scope = SOURCE_META.get(src, (DEFAULT_TIER, DEFAULT_SCOPE))
         _id = _hash(src, ts, title)
         try:
             cur = conn.execute(
-                "INSERT OR IGNORE INTO news_raw (id,ts,source,code,title,content) VALUES (?,?,?,?,?,?)",
-                (_id, ts, src, str(r.get("code", "") or ""), title, str(r.get("content", "") or "")))
+                "INSERT OR IGNORE INTO news_raw (id,ts,source,code,title,content,source_tier,scope) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (_id, ts, src, str(r.get("code", "") or ""), title, str(r.get("content", "") or ""),
+                 tier, scope))
             n += cur.rowcount
         except Exception as e:
             log.warning("news 落库失败: %s", e)

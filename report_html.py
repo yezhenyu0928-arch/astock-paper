@@ -885,7 +885,33 @@ _ETF_NAMES = {
 
 
 # ---------------- 主生成 ----------------
+def _ensure_vendor_chart():
+    """尽量把 Chart.js 落地到 docs/vendor/(摆脱境外 CDN)。缺失或下载失败均静默,页面其余正常。"""
+    try:
+        import urllib.request
+        vend = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs", "vendor")
+        os.makedirs(vend, exist_ok=True)
+        dst = os.path.join(vend, "chart.umd.min.js")
+        if os.path.exists(dst) and os.path.getsize(dst) > 10000:
+            return
+        for url in ("https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js",
+                   "https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.7/chart.umd.min.js",
+                   "https://unpkg.com/chart.js@4.4.7/dist/chart.umd.min.js"):
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    data = r.read()
+                open(dst, "wb").write(data)
+                if os.path.getsize(dst) > 10000:
+                    return
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
 def generate(out_path=None):
+    _ensure_vendor_chart()
     accts = _load_accounts()
     log_rows = _load_trade_log()
     today = util.today_str()
@@ -1044,7 +1070,7 @@ def generate(out_path=None):
     html_doc = f"<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'>" \
                f"<meta name='viewport' content='width=device-width, initial-scale=1'>" \
                f"<title>A股模拟跟单看板</title>" \
-               f"<script src='https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js'>" \
+               f"<script src='./vendor/chart.umd.min.js'>" \
                f"</script>{_STYLE}</head><body><div class='wrap'>{body}</div>{chart_js}{_LIVE_JS}</body></html>"
 
     out_path = out_path or (conf.ROOT / "docs" / "index.html")

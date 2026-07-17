@@ -14,6 +14,7 @@
 """
 import json
 import logging
+import math
 
 import conf
 import util
@@ -23,12 +24,32 @@ from models import Order
 
 log = logging.getLogger("news_engine")
 
-# 市场级词表(权重)
-MARKET_NEG = {"印花税上调": -2, "注册制暂停": -2, "地缘冲突升级": -2, "制裁": -2, "开战": -2,
-              "熔断": -2, "千股跌停": -2, "流动性收紧": -1, "超预期加息": -1, "加息": -1,
-              "汇率破位": -1, "大幅贬值": -1, "违约潮": -1}
-MARKET_POS = {"降准": 1, "降息": 1, "超预期宽松": 2, "平准基金": 2, "汇金增持": 2,
-              "重大利好": 1, "政策落地": 1}
+# 信源权重(截断到[0.4,1.5]);S0最高权威(国务院/央行/证监会/新华社/央视通稿)>S1交易所/部委>S2主流财经>S3市场快讯>S4自媒体
+TIER_WEIGHT = {"S0": 1.5, "S1": 1.2, "S2": 1.0, "S3": 0.7, "S4": 0.4}
+GLOBAL_DISCOUNT = 0.3   # 国际快讯(东财全球)对A股影响的折扣系数
+# 市场级事件词典:A股专属,关键词→基础分(-2..+2)。国际事件由 scope=global 单列折扣,不在此直接给高分
+MARKET_EVENT = {
+    # 货币宽松
+    "降准": 2, "降息": 2, "超预期宽松": 2, "全面降准": 2, "定向降准": 1,
+    "降准预期": 1, "降息预期": 1, "流动性呵护": 1, "窗口指导": 1,
+    "加息": -2, "提准": -2, "回收流动性": -2, "超预期加息": -2,
+    # 资本改革·利好
+    "印花税下调": 2, "下调印花税": 2, "印花税减半": 2, "汇金增持": 2, "国家队增持": 2, "平准基金": 2,
+    "IPO放缓": 1, "再融资收紧": 1, "减持新规": 1, "减持从严": 1,
+    # 资本改革·利空
+    "印花税上调": -2, "上调印花税": -2, "注册制暂停": -2, "IPO提速": -1, "再融资放开": -1, "大股东减持": -1, "减持松动": -1,
+    # 财政/产业
+    "特别国债": 2, "财政发力": 1, "积极财政": 1, "产业扶持": 1, "半导体扶持": 1,
+    "新能源扶持": 1, "AI扶持": 1, "消费刺激": 1, "加征关税": -2, "出口管制": -2,
+    "产业打压": -1, "关税": -1,
+    # 监管执法(短期情绪,长期中性)
+    "退市常态化": -1, "严查违规": -1, "财务造假": -1,
+    # 外部冲击(国际源会被×0.3;仅"直接涉华"才全额计,避免海外加息/冲突误冻全市场)
+    "美联储加息": -2, "地缘冲突": -2, "冲突升级": -2, "战争": -2, "开战": -2, "制裁": -2,
+    "熔断": -2, "千股跌停": -2, "流动性收紧": -1, "汇率破位": -1, "大幅贬值": -1, "违约潮": -1,
+}
+# 国际源中"直接冲击A股"的判定词(命中则国际事件也全额计分)
+CHINA_HINT = ("中国", "A股", "沪深", "央行", "证监会", "国务院", "对华", "中概", "港股", "中美")
 # 个股级词表
 STOCK_BLACKSWAN = ["立案调查", "被立案", "留置", "失联", "财务造假", "无法表示意见",
                    "债务违约", "资金占用", "退市风险警示", "实控人被"]
@@ -44,38 +65,71 @@ def _match(text, words):
 
 
 def scan_market(date, conn=None):
-    """扫当日快讯标题,L0 打分。返回 (score, evidence)。"""
+    """扫当日快讯,信源分级×事件词典×聚合,输出市场分 -2..+2(落 news_signal)。
+    v2:权威源(S0/S1)主导方向,低权源(S3/S4)贡献封顶±0.5,国际源(scope=global)打0.3折且仅涉华才计;
+    不再与原 L1 取 min(只降不升),改为大幅分歧时取均值(双向校准)。"""
     own = conn is None
     if own:
         conn = get_conn()
+    na.ensure()   # 确保 news_raw 含 source_tier/scope 列(旧库迁移)
     date = util.to_date_str(date)
-    rows = conn.execute("SELECT title FROM news_raw WHERE substr(ts,1,10)=? OR ts LIKE ?",
-                        (date, date + "%")).fetchall()
-    titles = [r[0] or "" for r in rows]
-    score, ev = 0, []
-    for t in titles:
-        for w, wt in {**MARKET_NEG, **MARKET_POS}.items():
-            if w in t:
-                score += wt
-                ev.append(f"{w}({wt:+d}):{t[:30]}")
-    score = max(-2, min(2, score))
-    level = "L0"
-    l0_score = score
-    # L1 大模型档:正式档与 L0 取更保守者;影子档(卡F)只记录不干预
+    rows = conn.execute(
+        "SELECT title, source, source_tier, scope FROM news_raw WHERE substr(ts,1,10)=? OR ts LIKE ?",
+        (date, date + "%")).fetchall()
     cfg = conf.load_config()
     nl = cfg.get("news_layer") or {}
+    l0_score, ev = _score_events(rows)
+    level = "L0"
+    titles = [r[0] or "" for r in rows]
     l1 = _l1_market(date, cfg, titles)
+    score = l0_score
     if l1 is not None:
         l1s = l1.get("market_score", 0)
         if nl.get("llm_shadow") and not nl.get("llm"):
             _log_shadow(date, l0_score, l1s, l1.get("top_risks", []))   # 影子:signal 仍用 L0
-        elif l1s < score:
-            ev.append(f"[L1更保守 {l1s}] " + "；".join(l1.get("top_risks", [])[:2]))
-            score = l1s
+        elif abs(l1s - l0_score) >= 2:   # 大幅分歧 → 取均值(双向校准,不再只降不升)
+            blended = int(round((l0_score + l1s) / 2))
+            ev.append(f"[L0={l0_score}与L1={l1s}分歧大,取均值{blended}] " + "；".join(l1.get("top_risks", [])[:2]))
+            score = blended
             level = "L1"
+        else:
+            ev.append(f"[L1={l1s}与L0一致] " + "；".join(l1.get("top_risks", [])[:2]))
     na.store_signal(date, "market", score, level, ev[:20], conn=conn)
     if own:
         conn.close()
+    return score, ev
+
+
+def _score_events(rows):
+    """对新闻行(含 source/source_tier/scope)做信源加权聚合。返回 (score, evidence)。
+    规则:一条标题只取最严重(最负)的一条事件,避免"加息"与"美联储加息"双重计分;
+    国际源(scope=global)非涉华事件打0.3折并强抑制到±0.2;低权源(快讯/自媒体)封顶±0.5。"""
+    score_raw, count, ev = 0.0, 0, []
+    for title, source, tier, scope in rows:
+        t = title or ""
+        tier = tier or na.SOURCE_META.get(source, (na.DEFAULT_TIER, na.DEFAULT_SCOPE))[0]
+        scope = scope or na.SOURCE_META.get(source, (na.DEFAULT_TIER, na.DEFAULT_SCOPE))[1]
+        matched = [(w, b) for w, b in MARKET_EVENT.items() if w in t]
+        if not matched:
+            continue
+        word, base = min(matched, key=lambda x: x[1])   # 一条标题取最严重事件,避免重叠词双重计分
+        w_tier = TIER_WEIGHT.get(tier, 0.7)
+        china = any(h in t for h in CHINA_HINT)
+        contrib = base * w_tier
+        tag = ""
+        if scope == "global" and not china:              # 国际源:折扣 + 强抑制(不再误冻全市场)
+            contrib = max(-0.2, min(0.2, contrib * GLOBAL_DISCOUNT))
+            tag = "[全球×0.3,封顶±0.2]"
+        elif w_tier <= 0.7:                             # 低权源(快讯/自媒体)贡献封顶±0.5
+            contrib = max(-0.5, min(0.5, contrib))
+            tag = "[低权封顶±0.5]"
+        score_raw += contrib
+        count += 1
+        ev.append(f"{word}({base:+d},权{w_tier}){tag}:{t[:24]}")
+    if count == 0:
+        return 0, ev
+    avg = score_raw / count
+    score = int(round(max(-2.0, min(2.0, math.tanh(avg) * 2))))
     return score, ev
 
 

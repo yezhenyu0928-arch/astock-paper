@@ -100,6 +100,14 @@ def post_check(date, ctx, orders, states, cfg, market_frozen=False):
                                          signal_date=date))
     orders = list(orders) + stop_orders
 
+    # 检测"轮动置换":同策略存在对当前持仓的卖出 → 视为换仓而非新开,大盘冻结时予以保留
+    rotate_sids = set()
+    for o in orders:
+        if o.side == "sell":
+            acct = accounts.get(o.strategy_id)
+            if acct and o.code in acct.positions:
+                rotate_sids.add(o.strategy_id)
+
     mult = _exposure_mult(date, ctx, cfg)
     kept = []
     for o in orders:
@@ -110,19 +118,23 @@ def post_check(date, ctx, orders, states, cfg, market_frozen=False):
         if acct.frozen and not (o.side == "sell" and o.weight == 0):
             continue
         if o.side == "buy":
-            # 规则1:大盘冻结删所有 buy
-            if market_frozen:
+            # 规则1:大盘冻结删所有"新开仓"buy;但保留同策略的"轮动置换"(已卖出持仓→换入新标的)
+            if market_frozen and o.strategy_id not in rotate_sids:
+                log.info("大盘冻结删新开单 %s %s", o.strategy_id, o.code)
                 continue
             # 规则4:个股流动性(ETF 豁免)
             if not _is_etf(o.code):
                 if ctx.avg_amount(o.code, 20) < min_amt:
                     log.info("流动性不足删单 %s %s", o.strategy_id, o.code)
                     continue
-            # 规则6:消息面敞口(只降险)
+            # 规则6:消息面敞口(只降险,且记录被削/删明细,使"为何无交易"可追溯)
             if mult < 1.0:
-                o.weight = round(o.weight * mult, 6)
+                new_w = round(o.weight * mult, 6)
+                log.info("消息面降敞口 %s %s: 权重 %s ×%s → %s", o.strategy_id, o.code, o.weight, mult, new_w)
+                o.weight = new_w
                 o.reason = (o.reason or "") + f"[消息面降敞口×{mult}]"
                 if o.weight <= 0:
+                    log.warning("消息面敞口×%s 抹平买单(已删) %s %s", mult, o.strategy_id, o.code)
                     continue
             # 规则3:单票上限(成交后占比预估>max_pos → 削)。仅个股;ETF 是分散工具,豁免
             if not _is_etf(o.code):

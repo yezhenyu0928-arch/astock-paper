@@ -127,7 +127,9 @@ def _scan(today, cfg, reg):
         na.store_news(na.fetch_flash(), conn=conn)
         score, ev = ne.scan_market(today, conn=conn)
         if score <= -2:
-            t, c = notify.build_alert(f"🔴盘中市场级重大负面(分{score}):{';'.join(ev[:2])},今日主流程将冻结开仓")
+            t, c = notify.build_alert(
+                f"🟡盘中检测到潜在重大利空信号(分{score}):{';'.join(ev[:2])}。"
+                f"仅供参考,是否冻结以日终主流程 price-based 风控(沪深300单日/20日跌幅)为准,本消息不断言冻结。")
             notify.push(t, c, "alert", cfg)
         eng = Engine(cfg, reg, conn=conn)
         accts = {s: eng.load_account(s) for s in eng.enabled_strategies()}
