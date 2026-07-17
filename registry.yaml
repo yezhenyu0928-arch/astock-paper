@@ -253,3 +253,31 @@ s12_reversal@v1:
     derisk_hold_ratio: 0.5
   universe: dynamic
   rebalance: monthly
+
+s3_trend_timing@v1:
+  class: strategies.s3_trend_timing.S3TrendTiming
+  benchmark: sh510300
+  frozen_date: 2026-07-17       # 新增:趋势择时经理(多周期均线多头+动量选股 + 大盘择时见顶清仓/见底满仓 + 行业轮动 + 破MA50止损)
+  params:
+    hold_n: 12
+    min_avg_amount: 80000000
+    min_market_cap: 8000000000
+    max_per_sector: 2
+  universe: dynamic
+  rebalance: weekly
+
+s9_growth_timing@v1:
+  class: strategies.s9_growth_timing.S9GrowthTiming
+  benchmark: sh510300
+  frozen_date: 2026-07-17       # 新增:成长择时经理(ROE质量+盈利同比稳健增长+估值选股 + 大盘择时 + 行业轮动 + 破MA60止损)
+  params:
+    hold_n: 10
+    min_avg_amount: 80000000
+    min_market_cap: 8000000000
+    max_per_sector: 2
+    roe_min: 0.08
+    growth_min: 0.05
+    growth_max: 0.80
+    pe_cap: 60
+  universe: dynamic
+  rebalance: weekly
