@@ -53,6 +53,20 @@ s3_ma_trend@v1:
   universe: index:sh000300     # 沪深300成分(历史快照)
   rebalance: daily
 
+s3_ma_trend@v2:
+  class: strategies.s3_ma_trend_v2.S3MaTrendV2
+  benchmark: sh510300
+  frozen_date: 2026-07-16       # 优化版:纪律化趋势跟踪——多周期均线多头排列+市场regime防御,解决v1震荡市whipsaw
+  params:
+    fast: 20                   # 20日均线
+    slow: 60                   # 60日均线
+    long_ma: 120               # 120日均线(长期趋势门禁)
+    vol_mult: 1.5              # 突破日成交量 > 20日均量×1.5
+    min_strength: 0.02         # 非强势regime下,站上MA60幅度需≥2%才入场
+    max_holdings: 10           # 单票权重=1/10
+  universe: index:sh000300     # 沪深300成分(大盘流动性好,趋势信号干净)
+  rebalance: daily
+
 s4_smallcap@v1:
   class: strategies.s4_smallcap.S4SmallCapFactor
   benchmark: sh510300          # 沪深300ETF(数据可行:原中证2000未入库;池已用沪深300)
