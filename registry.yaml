@@ -196,3 +196,60 @@ s2_etf@v2:
     vol_cap: 0.25               # 波动目标:所选ETF年化波动>25% 触发降仓
     vol_scale: 0.6              # 超阈值仓位缩放系数(与macro调节相乘,下限0.30)
   universe: [sh510300, sh510500, sh512890, sh518880, sh513100, sh511010]
+
+s10_lowvol@v1:
+  class: strategies.s10_lowvol.S10LowVol
+  benchmark: sh510300
+  frozen_date: 2026-07-17       # 新增:低波防御经理(替换失败的纯趋势/价格动量方向)
+  params:
+    hold_n: 20                   # 低波需广度分散
+    min_avg_amount: 50000000    # 流动性门槛(避免微盘极端波动)
+    min_market_cap: 5000000000  # 5亿,排除微盘
+    max_market_cap: 1000000000000
+    vol_window: 250             # 年化波动率窗口
+    roe_min: 0.05               # 质量门槛(排除亏损/僵尸低波陷阱)
+    max_pe: 40.0
+    max_pb: 6.0
+    max_per_industry: 3         # 行业中性
+    derisk_hold_ratio: 0.5      # 风险市持仓减半
+  universe: dynamic
+  rebalance: monthly
+
+s11_quality_growth@v1:
+  class: strategies.s11_quality_growth.S11QualityGrowth
+  benchmark: sh510300
+  frozen_date: 2026-07-17       # 新增:质量稳健成长经理(基本面驱动,替换 s9 失败的价格动量 Stage2)
+  params:
+    hold_n: 15
+    min_avg_amount: 50000000
+    min_market_cap: 3000000000
+    roe_min: 0.10               # ROE 门槛
+    roe_std_max: 0.15           # ROE 极差上限(稳定性)
+    yoy_min: 0.05               # 净利同比下限
+    yoy_max: 0.60               # 上限,排除一次性暴增
+    growth_std_max: 0.50        # 增长波动上限
+    max_pe: 45.0
+    max_pb: 8.0
+    max_per_industry: 3
+    derisk_hold_ratio: 0.6
+  universe: dynamic
+  rebalance: monthly
+
+s12_reversal@v1:
+  class: strategies.s12_reversal.S12Reversal
+  benchmark: sh510300
+  frozen_date: 2026-07-17       # 新增:反转均值回归经理(逆向交易,替换 s3 失败的价格趋势)
+  params:
+    hold_n: 18
+    min_avg_amount: 40000000
+    min_market_cap: 3000000000
+    lookback: 60                # 反转观察窗口(日)
+    drop_min: -0.35             # 超跌下限(跌太多=陷阱)
+    drop_max: -0.04             # 超跌上限(没跌=不算超跌)
+    roe_min: 0.05               # 基本面安全网
+    max_pe: 50.0
+    max_pb: 8.0
+    max_per_industry: 3
+    derisk_hold_ratio: 0.5
+  universe: dynamic
+  rebalance: monthly
