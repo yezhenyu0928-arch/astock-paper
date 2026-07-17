@@ -152,6 +152,14 @@ class S9Stage2Trend(BaseStrategy):
         if not ctx.is_last_trade_day_of_week(date):
             return []
 
+        # 宏观面防御:先计算市场regime,风险市清仓观望、不逆势开仓
+        try:
+            import macro as _macro
+            _reg = _macro.compute_market_regime(date, conn=ctx.conn)
+            _regime = _reg.get("regime", "震荡")
+        except Exception:
+            _regime = "震荡"
+
         hold_n = self.params.get("hold_n", 6)
         vol_floor = self.params.get("min_avg_amount", 50_000_000)
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
@@ -161,6 +169,11 @@ class S9Stage2Trend(BaseStrategy):
         if not pool:
             return []
         held = set(account.positions.keys())
+        # 风险regime:清仓全部持仓并观望(顺势不逆势)
+        if _regime == "风险":
+            return [Order(self.strategy_id, code, "sell", 0.0,
+                          f"Stage2趋势:{ctx.name(code)}市场regime=风险,清仓观望", date)
+                    for code in held]
         codes = list(dict.fromkeys(list(pool) + list(held)))
         tradable = set(c for c in pool if ctx.is_tradable(c, date))
         if not tradable and not held:

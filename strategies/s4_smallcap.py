@@ -27,15 +27,36 @@ class S4SmallCapFactor(BaseStrategy):
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
         w = common.target_weight(eff)
 
-        cand = []   # (code, mcap, pb, ret20, fund_score, news_score)
-        for code in ctx.members(POOL_INDEX, date):
+        # 真小盘宇宙:全A股按市值升序取最小一批(不再局限沪深300)。
+        # 用 daily_bar 全量代码 + fundamental 市值截面,经可交易/上市满1年/流动性过滤。
+        min_avg = self.params.get("min_avg_amount", 30_000_000)
+        pool_size = self.params.get("pool_size", 800)
+        try:
+            all_codes = [r[0] for r in ctx.conn.execute(
+                "SELECT DISTINCT code FROM daily_bar WHERE code LIKE 'sh%' OR code LIKE 'sz%'").fetchall()]
+        except Exception:
+            all_codes = ctx.members(POOL_INDEX, date)
+        univ = []
+        for code in all_codes:
             if not ctx.is_tradable(code, date):
+                continue
+            f = ctx.fundamental(code)
+            if not f or not f.get("market_cap") or f["market_cap"] <= 0:
                 continue
             c = ctx.close(code, 260)
             if len(c) < 250:                     # 上市满1年近似
                 continue
+            if ctx.avg_amount(code, 20) < min_avg:   # 流动性过滤,剔除仙股/壳股
+                continue
+            univ.append((code, f["market_cap"]))
+        univ.sort(key=lambda x: x[1])            # 市值升序
+        small = [u[0] for u in univ[:pool_size]] # 取最小 pool_size 只 = 真小盘
+
+        cand = []   # (code, mcap, pb, ret20, fund_score, news_score, turnover)
+        for code in small:
+            c = ctx.close(code, 260)
             f = ctx.fundamental(code)
-            if not f or not f.get("market_cap") or not f.get("pb") or f["pb"] <= 0:
+            if not f or not f.get("pb") or f["pb"] <= 0:
                 continue
             ret20 = c[-1] / c[-21] - 1 if len(c) >= 21 else 0
             fund_score = common.get_fundamental_score(ctx, code, date)
@@ -45,23 +66,29 @@ class S4SmallCapFactor(BaseStrategy):
                 news_score = ne.get_stock_sentiment_score(date, code, conn=ctx.conn)
             except Exception:
                 pass
-            cand.append((code, f["market_cap"], f["pb"], ret20, fund_score, news_score))
+            # 资金面代理:20日成交额 / 总市值 = 换手率口径,越高代表资金关注度越强
+            turn = (ctx.avg_amount(code, 20) / f["market_cap"]) if f["market_cap"] else 0.0
+            cand.append((code, f["market_cap"], f["pb"], ret20, fund_score, news_score, turn))
         if len(cand) < eff:
             return []
 
         cand.sort(key=lambda x: x[1])            # 市值升序
-        cand = cand[:pool_size]                   # 最小 400
+        cand = cand[:pool_size]                   # 最小 pool_size
         n = len(cand)
         size_rank = {c[0]: i / n for i, c in enumerate(sorted(cand, key=lambda x: x[1]))}
         pb_rank = {c[0]: i / n for i, c in enumerate(sorted(cand, key=lambda x: x[2]))}
         mom_rank = {c[0]: i / n for i, c in enumerate(sorted(cand, key=lambda x: x[3], reverse=True))}
         fund_rank = {c[0]: i / n for i, c in enumerate(sorted(cand, key=lambda x: x[4], reverse=True))}
         news_rank = {c[0]: i / n for i, c in enumerate(sorted(cand, key=lambda x: x[5], reverse=True))}
+        # 资金面:换手率(成交额/市值)降序排名,越高=资金越活跃→名次越小越优
+        turn_rank = {c[0]: i / n for i, c in enumerate(sorted(cand, key=lambda x: x[6], reverse=True))}
+        w_turn = weights.get("turnover", 0.10)
         scored = sorted(cand, key=lambda x: (weights["size"] * size_rank[x[0]]
                                              + weights["pb"] * pb_rank[x[0]]
                                              + weights["momentum_20d"] * mom_rank[x[0]]
                                              + weights.get("fundamental", 0.1) * fund_rank[x[0]]
-                                             + weights.get("news", 0.1) * news_rank[x[0]]))
+                                             + weights.get("news", 0.1) * news_rank[x[0]]
+                                             + w_turn * turn_rank[x[0]]))
         target = [c[0] for c in scored[:eff]]
 
         # —— 仅供理由展示(卡H):只读数值/排名,不参与选股 ——

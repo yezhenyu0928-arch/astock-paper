@@ -35,7 +35,8 @@ s1_dividend@v2:
     low_vol_pct: 0.30          # 波动率位于池内后30%
     roe_years: 3               # 连续3年ROE门槛
     roe_min: 0.08              # 每年ROE>8%(小数)且净利润>0
-    weights: {dividend: 0.4, low_vol: 0.3, roe: 0.3}   # 三因子排名打分权重
+    weights: {dividend: 0.32, low_vol: 0.22, roe: 0.22, valuation: 0.11, news: 0.13}   # 加估值分位因子
+    max_per_industry: 3        # 单行业持股上限,避免红利天然扎堆银行/公用/煤炭
     hold_n: 10                 # 等权持有
   universe: dynamic            # 沪深300过滤,generate_orders 内实现
   rebalance: monthly
@@ -57,8 +58,9 @@ s4_smallcap@v1:
   benchmark: sh510300          # 沪深300ETF(数据可行:原中证2000未入库;池已用沪深300)
   frozen_date: 2026-07-03       # 版本锁定入赛(报告见 reports/)
   params:
-    pool_size: 400             # 过滤后市值最小400只
-    weights: {size: 0.5, pb: 0.3, momentum_20d: 0.2}   # 打分权重
+    pool_size: 800             # 全A股按市值升序取最小800只(真小盘,不再局限沪深300)
+    min_avg_amount: 30000000   # 20日日均成交额下限(过滤流动性差的壳股/仙股)
+    weights: {size: 0.40, pb: 0.20, momentum_20d: 0.15, fundamental: 0.10, news: 0.05, turnover: 0.10}   # 加资金面(换手/成交额)因子
     hold_n: 20
   universe: dynamic
   rebalance: monthly

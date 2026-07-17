@@ -28,19 +28,23 @@ risk:
     m20_drop: 0.10              # 20日累计跌幅
   min_avg_amount: 50000000      # 个股20日日均成交额下限(元)
 
-strategies:                     # 精选阵容(2026-07 优化):删负收益、归档重复变体、新增赛道旗舰
-  s2_etf@v1: true               # ETF动量轮动(全期年化~9%)
-  s1_dividend@v2: true          # 红利低波·质量增强(年化~12%,取代 v1/v3)
-  s4_smallcap@v1: true          # 小市值多因子(年化~25%,最强)
-  s6_sector@v1: true            # 行业ETF动量(年化~7.5%,政策/行业面代理)
-  s7_track@v1: true             # 赛道旗舰:GLM政策+行业动量+市场regime,集中1-2赛道
-  s2_etf@v2: false              # V4卡N已裁决:回测年化3.2%/回撤20%/Calmar0.16,弱于v1(9%/25%/0.36),动量防护误伤收益不上线(registry保留备查)
-  # ↓ 已下线(2026-07 优化):负收益或与保留版本重复,曲线归档、不再参与赛马
-  s3_ma_trend@v1: false         # 删:全期年化 -0.2%(双均线趋势在震荡市持续 whipsaw)
-  s5_grid@v1: false             # 删:全期年化 -3.3%(PE网格全期负收益)
-  s1_dividend@v1: false         # 归档:被 v2 质量增强版取代(v2 年化12% > v1 11%)
-  s1_dividend@v3: false         # 归档:与 v2 高度重复,Barra 增强边际提升有限
-  s4_smallcap@v2: false         # 归档:被 v1 取代(v1 年化25% > v2)
+strategies:                     # 2026-07 重构:全面个股化——下线全部ETF策略,启用纯个股策略阵容
+  # ↓ 个股策略(仅交易A股个股,无任何ETF);各策略模拟不同投资经理风格,综合宏观/行业/基本面/技术/资金面
+  s1_dividend@v2: true          # 红利价值经理:高股息+低波+质量+估值分位(防御/收入型)
+  s4_smallcap@v1: true          # 小市值经理:真小盘(全A市值升序)+反转+低PB+资金面(高弹性)
+  s3_ma_trend@v1: true          # 趋势动量经理:双均线金叉+放量+宏观调阈+基本面(技术顺势)
+  s8_checklist@v1: true         # 价值质量清单经理:R1-R9价值质量规则+行业中性(深度价值)
+  s9_stage2@v1: true            # Stage2成长趋势经理:均线多头+动量+流动性硬门槛(结构性牛市)
+  # ↓ 已下线:全部为ETF策略,按要求移除(仅交易个股,不再涉及任何ETF)
+  s2_etf@v1: false              # 删:ETF动量轮动(ETF)
+  s2_etf@v2: false              # 删:ETF动量V2(ETF)
+  s6_sector@v1: false           # 删:行业ETF动量(ETF)
+  s7_track@v1: false            # 删:赛道ETF旗舰(ETF)
+  s5_grid@v1: false             # 删:沪深300ETF网格(ETF)
+  # ↓ 归档(个股,但与启用版本重复或风格重叠)
+  s1_dividend@v1: false         # 归档:被 v2 取代
+  s1_dividend@v3: false         # 归档:与 v2 重复
+  s4_smallcap@v2: false         # 归档:被 v1 取代
 
 schedule:
   signal_push_time: "18:00"     # 北京时间,仅用于消息标题展示

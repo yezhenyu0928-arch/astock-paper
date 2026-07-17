@@ -136,7 +136,7 @@ class S1DividendQuality(BaseStrategy):
                 news_score = ne.get_stock_sentiment_score(date, code, conn=ctx.conn)
             except Exception:
                 pass
-            cand.append((code, f["dividend_yield"], vol, roe, news_score))
+            cand.append((code, f["dividend_yield"], vol, roe, news_score, f.get("pe")))
         if not cand:
             return []
 
@@ -151,15 +151,36 @@ class S1DividendQuality(BaseStrategy):
         # 新闻面排名(利好排名靠前)
         by_news = sorted(keep, key=lambda x: x[4], reverse=True)
         news_rank = {c[0]: i for i, c in enumerate(by_news)}
-        wd = weights.get("dividend", 0.35)
-        wv = weights.get("low_vol", 0.25)
-        wr = weights.get("roe", 0.25)
-        wn = weights.get("news", 0.15)
+        # 估值分位:PE 升序排名(越低越便宜→名次越小=越优);缺失PE者给中性名次
+        by_pe = sorted(keep, key=lambda x: (x[5] is None, x[5] if x[5] is not None else 1e9))
+        pe_rank = {c[0]: i for i, c in enumerate(by_pe)}
+        wd = weights.get("dividend", 0.32)
+        wv = weights.get("low_vol", 0.22)
+        wr = weights.get("roe", 0.22)
+        wv2 = weights.get("valuation", 0.11)   # 估值(PE分位,越低越好)
+        wn = weights.get("news", 0.13)
         scored = sorted(keep, key=lambda x: (wd * dy_rank[x[0]]
                                              + wv * vol_rank[x[0]]
                                              + wr * roe_rank[x[0]]
+                                             + wv2 * pe_rank[x[0]]
                                              + wn * news_rank[x[0]]))
-        target = [c[0] for c in scored[:eff]]
+        # 行业中性化:单行业持股上限,避免红利天然扎堆银行/公用/煤炭
+        ind_cap = self.params.get("max_per_industry", 3)
+        try:
+            import factors as _fac
+            ind_map = _fac.get_industry(ctx.conn, [c[0] for c in keep])
+        except Exception:
+            ind_map = {}
+        ind_count, target = {}, []
+        for c in scored:
+            code = c[0]
+            ind = ind_map.get(code) or "未知"
+            if ind_count.get(ind, 0) >= ind_cap:
+                continue
+            target.append(code)
+            ind_count[ind] = ind_count.get(ind, 0) + 1
+            if len(target) >= eff:
+                break
 
         n_keep = len(keep)
         cand_codes = {c[0] for c in cand}
