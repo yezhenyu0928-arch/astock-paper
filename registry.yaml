@@ -281,3 +281,38 @@ s9_growth_timing@v1:
     pe_cap: 60
   universe: dynamic
   rebalance: weekly
+
+s13_growth_quality_rotation@v1:
+  class: strategies.s13_growth_quality_rotation.S13GrowthQualityRotation
+  benchmark: sh510300
+  frozen_date: 2026-07-17       # 新增:景气成长质量轮动经理(中小盘规模溢价+ROE质量+盈利增长+技术趋势确认+行业轮动+破MA120止损)
+  params:
+    hold_n: 25                   # 分散持仓控回撤
+    min_avg_amount: 30000000    # 20日日均成交额下限
+    min_market_cap: 1000000000  # 10亿,偏小盘吃规模溢价
+    max_market_cap: 15000000000 # 150亿,中小盘区间
+    max_per_sector: 3           # 单行业持股上限(行业中性)
+    roe_min: 0.08               # 连续3年ROE≥8%质量门禁
+    growth_min: 0.05            # 盈利同比下限
+    growth_max: 0.80            # 盈利同比上限(防透支/暴雷)
+    pe_cap: 50                  # 估值上限
+    weights: {roe: 0.18, growth: 0.18, value: 0.19, momentum: 0.25, lowvol: 0.20}
+  universe: dynamic
+  rebalance: monthly
+
+s14_value_reversal_rotation@v1:
+  class: strategies.s14_value_reversal_rotation.S14ValueReversalRotation
+  benchmark: sh510300
+  frozen_date: 2026-07-17       # 新增:低估反转轮动经理(中小盘+低估值质量+技术超跌企稳反转+行业轮动+破MA60止损)
+  params:
+    hold_n: 25
+    min_avg_amount: 30000000
+    min_market_cap: 1000000000
+    max_market_cap: 15000000000
+    max_per_sector: 3
+    roe_min: 0.08
+    pe_cap: 30                  # 低估值上限
+    pb_cap: 3.0
+    weights: {value_pe: 0.20, value_pb: 0.13, quality: 0.17, reversal: 0.25, stabilize: 0.25}
+  universe: dynamic
+  rebalance: monthly
