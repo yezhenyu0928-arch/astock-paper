@@ -158,6 +158,17 @@ s9_stage2@v1:
   universe: dynamic
   rebalance: weekly
 
+s9_stage2@v2:
+  class: strategies.s9_stage2_v2.S9Stage2TrendV2
+  benchmark: sh510300
+  frozen_date: 2026-07-17       # 借鉴v1 Stage2模板重构:宇宙扩全A+行业动量加权+宏观regime+基本面/资金面过滤,修复v1(沪深300宇宙)的-20%失败
+  params:
+    hold_n: 6
+    min_avg_amount: 30000000    # 20日均额下限(流动性)
+    cap_min: 3000000000         # 总市值下限(剔除微盘/壳股)
+  universe: dynamic             # 全A动态池(Stage2成长股在中小盘)
+  rebalance: weekly
+
 s7_track@v1:
   class: strategies.s7_track.S7TrackFlagship
   benchmark: sh510300
