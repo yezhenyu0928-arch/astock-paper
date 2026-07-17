@@ -1,7 +1,7 @@
 # s1_dividend@v2 五关验证报告
 
 - 资金档:50,000 元(按用户 config 实跑,不用大资金美化)
-- 生成日:2026-07-17  基准:sh510300
+- 生成日:2026-07-18  基准:sh510300
 - 参数:{'min_dividend_yield': 0.04, 'dividend_years': 3, 'low_vol_pct': 0.3, 'roe_years': 3, 'roe_min': 0.08, 'weights': {'dividend': 0.32, 'low_vol': 0.22, 'roe': 0.22, 'valuation': 0.11, 'news': 0.13}, 'max_per_industry': 3, 'hold_n': 10}
 
 > 免责:模拟/历史表现不代表未来。成交按次日开盘价+真实费用滑点(SPEC_FILL)建模,故意保守。
