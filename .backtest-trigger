@@ -1,1 +1,1 @@
-trigger full backtest for timing lineup s3_trend_timing@v1 + s9_growth_timing@v1 at 2026-07-17T13:22:42Z
+trigger full backtest for redesigned lineup s13/s14 (multi-factor, target annual>=20%) at 2026-07-17T23:01:54Z
