@@ -1,0 +1,42 @@
+name: heartbeat
+# Pages 停更心跳告警：每日(北京22:00后)检查 docs/index.html 最近一次提交年龄。
+# 主 daily 流程周一~周五 17:40/18:10(北京)提交看板；若超过阈值未更新，
+# 说明 Actions 已停止/失败/被禁用，发告警提醒（silent when healthy, 不打扰）。
+on:
+  schedule:
+    - cron: '0 14 * * *'      # UTC14:00 = 北京 22:00，晚于主流程
+  workflow_dispatch: {}        # 手动触发(验证用)
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # 需要完整历史以取 docs/index.html 提交时间
+      - name: 检查看板更新新鲜度
+        id: chk
+        run: |
+          last=$(git log -1 --format=%ct -- docs/index.html 2>/dev/null || echo 0)
+          now=$(date +%s)
+          age=$(( (now - last) / 86400 ))
+          echo "age_days=$age" >> "$GITHUB_OUTPUT"
+          echo "docs/index.html 最近更新于 ${age} 天前"
+          # 阈值 4 天：容周末(周五→下周一约3天)+缓冲；超过即视为停更。
+          if [ "$age" -gt 4 ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: 停更则告警
+        if: steps.chk.outputs.stale == 'true'
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
+        run: |
+          pip install -r requirements.txt >/dev/null 2>&1 || true
+          python notify.py --alert "⏰ 看板停更告警：docs/index.html 已 ${{ steps.chk.outputs.age_days }} 天未更新（阈值4天），GitHub Actions 可能已停止运行/失败/被禁用，或仓库密钥失效。请检查仓库 Workflow 与密钥是否有效，停更期间请勿跟单。" || true

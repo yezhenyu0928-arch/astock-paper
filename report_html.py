@@ -285,7 +285,10 @@ def _exposure_html(sid, exp_data):
             f'<summary>⚖️ 风格暴露与预测波动{vol_str}</summary>'
             f'{vol_line}'
             f'<div class="exp-chart-container">'
-            f'<canvas id="{chart_id}" width="400" height="200"></canvas></div>'
+            f'<canvas id="{chart_id}" width="400" height="200"></canvas>'
+            f'<div class="exp-fallback" hidden>'
+            f'<div class="exp-fallback-note">📊 图表库(Chart.js)未加载，因子暴露图已降级为纯文本/条形呈现（见下方“风格条形”与“暴露值表格”，数据完整）。</div>'
+            f'</div></div>'
             f'<div class="exp-bars">{bars}</div>'
             f'<table class="exposure-table"><thead><tr><th>因子</th><th>暴露值(z分)</th></tr></thead>'
             f'<tbody>{tbl_rows}</tbody></table>'
@@ -308,26 +311,52 @@ def _exposure_chart_js(exp_data):
         if not exposures:
             continue
         chart_id = f"exposureChart_{sid.replace('@','_').replace('.','_')}"
-        labels = json.dumps([f[:4] for f in factors_order if f in exposures], ensure_ascii=False)
+        labels = [f[:4] for f in factors_order if f in exposures]
         values = [exposures.get(f, 0) for f in factors_order if f in exposures]
         colors = ["#3b82f6" if v >= 0 else "#ef4444" for v in values]
-        chart_entries.append(f"""
-  (function(){{
-    var c=document.getElementById('{chart_id}');
-    if(!c)return;
-    try{{
-      new Chart(c,{{type:'bar',
-        data:{{labels:{labels},datasets:[{{data:{json.dumps(values)},backgroundColor:{json.dumps(colors)}}}]}},
-        options:{{responsive:true,maintainAspectRatio:false,
-          plugins:{{legend:{{display:false}},title:{{display:true,text:'{html.escape(_cn(sid))} 风格暴露',font:{{size:13}}}}}},
-          scales:{{y:{{title:{{display:true,text:'z分'}},min:-2,max:2}}}}}});
-    }}catch(e){{}}
-  }})();""")
+        cfg = {
+            "type": "bar",
+            "data": {
+                "labels": labels,
+                "datasets": [{"data": values, "backgroundColor": colors}],
+            },
+            "options": {
+                "responsive": True,
+                "maintainAspectRatio": False,
+                "plugins": {
+                    "legend": {"display": False},
+                    "title": {
+                        "display": True,
+                        "text": _cn(sid) + " 风格暴露",
+                        "font": {"size": 13},
+                    },
+                },
+                "scales": {
+                    "y": {
+                        "title": {"display": True, "text": "z分"},
+                        "min": -2.0,
+                        "max": 2.0,
+                    }
+                },
+            },
+        }
+        chart_entries.append(
+            "(function(){var c=document.getElementById('%s');if(!c)return;"
+            "try{new Chart(c,%s);}catch(e){}})();"
+            % (chart_id, json.dumps(cfg, ensure_ascii=False))
+        )
     if not chart_entries:
         return ""
-    # 同时生成"数据生成中"占位图（chart_entries 为空时）
+    # 降级逻辑:Chart.js 未加载(typeof Chart==='undefined')时,隐藏空白 canvas,
+    # 显示纯 HTML 兜底(.exp-fallback)与顶部横幅;否则照常渲染 Chart.js。
     return ("<script>"
-            "(function(){if(typeof Chart==='undefined')return;"
+            "(function(){"
+            "if(typeof Chart==='undefined'){"
+            "document.querySelectorAll('.exp-chart-container').forEach(function(c){"
+            "var cv=c.querySelector('canvas');if(cv)cv.style.display='none';"
+            "var fb=c.querySelector('.exp-fallback');if(fb)fb.hidden=false;});"
+            "var bn=document.getElementById('chartFallbackBanner');if(bn)bn.hidden=false;"
+            "return;}"
             + "".join(chart_entries)
             + "})();</script>")
 
@@ -1054,8 +1083,12 @@ def generate(out_path=None):
            '<a href="methodology.html">📐 策略方法论</a>'
            '<a href="methodology.html#risk-model">📈 因子风险模型</a>'
            '</nav>')
+    chart_fb_banner = ("<div id='chartFallbackBanner' class='chart-fallback-banner' hidden>"
+                        "⚠️ 图表库(Chart.js)未加载，因子暴露图已降级为纯文本/条形展示（数据完整，"
+                        "见各策略卡内“风格暴露”的条形图与暴露值表格）。</div>")
     body = (
         f"{nav}<h1>📊 A股模拟跟单看板</h1>"
+        f"{chart_fb_banner}"
         f"<div class='sub'>生成 {today} · 数据最新 {last} · 实盘模拟期自 2026-07-06 起 · 模拟/历史不代表未来，非投资建议，人工跟单</div>"
         f"{banner}"
         f"{market_section}"
@@ -1506,6 +1539,9 @@ details[open].usage-instructions summary{margin-bottom:8px;border-bottom:1px sol
 .exp-note a{color:#2563eb;text-decoration:none}
 .exposure-table{font-size:12px;margin-top:8px}
 .exposure-table th,.exposure-table td{padding:4px 8px}
+.exp-fallback{margin-top:6px}
+.exp-fallback-note{padding:8px 10px;border:1px dashed #e0a3a3;border-radius:8px;background:#fff8f8;color:#b3432f;font-size:12px;line-height:1.6}
+.chart-fallback-banner{margin:10px 0;padding:10px 14px;border:1px solid #e0a3a3;border-radius:8px;background:#fff8f8;color:#b3432f;font-weight:600;font-size:13px}
 </style>"""
 
 _FOOTER = """<div class="foot">
