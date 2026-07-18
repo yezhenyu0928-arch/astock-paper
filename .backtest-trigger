@@ -1,1 +1,1 @@
-trigger full backtest: 宏观7指标+时间止损+s15综合配置策略 + structural_ban bug修复(此前所有策略候选被误清空,结果失真) at 2026-07-18T02:26:41Z
+trigger full backtest: s4_smallcap 改造为小盘质量动量正收益策略(本地子集年化-2.1%→+12.6%) at 2026-07-18T02:33:45Z
