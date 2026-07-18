@@ -434,6 +434,142 @@ def top_bullish_sectors(date, conn=None, top=6):
             conn.close()
 
 
+# ============ 宏观择时 7 指标(手册宏观择时章节补全) ============
+# 7 指标: 沪深300趋势 / 估值分位 / 国债收益率(利率方向) / PMI / 社融 / 北向资金 / 情绪(融资余额变化,缺则广度兜底)
+# 数据来源: 前3项来自库内价格/PE/国债ETF(原 macro_score 三因子); 后4项来自 macro_data.macro_indicator 表
+# (akshare 拉取入库,详见 macro_data.py)。任一指标缺数据→该指标权重归零(优雅降级),不报错、不中断回测。
+# 返回 -1(最不利)~+1(最有利) 综合分 + 分档 regime。
+
+def macro_score_7(date, conn=None, cfg=None):
+    """宏观择时 7 指标综合评分(-1~+1)。缺失指标权重归零(优雅降级)。"""
+    own = conn is None
+    if own:
+        conn = get_conn()
+    try:
+        import macro_data as md
+        date = util.to_date_str(date)
+        subs = []  # (weight, subscore)
+
+        # 复用一次 regime 计算(趋势/广度/风险比都来自它)
+        rg = compute_market_regime(date, conn=conn)
+        ret3m = rg.get("ret_3m") or 0
+        above50 = rg.get("aboveMa50")
+
+        # 1. 沪深300趋势
+        try:
+            s_trend = (ret3m or 0) / 10.0
+            if above50 is True:
+                s_trend += 0.3
+            elif above50 is False:
+                s_trend -= 0.3
+            subs.append((1.0, max(-1.0, min(1.0, s_trend))))
+        except Exception:
+            pass
+
+        # 2. 估值分位(沪深300 PE 十年分位;越低越利于股票)
+        try:
+            import fundamental as F
+            pct = F.index_pe_percentile("sh000300", date, conn=conn)
+            if pct is not None:
+                subs.append((1.0, max(-1.0, min(1.0, (0.5 - pct) * 2))))
+        except Exception:
+            pass
+
+        # 3. 利率方向(国债ETF:宽松=利好)
+        try:
+            mf = macro_factor(date, conn=conn)
+            s_rate = 0.0
+            if mf.get("rate_direction") == "easing":
+                s_rate += 0.5
+            elif mf.get("rate_direction") == "tightening":
+                s_rate -= 0.5
+            s_rate += max(-0.5, min(0.5, (mf.get("bond_60d_ret", 0) or 0) / 10.0))
+            subs.append((1.0, max(-1.0, min(1.0, s_rate))))
+        except Exception:
+            pass
+
+        # 4. PMI(制造业,~50中性)
+        try:
+            pmi = md.value_on(conn, "PMI", date)
+            if pmi is not None:
+                subs.append((1.0, max(-1.0, min(1.0, (pmi - 50.0) / 2.0))))
+        except Exception:
+            pass
+
+        # 5. 社融(存量同比 %)
+        try:
+            tsf = md.value_on(conn, "TSF_YOY", date)
+            if tsf is not None:
+                subs.append((1.0, max(-1.0, min(1.0, tsf / 20.0))))
+        except Exception:
+            pass
+
+        # 6. 北向资金(近20日累计净买额,亿元)
+        try:
+            nb = md.window_sum(conn, "NORTHBOUND_NET", date, 20)
+            if nb is not None:
+                subs.append((1.0, max(-1.0, min(1.0, nb / 300.0))))
+        except Exception:
+            pass
+
+        # 7. 情绪: 融资余额20日变化(亿元,风险偏好代理);缺则用广度/风险比兜底
+        try:
+            mg = md.delta(conn, "MARGIN_BALANCE", date, 20)
+            if mg is not None:
+                subs.append((1.0, max(-1.0, min(1.0, mg / 1500.0))))
+            else:
+                s2 = 0.0
+                rr = rg.get("risk_ratio")
+                br = rg.get("breadth")
+                if rr is not None:
+                    s2 -= (rr - 0.20) * 2
+                if br is not None:
+                    s2 += (br - 50) / 50.0
+                subs.append((1.0, max(-1.0, min(1.0, s2))))
+        except Exception:
+            pass
+
+        if not subs:
+            return 0.0, "数据不足(无可用宏观指标)"
+        wsum = sum(w for w, _ in subs)
+        score = sum(w * s for w, s in subs) / wsum if wsum else 0.0
+        score = max(-1.0, min(1.0, score))
+        if score >= 0.5:
+            regime = "强势"
+        elif score <= -0.5:
+            regime = "风险"
+        elif score < -0.15:
+            regime = "转弱"
+        else:
+            regime = "震荡"
+        return score, regime
+    except Exception as e:
+        log.warning("macro_score_7 失败: %s", e)
+        return 0.0, "异常"
+    finally:
+        if own:
+            conn.close()
+
+
+def macro_exposure_mult(date, ctx, cfg=None):
+    """由 macro_score_7 映射总仓位敞口系数(手册:总仓位0-90%,现金≥10%)。
+
+    分档(中性=0.70,对应约30%现金,与手册"中性偏防御"一致):
+      score >= 0 : mult = 0.70 + score*0.20  → [0.70, 0.90]
+      score <  0 : mult = 0.70 + score*0.60  → [0.10, 0.70)
+    仅降不升(取 min 与消息面系数叠加)。无数据/异常 → 1.0(不干预)。"""
+    try:
+        # 无数据连接 → 不做宏观干预(回测/实盘 ctx 必带 conn;单测 MockCtx 无 conn 即视为无数据)
+        conn = getattr(ctx, "conn", None)
+        if conn is None:
+            return 1.0
+        score, _ = macro_score_7(date, conn=conn, cfg=cfg)
+    except Exception:
+        return 1.0
+    mult = (0.70 + score * 0.20) if score >= 0 else (0.70 + score * 0.60)
+    return float(max(0.10, min(0.90, mult)))
+
+
 # ── 简易自检 ──
 def _self_test():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s|%(name)s|%(message)s")

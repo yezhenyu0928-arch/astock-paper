@@ -316,3 +316,26 @@ s14_value_reversal_rotation@v1:
     weights: {value_pe: 0.20, value_pb: 0.13, quality: 0.17, reversal: 0.25, stabilize: 0.25}
   universe: dynamic
   rebalance: monthly
+
+s15_core_allocation@v1:
+  class: strategies.s15_core_allocation.S15CoreAllocation
+  benchmark: sh510300
+  frozen_date: 2026-07-17       # 新增:核心配置经理(手册组合构建=高股息底仓35%+核心成长45%+现金20%,月度再平衡)
+  params:
+    dividend_weight: 0.35       # 高股息底仓占总仓位比例(手册30-40%)
+    growth_weight: 0.45         # 核心成长占总仓位比例(手册40-50%)
+    dividend_hold_n: 5          # 红利袖持仓数
+    growth_hold_n: 5            # 成长袖持仓数
+    min_dividend_yield: 0.025   # 股息率下限(2.5%)
+    dividend_years: 3           # 连续分红年数
+    roe_min: 0.08               # ROE 质量门禁(连续3年≥8%)
+    roe_years: 3
+    growth_min: 0.05            # 盈利同比下限
+    growth_max: 0.80            # 盈利同比上限(防透支/暴雷)
+    min_avg_amount: 80000000    # 20日日均成交额下限(手册8000万)
+    min_market_cap: 8000000000  # 总市值下限80亿(手册)
+    max_market_cap: 500000000000
+    max_per_industry: 2         # 单行业持股上限(行业中性)
+    pe_cap: 50
+  universe: dynamic
+  rebalance: monthly

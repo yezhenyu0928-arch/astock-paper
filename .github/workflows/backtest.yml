@@ -9,7 +9,7 @@ on:
       sids:
         description: "回测策略(逗号分隔;留空=下列默认新策略集)"
         required: false
-        default: "s1_dividend@v2,s4_smallcap@v1,s8_checklist@v1,s13_growth_quality_rotation@v1,s14_value_reversal_rotation@v1"
+        default: "s1_dividend@v2,s4_smallcap@v1,s8_checklist@v1,s13_growth_quality_rotation@v1,s14_value_reversal_rotation@v1,s15_core_allocation@v1"
   push:
     paths:
       - '.backtest-trigger'
@@ -85,6 +85,10 @@ jobs:
             echo "个股库与年报库均充分,跳过 backfill"
           fi
 
+      - name: macro indicators backfill (PMI/社融/北向/融资余额)
+        run: |
+          python -c "import macro_data; print('macro backfill:', macro_data.backfill())" || echo "::warning::macro backfill 失败(回测将降级为价格类指标)"
+
       - name: save DB cache
         uses: actions/cache/save@v4
         with:
@@ -95,7 +99,7 @@ jobs:
         run: |
           SIDS="${{ github.event.inputs.sids }}"
           if [ -z "$SIDS" ]; then
-            SIDS="s1_dividend@v2,s4_smallcap@v1,s8_checklist@v1,s13_growth_quality_rotation@v1,s14_value_reversal_rotation@v1"
+            SIDS="s1_dividend@v2,s4_smallcap@v1,s8_checklist@v1,s13_growth_quality_rotation@v1,s14_value_reversal_rotation@v1,s15_core_allocation@v1"
           fi
           echo "回测集: $SIDS"
           IFS=',' read -ra ARR <<< "$SIDS"

@@ -27,7 +27,7 @@ class S4SmallCapFactor(BaseStrategy):
         hold_n = self.params.get("hold_n", 20)
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
         w = common.target_weight(eff)
-        w = round(w * news_guard.market_exposure(date, ctx, self.config), 6)  # 市场分调仓(跟踪大盘动态)
+        # 市场分/宏观敞口统一由 risk 层 _exposure_mult 处理(单一权威,避免双重缩放)
 
         # 真小盘宇宙:全A股按市值升序取最小一批(不再局限沪深300)。
         # 用 daily_bar 全量代码 + fundamental 市值截面,经可交易/上市满1年/流动性过滤。

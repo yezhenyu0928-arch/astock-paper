@@ -174,8 +174,17 @@ def structural_ban(date, code, ctx):
     """
     try:
         b = ctx.bar(code, str(date)[:10])
-        if b and b.get("limit_down"):
-            return True, "当日跌停(流动性/弱势风险, 结构性排雷)"
+        if b:
+            # 当日跌停判定: limit_down 字段可能是跌停价(数值>1)或布尔标志(0/1)。
+            # 价格模式下,最低价触及跌停价即视为跌停;布尔模式直接取真假。
+            ld = b.get("limit_down")
+            if ld is not None:
+                if isinstance(ld, (int, float)) and ld > 1.0:
+                    lo = b.get("low")
+                    if lo is not None and lo <= ld * 1.002:   # 触及跌停价(含微小浮点容差)
+                        return True, "当日跌停(触及跌停价, 流动性/弱势风险, 结构性排雷)"
+                elif ld:                                       # 布尔/0-1 标志
+                    return True, "当日跌停(流动性/弱势风险, 结构性排雷)"
         rows = ctx.conn.execute(
             "SELECT net_profit FROM stock_annual WHERE code=? AND pub_date<=? "
             "ORDER BY stat_year DESC LIMIT 2",

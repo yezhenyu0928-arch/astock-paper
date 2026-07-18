@@ -25,7 +25,7 @@ class S1DividendLowVol(BaseStrategy):
         hold_n = self.params.get("hold_n", 10)
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
         w = common.target_weight(eff)
-        w = round(w * news_guard.market_exposure(date, ctx, self.config), 6)  # 市场分调仓(跟踪大盘动态)
+        # 市场分/宏观敞口统一由 risk 层 _exposure_mult 处理(单一权威,避免双重缩放)
 
         pool = ctx.members(POOL_INDEX, date)
         pool = common.main_board_universe(ctx, pool, self.config, date)  # 主板宇宙硬约束(手册)
@@ -132,7 +132,7 @@ class S1DividendQuality(BaseStrategy):
         hold_n = self.params.get("hold_n", 10)
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
         w = common.target_weight(eff)
-        w = round(w * news_guard.market_exposure(date, ctx, self.config), 6)  # 市场分调仓(跟踪大盘动态)
+        # 市场分/宏观敞口统一由 risk 层 _exposure_mult 处理(单一权威,避免双重缩放)
 
         pool = ctx.members(POOL_INDEX, date)
         pool = common.main_board_universe(ctx, pool, self.config, date)  # 主板宇宙硬约束(手册)

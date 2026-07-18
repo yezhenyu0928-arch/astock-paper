@@ -67,15 +67,39 @@ def pre_check(date, ctx, states, cfg):
 
 
 def _exposure_mult(date, ctx, cfg):
-    """消息面敞口系数(SPEC_NEWS N3)。P12 由 news_engine 提供市场分→系数;
-    未启用/无信号时为 1.0。只降不升(利好不追)。"""
-    if not (cfg.get("news_layer") or {}).get("enabled"):
-        return 1.0
+    """综合敞口系数(只降不升) = min(消息面, 宏观7指标)。
+    消息面: news_engine 市场分→系数(手册消息面层);
+    宏观:   macro.macro_exposure_mult(score_7→总仓位0-90%,手册宏观择时)。
+    两者均只降不升,取最严一档。未启用/无数据/异常 → 1.0(不干预)。"""
+    # 消息面
+    news_mult = 1.0
+    if (cfg.get("news_layer") or {}).get("enabled"):
+        try:
+            import news_engine
+            news_mult = news_engine.market_exposure_mult(date, ctx, cfg)
+        except Exception:
+            news_mult = 1.0
+    # 宏观 7 指标
     try:
-        import news_engine
-        return news_engine.market_exposure_mult(date, ctx, cfg)
+        import macro
+        macro_mult = macro.macro_exposure_mult(date, ctx, cfg)
     except Exception:
-        return 1.0
+        macro_mult = 1.0
+    return min(news_mult, macro_mult)
+
+
+def _held_days(ctx, buy_date, date):
+    """持仓自然交易日数(基于 trade_calendar.is_open)。失败返回 None。"""
+    try:
+        conn = getattr(ctx, "conn", None)
+        if conn is None or not buy_date:
+            return None
+        r = conn.execute(
+            "SELECT COUNT(*) FROM trade_calendar WHERE cal_date>? AND cal_date<=? AND is_open=1",
+            (str(buy_date), str(date))).fetchone()
+        return int(r[0]) if r else None
+    except Exception:
+        return None
 
 
 def _drawdown_mult(acct, st, tiers):
@@ -102,8 +126,10 @@ def post_check(date, ctx, orders, states, cfg, market_frozen=False):
     min_amt = cfg["risk"]["min_avg_amount"]
     stop = cfg["risk"]["stop_loss"]
 
-    # 规则5:止损 + 移动止盈(遍历持仓生成强制 sell)。手册:硬止损8% + 移动止盈自峰值回撤6%。
+    # 规则5:止损 + 移动止盈 + 时间止损(遍历持仓生成强制 sell)。手册:硬止损8% + 移动止盈6% + 时间止损。
     trail_tp = cfg["risk"].get("trailing_take_profit", 0) or 0
+    ts_days = cfg["risk"].get("time_stop_days") or 0
+    ts_min = cfg["risk"].get("time_stop_min_return", 0.0) or 0.0
     stop_orders = []
     for sid, acct in accounts.items():
         stype = _stop_type(sid)
@@ -112,18 +138,27 @@ def post_check(date, ctx, orders, states, cfg, market_frozen=False):
             cur = ctx.raw_close(code)
             if not cur or not pos.avg_cost:
                 continue
+            pnl = cur / pos.avg_cost - 1
             # 5a) 硬止损:自成本浮亏超阈值
-            if thr is not None and (cur / pos.avg_cost - 1) < -thr:
+            if thr is not None and pnl < -thr:
                 stop_orders.append(Order(strategy_id=sid, code=code, side="sell", weight=0.0,
-                                         reason=f"止损(浮亏{cur/pos.avg_cost-1:.1%}>{thr:.0%})",
+                                         reason=f"止损(浮亏{pnl:.1%}>{thr:.0%})",
                                          signal_date=date))
                 continue
             # 5b) 移动止盈:盈利状态下,自持有期最高收盘回撤超阈值即锁定
             hc = getattr(pos, "highest_close", 0) or 0
             if trail_tp and hc > 0 and cur > pos.avg_cost and (cur / hc - 1) < -trail_tp:
                 stop_orders.append(Order(strategy_id=sid, code=code, side="sell", weight=0.0,
-                                         reason=f"移动止盈(自峰值回撤{1-cur/hc:.1%}>{trail_tp:.0%},锁定{cur/pos.avg_cost-1:+.1%})",
+                                         reason=f"移动止盈(自峰值回撤{1-cur/hc:.1%}>{trail_tp:.0%},锁定{pnl:+.1%})",
                                          signal_date=date))
+                continue
+            # 5c) 时间止损:持仓≥time_stop_days 且 收益<time_stop_min_return → 退出(手册:不达预期时间的仓位清理)
+            if ts_days and ts_days > 0 and pos.buy_date:
+                hd = _held_days(ctx, pos.buy_date, date)
+                if hd is not None and hd >= ts_days and pnl < ts_min:
+                    stop_orders.append(Order(strategy_id=sid, code=code, side="sell", weight=0.0,
+                                             reason=f"时间止损(持有{hd}日收益{pnl:.1%}<{ts_min:.0%})",
+                                             signal_date=date))
     orders = list(orders) + stop_orders
 
     # 检测"轮动置换":同策略存在对当前持仓的卖出 → 视为换仓而非新开,大盘冻结时予以保留
