@@ -20,7 +20,7 @@ permissions:
 
 concurrency:
   group: backtest
-  cancel-in-progress: false      # 回测耗时长,不被后续 push 取消
+  cancel-in-progress: true       # 新触发的回测取消旧的僵持/排队 run,避免 concurrency 卡队列(2026-07-18 修:旧 run 长期 in_progress 占组致新 run 永久 pending)
 
 jobs:
   run:
