@@ -9,6 +9,7 @@ import logging
 from models import Order
 from strategies.base import BaseStrategy
 from strategies import common
+from strategies import news_guard
 
 log = logging.getLogger("s4")
 # 本 build 用沪深300(数据可行性:东财历史被代理挡,baostock回填1000只需160min)。
@@ -26,6 +27,7 @@ class S4SmallCapFactor(BaseStrategy):
         hold_n = self.params.get("hold_n", 20)
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
         w = common.target_weight(eff)
+        w = round(w * news_guard.market_exposure(date, ctx, self.config), 6)  # 市场分调仓(跟踪大盘动态)
 
         # 真小盘宇宙:全A股按市值升序取最小一批(不再局限沪深300)。
         # 用 daily_bar 全量代码 + fundamental 市值截面,经可交易/上市满1年/流动性过滤。
@@ -36,21 +38,16 @@ class S4SmallCapFactor(BaseStrategy):
                 "SELECT DISTINCT code FROM daily_bar WHERE code LIKE 'sh%' OR code LIKE 'sz%'").fetchall()]
         except Exception:
             all_codes = ctx.members(POOL_INDEX, date)
+        # 主板宇宙硬约束(手册):主板前缀/非ST/上市≥2年/总市值≥80亿/日均成交≥8000万/可交易
+        all_codes = common.main_board_universe(ctx, all_codes, self.config, date)
         univ = []
         for code in all_codes:
-            if not ctx.is_tradable(code, date):
-                continue
             f = ctx.fundamental(code)
             if not f or not f.get("market_cap") or f["market_cap"] <= 0:
                 continue
-            c = ctx.close(code, 260)
-            if len(c) < 250:                     # 上市满1年近似
-                continue
-            if ctx.avg_amount(code, 20) < min_avg:   # 流动性过滤,剔除仙股/壳股
-                continue
-            univ.append((code, f["market_cap"]))
+            univ.append((code, f["market_cap"]))     # 硬过滤已在 main_board_universe 完成,此处仅取市值排序
         univ.sort(key=lambda x: x[1])            # 市值升序
-        small = [u[0] for u in univ[:pool_size]] # 取最小 pool_size 只 = 真小盘
+        small = [u[0] for u in univ[:pool_size]] # 取最小 pool_size 只 = 主板真小盘(已排除微盘)
 
         cand = []   # (code, mcap, pb, ret20, fund_score, news_score, turnover)
         for code in small:
@@ -75,6 +72,21 @@ class S4SmallCapFactor(BaseStrategy):
         cand.sort(key=lambda x: x[1])            # 市值升序
         cand = cand[:pool_size]                   # 最小 pool_size
         n = len(cand)
+        # —— 新闻/公告/动态守卫(全量接入) ——
+        _cc = [c[0] for c in cand]
+        try:
+            import factors as _fac
+            _ind = _fac.get_industry(ctx.conn, _cc)
+        except Exception:
+            _ind = {}
+        _ban_n, _ = news_guard.guard_candidates(date, _cc, ctx.conn, self.config)
+        _ban_i = news_guard.guard_industry(date, _cc, ctx.conn, self.config, _ind)
+        _ban_s = {c for c in _cc if news_guard.structural_ban(date, c, ctx)[0]}
+        _banned = _ban_n | _ban_i | _ban_s
+        if _banned:
+            cand = [c for c in cand if c[0] not in _banned]
+        if len(cand) < eff:
+            return []
         size_rank = {c[0]: i / n for i, c in enumerate(sorted(cand, key=lambda x: x[1]))}
         pb_rank = {c[0]: i / n for i, c in enumerate(sorted(cand, key=lambda x: x[2]))}
         mom_rank = {c[0]: i / n for i, c in enumerate(sorted(cand, key=lambda x: x[3], reverse=True))}
@@ -98,14 +110,18 @@ class S4SmallCapFactor(BaseStrategy):
 
         held = set(account.positions.keys())
         orders = []
+        forced = news_guard.guard_holdings(date, held, ctx.conn, self.config)
         for code in held:
-            if code not in target:
-                nm = ctx.name(code)
-                if code in full_rank:
-                    reason = f"小市值调仓:{nm}综合排名第{full_rank[code]}/{n}掉出前{eff},卖出"
-                else:
-                    reason = f"小市值:{nm}掉出候选池(市值/流动性/上市满1年过滤),卖出"
-                orders.append(Order(self.strategy_id, code, "sell", 0.0, reason, date))
+            if code in target and code not in forced:
+                continue
+            nm = ctx.name(code)
+            if code in forced:
+                reason = f"小市值:{nm}新闻黑天鹅,同步清仓"
+            elif code in full_rank:
+                reason = f"小市值调仓:{nm}综合排名第{full_rank[code]}/{n}掉出前{eff},卖出"
+            else:
+                reason = f"小市值:{nm}掉出候选池(市值/流动性/上市满1年过滤),卖出"
+            orders.append(Order(self.strategy_id, code, "sell", 0.0, reason, date))
         for code in target:
             if code not in held:
                 mcap, pb, ret20, fund = meta[code]

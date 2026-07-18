@@ -9,6 +9,7 @@ from statistics import mean, pstdev
 from models import Order
 from strategies.base import BaseStrategy
 from strategies import common
+from strategies import news_guard
 
 log = logging.getLogger("s1")
 POOL_INDEX = "sh000300"   # 沪深300(大盘红利票;可改中证800需相应扩充回填)
@@ -24,8 +25,10 @@ class S1DividendLowVol(BaseStrategy):
         hold_n = self.params.get("hold_n", 10)
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
         w = common.target_weight(eff)
+        w = round(w * news_guard.market_exposure(date, ctx, self.config), 6)  # 市场分调仓(跟踪大盘动态)
 
         pool = ctx.members(POOL_INDEX, date)
+        pool = common.main_board_universe(ctx, pool, self.config, date)  # 主板宇宙硬约束(手册)
         cand = []   # (code, div_yield, vol, fund_score)
         for code in pool:
             if not ctx.is_tradable(code, date):
@@ -43,6 +46,21 @@ class S1DividendLowVol(BaseStrategy):
             fund_score = common.get_fundamental_score(ctx, code, date)
             cand.append((code, f["dividend_yield"], vol, fund_score))
 
+        if not cand:
+            return []
+        # —— 新闻/公告/动态守卫(全量接入) ——
+        _cc = [c[0] for c in cand]
+        try:
+            import factors as _fac
+            _ind = _fac.get_industry(ctx.conn, _cc)
+        except Exception:
+            _ind = {}
+        _ban_n, _ = news_guard.guard_candidates(date, _cc, ctx.conn, self.config)
+        _ban_i = news_guard.guard_industry(date, _cc, ctx.conn, self.config, _ind)
+        _ban_s = {c for c in _cc if news_guard.structural_ban(date, c, ctx)[0]}
+        _banned = _ban_n | _ban_i | _ban_s
+        if _banned:
+            cand = [c for c in cand if c[0] not in _banned]
         if not cand:
             return []
         # 低波后30%:按 vol 升序保留前 (1-0.3)? SPEC"位于剩余池后30%"=波动率最低的30%
@@ -72,16 +90,20 @@ class S1DividendLowVol(BaseStrategy):
 
         held = set(account.positions.keys())
         orders = []
+        forced = news_guard.guard_holdings(date, held, ctx.conn, self.config)
         for code in held:
-            if code not in target:
-                nm = ctx.name(code)
-                if code in full_rank:
-                    reason = f"红利低波调仓:{nm}综合排名第{full_rank[code]}/{n_keep}掉出前{eff},卖出"
-                elif code in cand_codes:
-                    reason = f"红利低波:{nm}波动率升高、掉出低波区,卖出"
-                else:
-                    reason = f"红利低波:{nm}不再满足股息率≥{min_dy:.0%}或连续{years}年分红门槛,卖出"
-                orders.append(Order(self.strategy_id, code, "sell", 0.0, reason, date))
+            if code in target and code not in forced:
+                continue
+            nm = ctx.name(code)
+            if code in forced:
+                reason = f"红利低波:{nm}新闻黑天鹅,同步清仓"
+            elif code in full_rank:
+                reason = f"红利低波调仓:{nm}综合排名第{full_rank[code]}/{n_keep}掉出前{eff},卖出"
+            elif code in cand_codes:
+                reason = f"红利低波:{nm}波动率升高、掉出低波区,卖出"
+            else:
+                reason = f"红利低波:{nm}不再满足股息率≥{min_dy:.0%}或连续{years}年分红门槛,卖出"
+            orders.append(Order(self.strategy_id, code, "sell", 0.0, reason, date))
         for code in target:
             if code not in held:
                 dy = keep_dy[code]
@@ -110,8 +132,10 @@ class S1DividendQuality(BaseStrategy):
         hold_n = self.params.get("hold_n", 10)
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
         w = common.target_weight(eff)
+        w = round(w * news_guard.market_exposure(date, ctx, self.config), 6)  # 市场分调仓(跟踪大盘动态)
 
         pool = ctx.members(POOL_INDEX, date)
+        pool = common.main_board_universe(ctx, pool, self.config, date)  # 主板宇宙硬约束(手册)
         cand = []   # (code, div_yield, vol, roe, news_score)
         for code in pool:
             if not ctx.is_tradable(code, date):
@@ -137,6 +161,22 @@ class S1DividendQuality(BaseStrategy):
             except Exception:
                 pass
             cand.append((code, f["dividend_yield"], vol, roe, news_score, f.get("pe")))
+        if not cand:
+            return []
+
+        # —— 新闻/公告/动态守卫(全量接入) ——
+        _cc = [c[0] for c in cand]
+        try:
+            import factors as _fac
+            _ind = _fac.get_industry(ctx.conn, _cc)
+        except Exception:
+            _ind = {}
+        _ban_n, _ = news_guard.guard_candidates(date, _cc, ctx.conn, self.config)
+        _ban_i = news_guard.guard_industry(date, _cc, ctx.conn, self.config, _ind)
+        _ban_s = {c for c in _cc if news_guard.structural_ban(date, c, ctx)[0]}
+        _banned = _ban_n | _ban_i | _ban_s
+        if _banned:
+            cand = [c for c in cand if c[0] not in _banned]
         if not cand:
             return []
 
@@ -190,16 +230,20 @@ class S1DividendQuality(BaseStrategy):
 
         held = set(account.positions.keys())
         orders = []
+        forced = news_guard.guard_holdings(date, held, ctx.conn, self.config)
         for code in held:
-            if code not in target:
-                nm = ctx.name(code)
-                if code in full_rank:
-                    reason = f"红利质量调仓:{nm}综合排名第{full_rank[code]}/{n_keep}掉出前{eff},卖出"
-                elif code in cand_codes:
-                    reason = f"红利质量:{nm}波动率升高、掉出低波区,卖出"
-                else:
-                    reason = f"红利质量:{nm}不再满足股息率≥{min_dy:.0%}/连续分红/ROE≥{roe_min:.0%}门槛,卖出"
-                orders.append(Order(self.strategy_id, code, "sell", 0.0, reason, date))
+            if code in target and code not in forced:
+                continue
+            nm = ctx.name(code)
+            if code in forced:
+                reason = f"红利质量:{nm}新闻黑天鹅,同步清仓"
+            elif code in full_rank:
+                reason = f"红利质量调仓:{nm}综合排名第{full_rank[code]}/{n_keep}掉出前{eff},卖出"
+            elif code in cand_codes:
+                reason = f"红利质量:{nm}波动率升高、掉出低波区,卖出"
+            else:
+                reason = f"红利质量:{nm}不再满足股息率≥{min_dy:.0%}/连续分红/ROE≥{roe_min:.0%}门槛,卖出"
+            orders.append(Order(self.strategy_id, code, "sell", 0.0, reason, date))
         for code in target:
             if code not in held:
                 dy = keep_dy[code]; roe = keep_roe[code]

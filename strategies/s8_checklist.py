@@ -26,6 +26,7 @@ import pandas as pd
 from models import Order
 from strategies.base import BaseStrategy
 from strategies import common
+from strategies import news_guard
 import factors   # 仅用 get_industry(自成一体,不经过故障的 compute_factor_exposures 管线)
 
 log = logging.getLogger("s8")
@@ -302,13 +303,22 @@ class S8ValueChecklist(BaseStrategy):
         vol_window = self.params.get("vol_window", VOL_WINDOW)
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
         w = common.target_weight(eff)
+        w = round(w * news_guard.market_exposure(date, ctx, self.config), 6)  # 市场分调仓(跟踪大盘动态)
 
         pool = ctx.members(POOL_INDEX, date)
         if not pool:
             return []
         held = set(account.positions.keys())
         codes = list(dict.fromkeys(list(pool) + list(held)))   # 池∪持仓,防持仓掉出指数后无法评估卖出
-        tradable = set(c for c in pool if ctx.is_tradable(c, date))
+        # —— 新闻/公告/动态守卫(全量接入) ——
+        _ban_n, _ = news_guard.guard_candidates(date, codes, ctx.conn, self.config)
+        _ind_of = factors.get_industry(ctx.conn, codes)
+        _ban_i = news_guard.guard_industry(date, codes, ctx.conn, self.config, _ind_of)
+        _ban_s = {c for c in codes if news_guard.structural_ban(date, c, ctx)[0]}
+        _banned = _ban_n | _ban_i | _ban_s
+        if _banned:
+            codes = [c for c in codes if c not in _banned]
+        tradable = set(common.main_board_universe(ctx, pool, self.config, date))  # 买入候选限主板宇宙(手册)
         if not tradable and not held:
             return []
 
@@ -332,17 +342,20 @@ class S8ValueChecklist(BaseStrategy):
                 break
 
         orders = []
+        forced = news_guard.guard_holdings(date, held, ctx.conn, self.config)
         for code in held:
-            if code in target:
+            if code in target and code not in forced:
                 continue
             rank = full_rank.get(code)
             close = bars.loc[code, "close"] if code in bars.index else None
             low52 = bars.loc[code, "low52"] if code in bars.index else None
             breach = bool(close is not None and low52 is not None
                           and pd.notna(close) and pd.notna(low52) and close < low52 * 1.3)
-            if rank is None or rank > keep_n or breach:
+            if rank is None or rank > keep_n or breach or code in forced:
                 nm = ctx.name(code)
-                if breach:
+                if code in forced:
+                    reason = f"清单8:{nm}新闻黑天鹅,同步清仓"
+                elif breach:
                     reason = f"清单8:{nm}跌破52周低点×1.3止损线,卖出"
                 elif rank is None:
                     reason = f"清单8:{nm}数据不足或不再满足入池条件,卖出"

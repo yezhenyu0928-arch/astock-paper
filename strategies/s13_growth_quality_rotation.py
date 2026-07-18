@@ -20,6 +20,7 @@ import macro as _macro
 import factors as _fac
 import fundamental as F
 from strategies import common
+from strategies import news_guard
 import util
 
 
@@ -94,6 +95,7 @@ class S13GrowthQualityRotation(BaseStrategy):
 
         all_codes = [r[0] for r in ctx.conn.execute(
             "SELECT DISTINCT code FROM daily_bar WHERE code LIKE 'sh%' OR code LIKE 'sz%'").fetchall()]
+        all_codes = common.main_board_universe(ctx, all_codes, self.config, date)  # 主板宇宙硬约束(手册)
 
         cands = []  # (code, roe, gy, pe, ret20, vol, ind)
         for code in all_codes:
@@ -150,6 +152,16 @@ class S13GrowthQualityRotation(BaseStrategy):
                 continue
             cands.append((code, roe, gy, f["pe"], ret20, vol, ind))
 
+        # —— 新闻/公告/动态守卫(全量接入) ——
+        _cc = [c[0] for c in cands]
+        _ind_of = _fac.get_industry(ctx.conn, _cc)
+        _ban_n, _ = news_guard.guard_candidates(date, _cc, ctx.conn, self.config)
+        _ban_i = news_guard.guard_industry(date, _cc, ctx.conn, self.config, _ind_of)
+        _ban_s = {c for c in _cc if news_guard.structural_ban(date, c, ctx)[0]}
+        _banned = _ban_n | _ban_i | _ban_s
+        if _banned:
+            cands = [c for c in cands if c[0] not in _banned]
+
         if not cands:
             return [Order(self.strategy_id, c, "sell", 0.0,
                           f"成长质量轮动:无符合ROE质量+盈利增长+强势行业个股,清仓", date)
@@ -180,9 +192,12 @@ class S13GrowthQualityRotation(BaseStrategy):
         wgt = (1.0 / eff) * stance
         tset = set(target)
         orders = []
+        forced = news_guard.guard_holdings(date, list(account.positions.keys()), ctx.conn, self.config)
         for code in list(account.positions.keys()):
             reason = None
-            if code not in tset:
+            if code in forced:
+                reason = f"成长质量轮动:{ctx.name(code)}新闻黑天鹅,同步清仓"
+            elif code not in tset:
                 reason = f"成长质量轮动:{ctx.name(code)}掉出目标池,卖出"
             else:
                 cc = ctx.close(code, 121)

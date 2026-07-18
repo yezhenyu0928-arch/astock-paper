@@ -246,6 +246,20 @@ def run(date=None, only=None):
             items = _render_fill_items(eng, ctx, reports)
             t, c = notify.build_fill_message(today, items)
             notify.push(t, c, "op", cfg)
+        # 5 之前: 持仓个股新闻预扫描(落库 news_signal(stock:{code})),
+        # 供各策略 generate_orders 内的 guard_holdings 读取, 与步骤5.5 黑天鹅强卖双保险。
+        if news_on:
+            try:
+                import news_engine as ne
+                accts = {s: eng.load_account(s) for s in eng.enabled_strategies()}
+                holdings = set()
+                for a in accts.values():
+                    holdings |= set(a.positions.keys())
+                if holdings:
+                    ne.scan_holdings(today, holdings, conn=eng.conn)
+                    log.info("持仓新闻预扫描完成(供策略guard_holdings): %d 只", len(holdings))
+            except Exception as e:
+                log.warning("持仓新闻预扫描失败(降级): %s", e)
         # 5 生成明日计划(risk 内已按市场分降敞口)
         orders = eng.run_strategies(today)
         # 5.5 持仓黑天鹅:强制清仓单 + 警示

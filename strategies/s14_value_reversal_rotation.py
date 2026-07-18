@@ -18,6 +18,7 @@ import macro as _macro
 import factors as _fac
 import fundamental as F
 from strategies import common
+from strategies import news_guard
 import util
 
 
@@ -77,6 +78,7 @@ class S14ValueReversalRotation(BaseStrategy):
 
         all_codes = [r[0] for r in ctx.conn.execute(
             "SELECT DISTINCT code FROM daily_bar WHERE code LIKE 'sh%' OR code LIKE 'sz%'").fetchall()]
+        all_codes = common.main_board_universe(ctx, all_codes, self.config, date)  # 主板宇宙硬约束(手册)
 
         cands = []  # (code, pe, pb, roe, ret60, vol_ratio, ind)
         for code in all_codes:
@@ -125,6 +127,16 @@ class S14ValueReversalRotation(BaseStrategy):
                 continue
             cands.append((code, pe, pb, roe, ret60, vol_ratio, ind))
 
+        # —— 新闻/公告/动态守卫(全量接入) ——
+        _cc = [c[0] for c in cands]
+        _ind_of = _fac.get_industry(ctx.conn, _cc)
+        _ban_n, _ = news_guard.guard_candidates(date, _cc, ctx.conn, self.config)
+        _ban_i = news_guard.guard_industry(date, _cc, ctx.conn, self.config, _ind_of)
+        _ban_s = {c for c in _cc if news_guard.structural_ban(date, c, ctx)[0]}
+        _banned = _ban_n | _ban_i | _ban_s
+        if _banned:
+            cands = [c for c in cands if c[0] not in _banned]
+
         if not cands:
             return [Order(self.strategy_id, c, "sell", 0.0,
                           f"低估反转轮动:无符合低估值+质量+超跌企稳+强势行业个股,清仓", date)
@@ -155,9 +167,12 @@ class S14ValueReversalRotation(BaseStrategy):
         wgt = (1.0 / eff) * stance
         tset = set(target)
         orders = []
+        forced = news_guard.guard_holdings(date, list(account.positions.keys()), ctx.conn, self.config)
         for code in list(account.positions.keys()):
             reason = None
-            if code not in tset:
+            if code in forced:
+                reason = f"低估反转轮动:{ctx.name(code)}新闻黑天鹅,同步清仓"
+            elif code not in tset:
                 reason = f"低估反转轮动:{ctx.name(code)}掉出目标池,卖出"
             else:
                 cc = ctx.close(code, 61)
