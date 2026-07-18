@@ -1,1 +1,1 @@
-trigger full backtest for manual-compliance discipline + news_guard integration (main_board_universe, risk tiers, 12pct cap, 80亿/8000万 floor) at 2026-07-18T01:35:21Z
+trigger full backtest: 宏观7指标+时间止损+s15综合配置策略 + structural_ban bug修复(此前所有策略候选被误清空,结果失真) at 2026-07-18T02:26:23Z
