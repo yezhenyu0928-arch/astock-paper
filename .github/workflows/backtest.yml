@@ -11,7 +11,7 @@ on:
       sids:
         description: "回测策略(逗号分隔;留空=下列默认新策略集)"
         required: false
-        default: "s1_dividend@v2,s4_smallcap@v2,s8_checklist@v1,s13_growth_quality_rotation@v2,s14_value_reversal_rotation@v2,s15_core_allocation@v2"
+        default: "s1_dividend@v2,s4_smallcap@v2,s8_checklist@v2,s13_growth_quality_rotation@v2,s14_value_reversal_rotation@v2,s15_core_allocation@v2"
   push:
     paths:
       - '.backtest-trigger'
@@ -105,7 +105,7 @@ jobs:
         run: |
           SIDS="${{ github.event.inputs.sids }}"
           if [ -z "$SIDS" ]; then
-            SIDS="s1_dividend@v2,s4_smallcap@v2,s8_checklist@v1,s13_growth_quality_rotation@v2,s14_value_reversal_rotation@v2,s15_core_allocation@v2"
+            SIDS="s1_dividend@v2,s4_smallcap@v2,s8_checklist@v2,s13_growth_quality_rotation@v2,s14_value_reversal_rotation@v2,s15_core_allocation@v2"
           fi
           JSON=$(python -c "import json,sys; print(json.dumps([s.strip() for s in sys.argv[1].split(',') if s.strip()]))" "$SIDS")
           echo "策略矩阵: $JSON"

@@ -410,3 +410,22 @@ s15_core_allocation@v2:
     pe_cap: 50
   universe: dynamic
   rebalance: monthly
+
+s8_checklist@v2:
+  class: strategies.s8_checklist.S8LowDrawdown
+  benchmark: sh510300
+  frozen_date: 2026-07-19       # 换选股逻辑:高质量低回撤动量(质量+低回撤+低波动+动量+趋势 复合打分)+宏观regime降仓+持有期跟踪止损,目标高收益低回撤
+  params:
+    hold_n: 10
+    keep_n: 12
+    max_per_industry: 2
+    min_avg_amount: 30000000
+    stop_pct: 0.10
+    mom_min: 0.05
+    roe_years: 3
+    roe_min: 0.10
+    pe_cap: 40
+    dd_window: 252
+    weights: {quality: 0.20, lowdd: 0.30, lowvol: 0.15, momentum: 0.25, trend: 0.10}
+  universe: dynamic
+  rebalance: monthly
