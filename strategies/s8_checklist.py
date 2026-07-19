@@ -463,14 +463,15 @@ def score_pool_v2(conn, codes, date, params):
         if code not in bars.index:
             continue
         b = bars.loc[code]
-        f = fund.get(code)
+        # 注意:fund 是 DataFrame(index=code),必须用 .loc[code] 取行;误用 .get(code) 会取到"列名为 code 的列"→ None
+        f = fund.loc[code] if code in fund.index else None
         yrs = annual.get(code, [])
         if not _consecutive_roe(yrs, roe_years, roe_min):
             continue
         if not _consecutive_profit(yrs, roe_years):
             continue
-        pe = f.get("pe") if f else None
-        if pe is None or pe <= 0 or pe > pe_cap:
+        pe = f.get("pe") if f is not None else None
+        if pe is None or pd.isna(pe) or pe <= 0 or pe > pe_cap:
             continue
         mom = b.get("mom_12_1")
         if mom is None or pd.isna(mom) or mom < mom_min:
