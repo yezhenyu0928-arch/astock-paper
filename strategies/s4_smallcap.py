@@ -81,7 +81,9 @@ class S4SmallCapFactor(BaseStrategy):
             ma60 = float(np.mean(c[-60:]))
             ma250 = float(np.mean(c[-250:]))
             price = c[-1]
-            if not (ma20 > ma60 > ma250 > 0 and price > ma60):
+            # 趋势门禁: 仅要求中期向上(MA60>MA250)且站上中期均线(price>MA60)即视为上升通道,
+            # 去掉原 ma20>ma60 的强追高要求——小盘+追高在震荡市易亏,改买企稳而非追高
+            if not (ma60 > ma250 > 0 and price > ma60):
                 continue
             ret20 = c[-1] / c[-21] - 1 if len(c) >= 21 else 0
             fund_score = common.get_fundamental_score(ctx, code, date)

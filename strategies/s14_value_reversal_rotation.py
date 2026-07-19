@@ -123,7 +123,9 @@ class S14ValueReversalRotation(BaseStrategy):
             if vol_ratio < 1.0:       # 未放量企稳
                 continue
             ind = _fac.get_industry(ctx.conn, [code]).get(code)
-            if not ind or ind not in strong_ind:
+            # 行业轮动是加分项而非硬门槛: 仅当存在强势行业信号(strong_ind非空)且该股有行业归属时,
+            # 才剔除不在强势行业的个股;信号缺失或无行业归属一律降级为不过滤(避免候选池恒空→0成交)
+            if strong_ind and ind and ind not in strong_ind:
                 continue
             cands.append((code, pe, pb, roe, ret60, vol_ratio, ind))
 
