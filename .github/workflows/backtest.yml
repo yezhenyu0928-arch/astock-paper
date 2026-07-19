@@ -2,7 +2,9 @@ name: backtest
 # CI 全量库回测(OPTIMIZE_V4.md 四点五节:个股策略本机建不起库,回测统一在 CI 跑)。
 # 触发:①手动 workflow_dispatch(可指定 sids);②push 改动根目录 .backtest-trigger 戳文件时。
 #   —— 用独立戳文件而非 strategies/ 路径触发,避免每次改策略/回填 reports 都误触发或自触发死循环。
-# 流程:restore DB cache → 个股库不足则内联 backfill 重建 → 逐 sid 跑五关+蒙卡 → 报告 commit 回 main。
+# 架构(2026-07-19 改):prep 单次建库/缓存 → backtest 用 matrix 并行跑各策略(每策略独立 runner,~1h,
+#   互不拖累,根治单 job 串行 6 策略 5.5h 撞 timeout-minutes:330 被强杀的问题) → collect 汇总各策略
+#   产物 artifact 后统一 commit 回 main。
 on:
   workflow_dispatch:
     inputs:
@@ -20,12 +22,15 @@ permissions:
 
 concurrency:
   group: backtest
-  cancel-in-progress: true       # 新触发的回测取消旧的僵持/排队 run,避免 concurrency 卡队列(2026-07-18 修:旧 run 长期 in_progress 占组致新 run 永久 pending)
+  cancel-in-progress: true       # 新触发的回测取消旧的僵持/排队 run,避免 concurrency 卡队列
 
 jobs:
-  run:
+  # ---------- ① 建库/缓存 + 解析策略集(单次,供并行 matrix 复用) ----------
+  prep:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 120
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -95,21 +100,88 @@ jobs:
           path: db/market.sqlite
           key: db-${{ github.run_id }}
 
-      - name: run backtests + monte-carlo
+      - name: 解析策略集为 JSON 矩阵
+        id: set
         run: |
           SIDS="${{ github.event.inputs.sids }}"
           if [ -z "$SIDS" ]; then
             SIDS="s1_dividend@v2,s4_smallcap@v1,s8_checklist@v1,s13_growth_quality_rotation@v1,s14_value_reversal_rotation@v1,s15_core_allocation@v1"
           fi
-          echo "回测集: $SIDS"
-          IFS=',' read -ra ARR <<< "$SIDS"
-          for sid in "${ARR[@]}"; do
-            sid="$(echo "$sid" | xargs)"    # 去空格
-            echo "===== 五关回测 $sid ====="
-            python backtest.py report "$sid" || echo "::warning::report $sid 失败"
-            echo "===== 蒙特卡洛 validate $sid ====="
-            python validate.py "$sid" || echo "::warning::validate $sid 失败"
+          JSON=$(python -c "import json,sys; print(json.dumps([s.strip() for s in sys.argv[1].split(',') if s.strip()]))" "$SIDS")
+          echo "策略矩阵: $JSON"
+          echo "matrix=$JSON" >> "$GITHUB_OUTPUT"
+
+  # ---------- ② 并行回测:每个策略一个独立 runner ----------
+  backtest:
+    needs: prep
+    runs-on: ubuntu-latest
+    timeout-minutes: 180        # 单策略五关+蒙卡通常~1h,180min 充足余量
+    strategy:
+      fail-fast: false          # 某策略失败不连累其它策略
+      matrix:
+        sid: ${{ fromJSON(needs.prep.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt
+
+      - name: restore DB cache (复用 prep 已建库)
+        uses: actions/cache/restore@v4
+        with:
+          path: db/market.sqlite
+          key: db-${{ github.run_id }}
+          restore-keys: db-
+
+      - name: 五关回测 + 蒙特卡洛 (${{ matrix.sid }})
+        run: |
+          sid="${{ matrix.sid }}"
+          echo "===== 五关回测 $sid ====="
+          python backtest.py report "$sid" || echo "::warning::report $sid 失败"
+          echo "===== 蒙特卡洛 validate $sid ====="
+          python validate.py "$sid" || echo "::warning::validate $sid 失败"
+
+      - name: 收集本策略新生成/变更的报告
+        run: |
+          mkdir -p out
+          # porcelain: 前3列为状态,路径从第4列起;兼容 M(改动) 与 ??(新建)
+          git status --porcelain reports/ | cut -c4- | while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            mkdir -p "out/$(dirname "$f")"
+            cp "$f" "out/$f"
           done
+          echo "本策略产物:" && (ls -R out/reports 2>/dev/null || echo "(无变更文件)")
+
+      - name: 上传报告 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ strategy.job-index }}
+          path: out/reports
+          if-no-files-found: warn
+          retention-days: 3
+
+  # ---------- ③ 汇总各策略产物,统一 commit 回 main ----------
+  collect:
+    needs: backtest
+    if: always()               # 即使个别策略失败也把已成功的报告提交回来
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载全部策略报告
+        uses: actions/download-artifact@v4
+        with:
+          pattern: report-*
+          merge-multiple: true
+          path: dl
+
+      - name: 合并进 reports/
+        run: |
+          if [ -d dl ]; then
+            cp -rv dl/. reports/ 2>/dev/null || true
+          fi
+          echo "=== reports/ 目录 ===" && ls -la reports/ | head -40
 
       - name: commit reports
         run: |
