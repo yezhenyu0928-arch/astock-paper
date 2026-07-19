@@ -27,6 +27,7 @@ from models import Order
 from strategies.base import BaseStrategy
 from strategies import common
 from strategies import news_guard
+from strategies import mf_core
 import factors   # 仅用 get_industry(自成一体,不经过故障的 compute_factor_exposures 管线)
 import macro      # compute_market_regime: 宏观 regime 自适应降仓(S8@v2 低回撤核心防线)
 
@@ -490,111 +491,44 @@ def score_pool_v2(conn, codes, date, params):
         scores[code] = w_q * q_s + w_dd * dd_s + w_vol * vol_s + w_mom * mom_s + w_tr * trend_s
     return scores, bars
 
-
 class S8LowDrawdown(BaseStrategy):
-    """S8@v2 高质量低回撤动量。generate_orders 编排:宏观regime降仓 + 复合打分选股
-    + 持有期跟踪止损(自高点回撤/破MA60)。详见模块顶部说明。"""
+    """S8@v2 红利低波低回撤(@v2 重建)。
+
+    原 v2 逻辑(质量+低回撤+动量+趋势复合打分)在 42 只大蓝筹宇宙里筛出标的极少 ->
+    修复 PE 取数 bug 后仍仅 -0.9% (因子风格错配)。
+
+    v2 重建在已验证的红利质量多因子底座(mf_core)之上, 叠加 low_vol/quality 倾斜
+    (低回撤目标), 宏观 regime 自适应降仓 + 偏紧跟踪止损(8%)。
+    """
 
     def generate_orders(self, date, ctx, account):
         if not ctx.is_last_trade_day_of_month(date):
             return []
 
-        p = self.params
-        hold_n = p.get("hold_n", 10)
-        keep_n = p.get("keep_n", 12)
-        max_per_industry = p.get("max_per_industry", 2)
-        min_avg_amount = p.get("min_avg_amount", 30000000)
-        stop_pct = p.get("stop_pct", 0.10)
+        params = {
+            "min_dividend_yield": 0.04,
+            "dividend_years": 3,
+            "roe_years": 3,
+            "roe_min": 0.08,
+            "hold_n": 10,
+            "max_per_industry": 3,
+            "low_vol_pct": 0.45,        # 更偏重低波区
+            "regime_downsize": True,    # 宏观 risk-off 降仓
+            "weights": {"dividend": 0.20, "low_vol": 0.35, "roe": 0.25,
+                        "valuation": 0.10, "news": 0.10},
+        }
+        sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
+        if not sel["target"]:
+            from strategies import news_guard
+            forced = news_guard.guard_holdings(date, list(account.positions.keys()), ctx.conn, self.config)
+            orders = [Order(self.strategy_id, code, "sell", 0.0,
+                            f"低回撤8:{ctx.name(code)}新闻黑天鹅,清仓", date)
+                      for code in account.positions.keys() if code in forced]
+            orders += [Order(self.strategy_id, code, "sell", 0.0,
+                             f"低回撤8:{ctx.name(code)}无候选,清仓", date)
+                       for code in account.positions.keys() if code not in forced]
+            return orders
+        return mf_core.build_orders(ctx, date, account, sel, params,
+                                    self.strategy_id, self.config, stop_pct=0.08)
 
-        eff0 = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
-        w = common.target_weight(eff0)
 
-        # —— 宏观 regime 自适应降仓 ——
-        eff_ratio = 1.0
-        try:
-            reg = macro.compute_market_regime(date, conn=ctx.conn)
-            rscore = reg.get("score", 50)
-            eff_ratio = 1.0 if rscore >= 60 else (0.6 if rscore >= 40 else 0.25)
-        except Exception as e:
-            log.warning("regime 失败:%s", e)
-            eff_ratio = 0.6
-        eff = max(1, int(round(eff0 * eff_ratio)))
-        if eff_ratio < 1.0:
-            w = common.target_weight(eff)
-
-        pool = ctx.members(POOL_INDEX, date)
-        if not pool:
-            return []
-        held = set(account.positions.keys())
-        codes = list(dict.fromkeys(list(pool) + list(held)))
-
-        # —— 新闻/公告/动态守卫 ——
-        _ban_n, _ = news_guard.guard_candidates(date, codes, ctx.conn, self.config)
-        _ind_of = factors.get_industry(ctx.conn, codes)
-        _ban_i = news_guard.guard_industry(date, codes, ctx.conn, self.config, _ind_of)
-        _ban_s = {c for c in codes if news_guard.structural_ban(date, c, ctx)[0]}
-        _banned = _ban_n | _ban_i | _ban_s
-        if _banned:
-            codes = [c for c in codes if c not in _banned]
-
-        tradable = set(common.main_board_universe(ctx, pool, self.config, date))
-        if not tradable and not held:
-            return []
-
-        scores, bars = score_pool_v2(ctx.conn, codes, date, p)
-        scores = {c: s for c, s in scores.items() if c in tradable}
-
-        industry_map = factors.get_industry(ctx.conn, codes)
-        ranked = sorted(scores, key=lambda c: scores[c], reverse=True)
-        full_rank = {c: i + 1 for i, c in enumerate(ranked)}
-
-        industry_count, target = {}, []
-        for code in ranked:
-            ind = industry_map.get(code) or "未知"
-            if industry_count.get(ind, 0) >= max_per_industry:
-                continue
-            target.append(code)
-            industry_count[ind] = industry_count.get(ind, 0) + 1
-            if len(target) >= eff:
-                break
-
-        orders = []
-        forced = news_guard.guard_holdings(date, held, ctx.conn, self.config)
-        for code in held:
-            if code in target and code not in forced:
-                continue
-            b = bars.loc[code] if code in bars.index else None
-            close = b.get("close") if b is not None else None
-            pos = account.positions[code]
-            peak = pos.highest_close if pos.highest_close else pos.avg_cost
-            breach = bool(close is not None and peak and peak > 0 and close < peak * (1 - stop_pct))
-            ma60 = b.get("ma60") if b is not None else None
-            ma_break = bool(close is not None and ma60 is not None and pd.notna(ma60) and close < ma60)
-            low52 = b.get("low52") if b is not None else None
-            breach52 = bool(close is not None and low52 is not None and pd.notna(close)
-                            and pd.notna(low52) and close < low52 * 1.3)
-            rank = full_rank.get(code)
-            if rank is None or rank > keep_n or breach or ma_break or breach52 or code in forced:
-                nm = ctx.name(code)
-                if code in forced:
-                    reason = f"低回撤8:{nm}新闻黑天鹅,清仓"
-                elif breach:
-                    reason = f"低回撤8:{nm}自高点回撤>{(stop_pct*100):.0f}%止损"
-                elif ma_break:
-                    reason = f"低回撤8:{nm}跌破MA60止损"
-                elif breach52:
-                    reason = f"低回撤8:{nm}跌破52周低点×1.3止损"
-                elif rank is None:
-                    reason = f"低回撤8:{nm}不再满足入池,卖出"
-                else:
-                    reason = f"低回撤8:{nm}评分第{rank}掉出前{keep_n},卖出"
-                orders.append(Order(self.strategy_id, code, "sell", 0.0, reason, date))
-
-        for code in target:
-            if code not in held:
-                nm = ctx.name(code)
-                b = bars.loc[code]
-                reason = (f"低回撤8:买入{nm}(评分{scores[code]:.2f}·动量{(b.get('mom_12_1') or 0)*100:.0f}%·"
-                          f"最大回撤{(b.get('max_dd') or 0)*100:.0f}%·波动{b.get('ann_vol') or 0:.1f})")
-                orders.append(Order(self.strategy_id, code, "buy", w, reason, date))
-        return orders

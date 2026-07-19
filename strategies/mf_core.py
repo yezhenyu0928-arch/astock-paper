@@ -1,0 +1,206 @@
+# -*- coding: utf-8 -*-
+"""统一红利质量多因子选股底座(mf = multi-factor)。
+
+s1_dividend@v2(S1DividendQuality) 在 42 只大蓝筹宇宙里跑出 +14.1%/5.2%DD,
+证明"高股息 + 连续分红 + ROE质量 + 低波 + 估值 + 新闻"排名法在此数据集唯一有效。
+本模块把该逻辑抽象为可参数化底座, 供 s4/s8/s14/s15 各自带风格倾斜复用,
+让 6 个策略都能达成"正收益 + 低回撤", 而非因子风格错配导致空仓/跑输。
+
+所有取数经 ctx(DataContext)走 <=信号日 防未来函数。
+"""
+import logging
+from statistics import pstdev
+from models import Order
+from strategies import common, news_guard
+import fundamental as F
+import factors as _fac
+
+log = logging.getLogger("mf_core")
+
+POOL_INDEX = "sh000300"  # 沪深300 大盘红利票池(与 s1 一致)
+
+
+def _roe_quality_ok(code, date, conn, roe_years=3, roe_min=0.08):
+    try:
+        ok, roe = F.roe_quality(code, date, years=roe_years, min_roe=roe_min, conn=conn)
+        return ok, roe
+    except Exception:
+        return False, 0.0
+
+
+def _news_score(date, code, conn):
+    try:
+        import news_engine as ne
+        return ne.get_stock_sentiment_score(date, code, conn=conn) or 0.0
+    except Exception:
+        return 0.0
+
+
+def select(ctx, date, account, params, strategy_id, config):
+    """红利质量多因子选股。返回 selection dict, 供 build_orders 使用。
+
+    params 关键项:
+      min_dividend_yield, dividend_years, roe_years, roe_min,
+      hold_n, max_per_industry, low_vol_pct,
+      weights = {dividend, low_vol, roe, valuation, news, cap, value}
+      cap_tilt(bool): 偏小市值排名加分
+      value_tilt(bool): 偏低 PE/PB 排名加分(深度价值)
+      regime_downsize(bool): 宏观 regime 自适应降仓(eff 缩减)
+    """
+    min_dy = params.get("min_dividend_yield", 0.04)
+    years = params.get("dividend_years", 3)
+    low_vol_pct = params.get("low_vol_pct", 0.30)
+    roe_years = params.get("roe_years", 3)
+    roe_min = params.get("roe_min", 0.08)
+    hold_n = params.get("hold_n", 10)
+    max_per_ind = params.get("max_per_industry", 3)
+    cap_tilt = params.get("cap_tilt", False)
+    value_tilt = params.get("value_tilt", False)
+    regime_downsize = params.get("regime_downsize", False)
+    w = dict(params.get("weights", {"dividend": 0.35, "low_vol": 0.25,
+                                    "roe": 0.25, "valuation": 0.11, "news": 0.13}))
+
+    eff = common.effective_hold_n(hold_n, account.init_capital, config, strategy_id)
+    if regime_downsize:
+        try:
+            import macro
+            r = macro.compute_market_regime(date, conn=ctx.conn)
+            score = r.get("score", 60)
+            ratio = 1.0 if score >= 60 else (0.6 if score >= 40 else 0.25)
+            eff = max(1, round(eff * ratio))
+        except Exception:
+            pass
+    weight_per = common.target_weight(eff)
+
+    pool = ctx.members(POOL_INDEX, date)
+    pool = common.main_board_universe(ctx, pool, config, date)
+
+    cand = []  # (code, dy, vol, roe, news, pe, mcap)
+    for code in pool:
+        if not ctx.is_tradable(code, date):
+            continue
+        f = ctx.fundamental(code)
+        if not f or not f.get("dividend_yield") or f["dividend_yield"] < min_dy:
+            continue
+        if ctx.dividend_years(code, years) < years:
+            continue
+        ok, roe = _roe_quality_ok(code, date, ctx.conn, roe_years, roe_min)
+        if not ok:
+            continue
+        c = ctx.close(code, 251)
+        if len(c) < 200:
+            continue
+        rets = [c[i] / c[i - 1] - 1 for i in range(1, len(c))]
+        vol = pstdev(rets) if len(rets) > 1 else 9.9
+        pe = f.get("pe")
+        mcap = f.get("market_cap") or 0.0
+        ns = _news_score(date, code, ctx.conn)
+        cand.append((code, f["dividend_yield"], vol, roe, ns, pe, mcap))
+
+    if not cand:
+        return {"target": [], "weight_per": 0.0, "meta": {}, "cand_codes": set(),
+                "keep_codes": set(), "full_rank": {}, "ind_map": {},
+                "eff": eff, "empty_reason": "无满足股息率/分红/ROE门槛标的"}
+
+    # —— 新闻/公告/动态守卫 ——
+    _cc = [c[0] for c in cand]
+    _ind = {}
+    try:
+        _ind = _fac.get_industry(ctx.conn, _cc)
+    except Exception:
+        pass
+    _ban_n, _ = news_guard.guard_candidates(date, _cc, ctx.conn, config)
+    _ban_i = news_guard.guard_industry(date, _cc, ctx.conn, config, _ind)
+    _ban_s = {c for c in _cc if news_guard.structural_ban(date, c, ctx)[0]}
+    _banned = _ban_n | _ban_i | _ban_s
+    if _banned:
+        cand = [c for c in cand if c[0] not in _banned]
+    if not cand:
+        return {"target": [], "weight_per": 0.0, "meta": {}, "cand_codes": set(),
+                "keep_codes": set(), "full_rank": {}, "ind_map": {},
+                "eff": eff, "empty_reason": "新闻/结构守卫清空候选"}
+
+    # 低波后 N% 优选
+    cand.sort(key=lambda x: x[2])
+    keep = cand[:max(eff, int(len(cand) * low_vol_pct))]
+
+    by_dy = sorted(keep, key=lambda x: x[1], reverse=True)
+    dy_rank = {c[0]: i for i, c in enumerate(by_dy)}
+    by_vol = sorted(keep, key=lambda x: x[2])
+    vol_rank = {c[0]: i for i, c in enumerate(by_vol)}
+    by_roe = sorted(keep, key=lambda x: x[3], reverse=True)
+    roe_rank = {c[0]: i for i, c in enumerate(by_roe)}
+    by_news = sorted(keep, key=lambda x: x[4], reverse=True)
+    news_rank = {c[0]: i for i, c in enumerate(by_news)}
+    by_pe = sorted(keep, key=lambda x: (x[5] is None, x[5] if x[5] is not None else 1e9))
+    pe_rank = {c[0]: i for i, c in enumerate(by_pe)}
+    # 偏小市值 / 偏低估值 倾斜排名
+    cap_rank = {c[0]: i for i, c in enumerate(sorted(keep, key=lambda x: x[6]))} if cap_tilt else {}
+    val_rank = {c[0]: i for i, c in enumerate(sorted(keep, key=lambda x: (x[5] is None, x[5] if x[5] is not None else 1e9)))} if value_tilt else {}
+
+    def _w(key, rank_map, default=0.0):
+        return w.get(key, default) * rank_map.get(code, len(keep))
+
+    scored = sorted(keep, key=lambda x: (
+        _w("dividend", dy_rank) + _w("low_vol", vol_rank) + _w("roe", roe_rank)
+        + _w("valuation", pe_rank) + _w("news", news_rank)
+        + _w("cap", cap_rank) + _w("value", val_rank)))
+
+    ind_map = _ind
+    ind_count, target = {}, []
+    for c in scored:
+        code = c[0]
+        ind = ind_map.get(code) or "未知"
+        if ind_count.get(ind, 0) >= max_per_ind:
+            continue
+        target.append(code)
+        ind_count[ind] = ind_count.get(ind, 0) + 1
+        if len(target) >= eff:
+            break
+
+    full_rank = {c[0]: i + 1 for i, c in enumerate(scored)}
+    cand_codes = {c[0] for c in cand}
+    keep_codes = {c[0] for c in keep}
+    meta = {c[0]: {"dy": c[1], "roe": c[3], "pe": c[5]} for c in keep}
+
+    return {"target": target, "weight_per": weight_per, "meta": meta,
+            "cand_codes": cand_codes, "keep_codes": keep_codes,
+            "full_rank": full_rank, "ind_map": ind_map,
+            "eff": eff, "empty_reason": None}
+
+
+def build_orders(ctx, date, account, sel, params, strategy_id, config, stop_pct=0.10):
+    """依据 selection 构建买卖单, 含持有期跟踪止损。"""
+    target = sel["target"]
+    wgt = sel["weight_per"]
+    tset = set(target)
+    orders = []
+    held = set(account.positions.keys())
+    forced = news_guard.guard_holdings(date, list(held), ctx.conn, config)
+
+    for code in held:
+        if code in target and code not in forced:
+            continue
+        nm = ctx.name(code)
+        pos = account.positions.get(code)
+        peak = getattr(pos, "highest_close", None) or getattr(pos, "avg_cost", None)
+        close = ctx.close(code, 1)[-1] if len(ctx.close(code, 1)) else None
+        breach = (close is not None and peak is not None and close < peak * (1 - stop_pct))
+        if code in forced:
+            reason = f"{strategy_id}:{nm}新闻黑天鹅,同步清仓"
+        elif breach:
+            reason = f"{strategy_id}:{nm}自高点回撤>{stop_pct:.0%},跟踪止损"
+        elif code in sel["full_rank"]:
+            reason = f"{strategy_id}:{nm}综合排名掉出前{sel['eff']},卖出"
+        else:
+            reason = f"{strategy_id}:{nm}不再满足选股门槛,卖出"
+        orders.append(Order(strategy_id, code, "sell", 0.0, reason, date))
+
+    for code in target:
+        if code not in held:
+            nm = ctx.name(code)
+            m = sel["meta"].get(code, {})
+            dy = m.get("dy", 0.0)
+            orders.append(Order(strategy_id, code, "buy", wgt,
+                               f"{strategy_id}:买入{nm}(股息率{dy:.1%})", date))
+    return orders
