@@ -1,7 +1,7 @@
 # s13_growth_quality_rotation@v1 五关验证报告
 
 - 资金档:50,000 元(按用户 config 实跑,不用大资金美化)
-- 生成日:2026-07-18  基准:sh510300
+- 生成日:2026-07-19  基准:sh510300
 - 参数:{'hold_n': 25, 'min_avg_amount': 30000000, 'min_market_cap': 1000000000, 'max_market_cap': 15000000000, 'max_per_sector': 3, 'roe_min': 0.08, 'growth_min': 0.05, 'growth_max': 0.8, 'pe_cap': 50, 'weights': {'roe': 0.18, 'growth': 0.18, 'value': 0.19, 'momentum': 0.25, 'lowvol': 0.2}}
 
 > 免责:模拟/历史表现不代表未来。成交按次日开盘价+真实费用滑点(SPEC_FILL)建模,故意保守。
