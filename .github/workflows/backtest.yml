@@ -21,7 +21,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: backtest
+  group: backtest-relock-20260719231018
   cancel-in-progress: true       # 新触发的回测取消旧的僵持/排队 run,避免 concurrency 卡队列
 
 jobs:
