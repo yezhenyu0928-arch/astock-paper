@@ -15,10 +15,10 @@ on:
   push:
     paths:
       - '.backtest-trigger'
+      - '.github/workflows/backtest.yml'
 
 permissions:
   contents: write
-
 
 jobs:
   # ---------- ① 建库/缓存 + 解析策略集(单次,供并行 matrix 复用) ----------

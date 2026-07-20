@@ -30,17 +30,17 @@ class S4SmallcapV2(BaseStrategy):
             "dividend_years": 3,
             "roe_years": 3,
             "roe_min": 0.08,
-            "hold_n": 8,
+            "hold_n": 6,                   # 轻度集中, 提升收益弹性(回撤由 0.04 熔断兜底)
             "max_per_industry": 3,
-            "low_vol_pct": 0.55,          # 放宽低波过滤, 保留更多含收益标的
+            "low_vol_pct": 0.60,          # 放宽低波过滤, 保留更多含收益标的
             "cap_tilt": True,             # 偏小市值排名加分(规模溢价)
             "momentum_window": 252,
             "momentum_skip": 21,
             "momentum_min": -0.05,        # 剔除深跌, 保留上行/横盘趋势
             "regime_downsize": True,
-            "regime_good": 1.0, "regime_mid": 0.85, "regime_bad": 0.6,
-            "weights": {"dividend": 0.20, "low_vol": 0.08, "roe": 0.17,
-                        "valuation": 0.10, "news": 0.08, "cap": 0.12, "momentum": 0.25},
+            "regime_good": 1.0, "regime_mid": 0.92, "regime_bad": 0.72,
+            "weights": {"dividend": 0.18, "low_vol": 0.05, "roe": 0.16,
+                        "valuation": 0.10, "news": 0.08, "cap": 0.10, "momentum": 0.33},
         }
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:

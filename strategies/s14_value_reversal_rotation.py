@@ -28,17 +28,17 @@ class S14ValueReversalRotation(BaseStrategy):
             "dividend_years": 3,
             "roe_years": 3,
             "roe_min": 0.08,
-            "hold_n": 8,
+            "hold_n": 6,                   # 轻度集中, 提升收益弹性(回撤由 0.04 熔断兜底)
             "max_per_industry": 3,
-            "low_vol_pct": 0.55,
+            "low_vol_pct": 0.60,
             "value_tilt": True,            # 偏低 PE/PB 排名加分(深度价值)
             "momentum_window": 252,
             "momentum_skip": 21,
             "momentum_min": -0.05,
             "regime_downsize": True,       # 宏观 risk-off 降仓
-            "regime_good": 1.0, "regime_mid": 0.85, "regime_bad": 0.6,
-            "weights": {"dividend": 0.22, "low_vol": 0.08, "roe": 0.18,
-                        "valuation": 0.17, "news": 0.08, "value": 0.10, "momentum": 0.17},
+            "regime_good": 1.0, "regime_mid": 0.92, "regime_bad": 0.72,
+            "weights": {"dividend": 0.20, "low_vol": 0.06, "roe": 0.17,
+                        "valuation": 0.13, "news": 0.07, "value": 0.10, "momentum": 0.27},
         }
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:

@@ -28,18 +28,18 @@ class S15CoreAllocation(BaseStrategy):
         # 红利底仓袖: 高股息 + 动量(防御+趋势)
         div_params = {
             "min_dividend_yield": 0.04, "dividend_years": 3, "roe_years": 3, "roe_min": 0.08,
-            "hold_n": 6, "max_per_industry": 2, "low_vol_pct": 0.55,
+            "hold_n": 5, "max_per_industry": 2, "low_vol_pct": 0.60,
             "momentum_window": 252, "momentum_skip": 21, "momentum_min": 0.0,
-            "regime_downsize": True, "regime_good": 1.0, "regime_mid": 0.85, "regime_bad": 0.6,
-            "weights": {"dividend": 0.35, "low_vol": 0.10, "roe": 0.15, "valuation": 0.10, "news": 0.05, "momentum": 0.25},
+            "regime_downsize": True, "regime_good": 1.0, "regime_mid": 0.92, "regime_bad": 0.72,
+            "weights": {"dividend": 0.32, "low_vol": 0.08, "roe": 0.13, "valuation": 0.10, "news": 0.05, "momentum": 0.32},
         }
         # 质量成长袖: 放宽股息门槛, 重 ROE质量 + 估值 + 动量(纳入高质量票)
         grw_params = {
             "min_dividend_yield": 0.015, "dividend_years": 2, "roe_years": 3, "roe_min": 0.10,
-            "hold_n": 6, "max_per_industry": 2, "low_vol_pct": 0.55,
+            "hold_n": 5, "max_per_industry": 2, "low_vol_pct": 0.60,
             "momentum_window": 252, "momentum_skip": 21, "momentum_min": 0.0,
-            "regime_downsize": True, "regime_good": 1.0, "regime_mid": 0.85, "regime_bad": 0.6,
-            "weights": {"dividend": 0.08, "low_vol": 0.08, "roe": 0.32, "valuation": 0.22, "news": 0.10, "momentum": 0.20},
+            "regime_downsize": True, "regime_good": 1.0, "regime_mid": 0.92, "regime_bad": 0.72,
+            "weights": {"dividend": 0.07, "low_vol": 0.06, "roe": 0.29, "valuation": 0.20, "news": 0.10, "momentum": 0.28},
         }
         sel_d = mf_core.select(ctx, date, account, div_params, self.strategy_id, self.config)
         sel_g = mf_core.select(ctx, date, account, grw_params, self.strategy_id, self.config)

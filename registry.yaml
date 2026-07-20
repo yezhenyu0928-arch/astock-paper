@@ -129,10 +129,22 @@ s4_smallcap@v2:
   benchmark: sh510300
   frozen_date: 2026-07-06       # P0升级:4因子→7因子(BETA/EARNINGS_YIELD/QUALITY)+macro regime+行业动量倾斜
   params:
-    factor_weights: {SIZE: 0.20, MOMENTUM: 0.20, VALUE: 0.15, LIQUIDITY: 0.10, BETA: 0.15, EARNINGS_YIELD: 0.10, QUALITY: 0.10}
-    resvol_cap_z: 1.28
+    min_dividend_yield: 0.035
+    dividend_years: 3
+    roe_years: 3
+    roe_min: 0.08
+    hold_n: 6
     max_per_industry: 3
-    hold_n: 20
+    low_vol_pct: 0.60
+    cap_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -0.05
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 0.92
+    regime_bad: 0.72
+    weights: {dividend: 0.18, low_vol: 0.05, roe: 0.16, valuation: 0.10, news: 0.08, cap: 0.10, momentum: 0.33}
   universe: dynamic
   rebalance: monthly
 
@@ -346,16 +358,16 @@ s13_growth_quality_rotation@v2:
   benchmark: sh510300
   frozen_date: 2026-07-19       # 修复: 行业轮动降级(strong_ind空时不过滤),解决全A库0成交
   params:
-    hold_n: 25
+    hold_n: 12
     min_avg_amount: 30000000
     min_market_cap: 1000000000
-    max_market_cap: 15000000000
+    max_market_cap: 100000000000
     max_per_sector: 3
     roe_min: 0.08
     growth_min: 0.05
     growth_max: 0.80
     pe_cap: 50
-    weights: {roe: 0.18, growth: 0.18, value: 0.19, momentum: 0.25, lowvol: 0.20}
+    weights: {roe: 0.15, growth: 0.18, value: 0.13, momentum: 0.42, lowvol: 0.07}
   universe: dynamic
   rebalance: monthly
 
@@ -364,15 +376,22 @@ s14_value_reversal_rotation@v2:
   benchmark: sh510300
   frozen_date: 2026-07-19       # 修复: 行业轮动降级(strong_ind空时不过滤),解决全A库0成交
   params:
-    hold_n: 25
-    min_avg_amount: 30000000
-    min_market_cap: 1000000000
-    max_market_cap: 15000000000
-    max_per_sector: 3
+    min_dividend_yield: 0.035
+    dividend_years: 3
+    roe_years: 3
     roe_min: 0.08
-    pe_cap: 30
-    pb_cap: 3.0
-    weights: {value_pe: 0.20, value_pb: 0.13, quality: 0.17, reversal: 0.25, stabilize: 0.25}
+    hold_n: 6
+    max_per_industry: 3
+    low_vol_pct: 0.60
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -0.05
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 0.92
+    regime_bad: 0.72
+    weights: {dividend: 0.20, low_vol: 0.06, roe: 0.17, valuation: 0.13, news: 0.07, value: 0.10, momentum: 0.27}
   universe: dynamic
   rebalance: monthly
 
@@ -381,21 +400,8 @@ s15_core_allocation@v2:
   benchmark: sh510300
   frozen_date: 2026-07-19       # 激活配置: 放宽两袖门槛(股息率2%↓/连续分红2年↓/ROE2年↓/成长同比0~100%),解决几乎空仓
   params:
-    dividend_weight: 0.35
-    growth_weight: 0.45
-    dividend_hold_n: 5
-    growth_hold_n: 5
-    min_dividend_yield: 0.02
-    dividend_years: 2
-    roe_min: 0.08
-    roe_years: 2
-    growth_min: 0.0
-    growth_max: 1.0
-    min_avg_amount: 80000000
-    min_market_cap: 8000000000
-    max_market_cap: 500000000000
-    max_per_industry: 2
-    pe_cap: 50
+    dividend_sleeve: {min_dividend_yield: 0.04, hold_n: 5, low_vol_pct: 0.60, momentum_min: 0.0, regime_mid: 0.92, regime_bad: 0.72, weights: {dividend: 0.32, low_vol: 0.08, roe: 0.13, valuation: 0.10, news: 0.05, momentum: 0.32}}
+    growth_sleeve: {min_dividend_yield: 0.015, hold_n: 5, low_vol_pct: 0.60, momentum_min: 0.0, regime_mid: 0.92, regime_bad: 0.72, weights: {dividend: 0.07, low_vol: 0.06, roe: 0.29, valuation: 0.20, news: 0.10, momentum: 0.28}}
   universe: dynamic
   rebalance: monthly
 
@@ -404,16 +410,20 @@ s8_checklist@v2:
   benchmark: sh510300
   frozen_date: 2026-07-19       # 换选股逻辑:高质量低回撤动量(质量+低回撤+低波动+动量+趋势 复合打分)+宏观regime降仓+持有期跟踪止损,目标高收益低回撤
   params:
-    hold_n: 10
-    keep_n: 12
-    max_per_industry: 2
-    min_avg_amount: 30000000
-    stop_pct: 0.10
-    mom_min: 0.05
+    min_dividend_yield: 0.04
+    dividend_years: 3
     roe_years: 3
-    roe_min: 0.10
-    pe_cap: 40
-    dd_window: 252
-    weights: {quality: 0.20, lowdd: 0.30, lowvol: 0.15, momentum: 0.25, trend: 0.10}
+    roe_min: 0.08
+    hold_n: 6
+    max_per_industry: 3
+    low_vol_pct: 0.60
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 0.92
+    regime_bad: 0.72
+    weights: {dividend: 0.16, low_vol: 0.15, roe: 0.19, valuation: 0.10, news: 0.10, momentum: 0.30}
   universe: dynamic
   rebalance: monthly
