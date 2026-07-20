@@ -15,14 +15,10 @@ on:
   push:
     paths:
       - '.backtest-trigger'
-      - '.github/workflows/backtest.yml'
 
 permissions:
   contents: write
 
-concurrency:
-  group: backtest-relock-20260719231018
-  cancel-in-progress: true       # 新触发的回测取消旧的僵持/排队 run,避免 concurrency 卡队列
 
 jobs:
   # ---------- ① 建库/缓存 + 解析策略集(单次,供并行 matrix 复用) ----------
