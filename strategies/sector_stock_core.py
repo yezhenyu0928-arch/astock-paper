@@ -3,14 +3,27 @@
 
 设计意图(对齐用户方向:选对行业赛道 + 行业轮动 + 新闻抓风口 + 及时风控卖出,且只买卖个股不碰ETF):
 - 选对行业赛道: 用申万一级行业动量(行业指数涨幅的截面排名)作为"政策/景气/风口"的
-  最可验证代理(业界研究: 行业动量年化~19%、行业ETF动量即自动跟随产业政策主线);
+  最可验证代理;
 - 行业内选股: 在最强几个行业里, 按风格倾斜(小盘/红利/成长/价值/均衡)挑个股;
-- 及时风控卖出: 宽基趋势(沪深300 跌破均线)或宏观收紧或市场急跌 -> 整仓清仓持现金
-  (不买任何ETF, 现金即避险资产); 叠加 news_guard 黑天鹅强卖;
+- 及时风控卖出: 两层护栏, 保守优先控回撤——
+   ① 组合层硬回撤护栏(不依赖基准): 跟踪账户净值峰值, 一旦从峰值回撤超 hard_dd_guard
+      (默认3%)即整仓清仓持现金。这能抓住"下跌第一腿"(60日趋势线太慢扛的初始跌幅),
+      把峰值回撤结构性压在 ~4-5%(留 1 日结算滞后缓冲);
+   ② 宽基趋势门禁(抓风口代理): 沪深300 价格跌破慢线(默认60日MA)即判定为空头市,
+      禁止建仓/持有 —— 避免"清仓后次月又抄在半山腰、吃第二腿下跌"的再入场陷阱;
+      宏观regime差 或 近 fast 日急跌超阈 也触发清仓。
+  风险-off 一律整仓清仓持现金(不买任何ETF); 叠加 news_guard 黑天鹅强卖。
 - 新闻抓风口: 作为实盘叠加层(news_guard 黑天鹅强卖 + 可选行业主题加分); 历史回测无
   新闻数据则中性退化, 不污染回测。
 
 回测纪律: 所有取数经 ctx(DataContext) 走 <=信号日, 防未来函数; 成交按次日开盘价+真实费用滑点。
+
+Round 3 关键修复(相对 Round 2):
+- Round 2 失败根因: generate_core 在每个调仓日无条件重新全选建仓, 60日趋势线太慢,
+  清仓后次月又抄回下跌市吃"第二腿", 导致 5 策略齐刷刷 ~12% 回撤。
+- 本版: ① 新增组合层硬回撤护栏(净值峰值跟踪, 与基准数据无关, 可靠); ② 趋势门禁改为
+  "空头(价格<慢线)即禁止持仓", 只在确认多头(价格>慢线)时才建仓; ③ 基准查找加回退
+  (sh000300->sh510300), 缺失时保守认定为空头(不裸奔 beta)。
 """
 import logging
 from statistics import pstdev, median
@@ -22,7 +35,8 @@ import factors as _fac
 log = logging.getLogger("sector_stock_core")
 
 POOL_INDEX = "sh000300"   # 沪深300 大盘票池(覆盖全部31个申万一级行业)
-BENCH = "sh510300"        # 宽基趋势代理(仅读取价格作信号, 不交易)
+# 宽基趋势代理候选(仅读取价格作信号, 不交易)。优先指数本身, 回退到ETF, 任一可用即可。
+BENCH_CANDIDATES = ["sh000300", "sh510300"]
 
 
 def _empty(eff, reason):
@@ -31,42 +45,20 @@ def _empty(eff, reason):
 
 
 def _bench_state(ctx, date, slow, fast):
-    """返回 (慢线破位, 快线破位, 近fast日收益)。取数失败返回 None。"""
-    try:
-        c = ctx.close(BENCH, slow + 1)
-        if len(c) < slow:
-            return None
+    """返回 (慢线破位, 快线破位, 近fast日收益); 所有候选都取不到足够数据返回 None。"""
+    for code in BENCH_CANDIDATES:
+        try:
+            c = ctx.close(code, slow + 1)
+        except Exception:
+            continue
+        if len(c) < slow or c[-1] <= 0:
+            continue
         slow_ma = sum(c[-slow:]) / slow
         price = c[-1]
-        if price <= 0 or slow_ma <= 0:
-            return None
         fast_ma = sum(c[-fast:]) / fast if len(c) >= fast else slow_ma
         fast_ret = (price / c[-fast] - 1.0) if len(c) >= fast and c[-fast] else 0.0
         return (price < slow_ma, price < fast_ma, fast_ret)
-    except Exception:
-        return None
-
-
-def market_risk_off(ctx, date, params, config):
-    """宽基趋势 + 宏观 判定是否清仓持现金(不买ETF)。保守优先控回撤。"""
-    slow = int(params.get("trend_slow_ma", 60))
-    fast = int(params.get("trend_fast_ma", 20))
-    st = _bench_state(ctx, date, slow, fast)
-    slow_down, fast_down, fast_ret = (False, False, 0.0)
-    if st is not None:
-        slow_down, fast_down, fast_ret = st
-    macro_bad = False
-    if params.get("use_macro", True):
-        try:
-            import macro
-            r = macro.compute_market_regime(date, conn=ctx.conn)
-            macro_bad = (r.get("score", 60) or 60) < params.get("macro_bad_score", 40)
-        except Exception:
-            pass
-    # 市场急跌(近fast日跌超阈值)也避险
-    sharp_drop = fast_ret < -params.get("sharp_drop_thr", 0.08)
-    # 保守退出: 慢线破位 / 宏观差 / 市场急跌 任一即走
-    return bool(slow_down) or bool(macro_bad) or bool(sharp_drop)
+    return None
 
 
 def _stock_momentum(ctx, code, mom_w):
@@ -229,25 +221,62 @@ def build_orders(ctx, date, account, sel, params, strategy_id, config, stop_pct=
 
 
 def generate_core(self, date, ctx, account, params):
-    """供各策略 generate_orders 调用的统一入口(每日调用)。"""
+    """供各策略 generate_orders 调用的统一入口(每日调用)。
+
+    风控优先: 组合硬回撤护栏 / 宽基空头门禁 / 宏观差 / 急跌 -> 清仓持现金(不买ETF)。
+    仅在"趋势确认多头(价格>慢线)且组合安全"时才建仓/持仓; 非调仓日仅跟踪止损维护。
+    """
     stop_pct = params.get("stop_pct", 0.08)
     rebal = params.get("rebalance", "monthly")
     due = (ctx.is_last_trade_day_of_month(date) if rebal == "monthly"
            else ctx.is_last_trade_day_of_week(date))
 
-    # 1) 风控优先: 宽基趋势/宏观/急跌走坏 -> 清仓持现金(不买ETF)
-    try:
-        if market_risk_off(ctx, date, params, self.config):
-            held = list(account.positions.keys())
-            if held:
-                return [Order(self.strategy_id, code, "sell", 0.0,
-                              f"{self.strategy_id}:{ctx.name(code)}宽基趋势走弱,清仓避险", date)
-                        for code in held]
-            return []
-    except Exception:
-        pass
+    # —— ① 组合层硬回撤护栏(不依赖基准, 直接锁峰值回撤) ——
+    nav = account.nav or 1.0
+    peak = max(getattr(self, "_nav_peak", 1.0) or 1.0, nav)
+    self._nav_peak = peak
+    dd = (1 - nav / peak) if peak > 0 else 0.0
+    hard_guard = float(params.get("hard_dd_guard", 0.03))
+    dd_breach = dd > hard_guard
 
-    # 2) 调仓日: 全选 + 调仓
+    # —— ② 宽基趋势门禁(抓风口代理) + ③ 宏观/急跌退出信号 ——
+    slow = int(params.get("trend_slow_ma", 60))
+    fast = int(params.get("trend_fast_ma", 20))
+    st = _bench_state(ctx, date, slow, fast)
+    bench_ok = st is not None
+    slow_down, fast_down, fast_ret = (True, True, -9.9) if st is None else st
+    # 空头判定: 价格跌破慢线(熊市)即禁止持仓(只出不进)
+    bear = bool(slow_down)
+
+    macro_bad = False
+    if params.get("use_macro", True):
+        try:
+            import macro
+            r = macro.compute_market_regime(date, conn=ctx.conn)
+            macro_bad = (r.get("score", 60) or 60) < params.get("macro_bad_score", 40)
+        except Exception:
+            pass
+    sharp_drop = (fast_ret is not None) and (fast_ret < -float(params.get("sharp_drop_thr", 0.06)))
+    exit_sig = bool(macro_bad) or bool(sharp_drop)
+
+    risk_off = bool(bear) or bool(exit_sig) or bool(dd_breach)
+    if not bench_ok:
+        # 无基准数据: 保守认定为空头, 不裸奔 beta(避免 Round 2 式 ~12% 回撤); 记日志便于排查
+        risk_off = True
+        log.warning("%s 基准趋势数据缺失, 保守按空头处理(不持仓)", self.strategy_id)
+
+    if risk_off:
+        held = list(account.positions.keys())
+        # 清仓/持币时重置净值峰值, 避免 dd 长期卡在阈值致趋势转好后无法再入场
+        self._nav_peak = nav
+        if held:
+            return [Order(self.strategy_id, code, "sell", 0.0,
+                          f"{self.strategy_id}:{ctx.name(code)}风控规避"
+                          f"(空头/急跌/回撤{dd:.1%}),清仓持现金", date)
+                    for code in held]
+        return []
+
+    # —— 趋势向好 & 组合安全: 建仓/维护 ——
     if due:
         sel = select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:
@@ -259,7 +288,7 @@ def generate_core(self, date, ctx, account, params):
             return []
         return build_orders(ctx, date, account, sel, params, self.strategy_id, self.config, stop_pct)
 
-    # 3) 非调仓日: 仅跟踪止损 / 黑天鹅维护(不新建仓)
+    # 非调仓日: 仅跟踪止损 / 黑天鹅维护(不新建仓)
     sells = _stop_breach(ctx, account, stop_pct)
     forced = set()
     try:

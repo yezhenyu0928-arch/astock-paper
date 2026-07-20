@@ -140,7 +140,8 @@ s4_smallcap@v2:
     macro_bad_score: 40
     min_ind_members: 3
     stop_pct: 0.09
-    sharp_drop_thr: 0.08
+    sharp_drop_thr: 0.06
+    hard_dd_guard: 0.03
     tilt: smallcap
     weights: {momentum: 0.30, low_vol: 0.10, roe: 0.10, valuation: 0.10, dividend: 0.10, size: 0.30}
   universe: dynamic
@@ -367,7 +368,8 @@ s13_growth_quality_rotation@v2:
     macro_bad_score: 40
     min_ind_members: 3
     stop_pct: 0.10
-    sharp_drop_thr: 0.08
+    sharp_drop_thr: 0.06
+    hard_dd_guard: 0.03
     tilt: growth
     weights: {momentum: 0.30, low_vol: 0.10, roe: 0.28, valuation: 0.10, dividend: 0.05, size: 0.12}
   universe: dynamic
@@ -389,7 +391,8 @@ s14_value_reversal_rotation@v2:
     macro_bad_score: 40
     min_ind_members: 3
     stop_pct: 0.10
-    sharp_drop_thr: 0.08
+    sharp_drop_thr: 0.06
+    hard_dd_guard: 0.03
     tilt: value
     weights: {momentum: 0.25, low_vol: 0.10, roe: 0.10, valuation: 0.35, dividend: 0.10, size: 0.10}
   universe: dynamic
@@ -411,7 +414,8 @@ s15_core_allocation@v2:
     macro_bad_score: 40
     min_ind_members: 3
     stop_pct: 0.08
-    sharp_drop_thr: 0.08
+    sharp_drop_thr: 0.06
+    hard_dd_guard: 0.03
     tilt: balanced
     weights: {momentum: 0.30, low_vol: 0.20, roe: 0.20, valuation: 0.15, dividend: 0.10, size: 0.05}
   universe: dynamic
@@ -433,7 +437,8 @@ s8_checklist@v2:
     macro_bad_score: 40
     min_ind_members: 3
     stop_pct: 0.08
-    sharp_drop_thr: 0.08
+    sharp_drop_thr: 0.06
+    hard_dd_guard: 0.03
     tilt: dividend
     weights: {momentum: 0.22, low_vol: 0.18, roe: 0.22, valuation: 0.10, dividend: 0.28, size: 0.00}
   universe: dynamic

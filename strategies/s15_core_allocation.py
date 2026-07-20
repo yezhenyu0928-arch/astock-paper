@@ -18,7 +18,7 @@ class S15CoreAllocation(BaseStrategy):
             "trend_slow_ma": 60, "trend_fast_ma": 20,
             "use_macro": True, "macro_bad_score": 40, "use_news": True,
             "min_ind_members": 3, "stop_pct": 0.08,
-            "sharp_drop_thr": 0.08,
+            "sharp_drop_thr": 0.06, "hard_dd_guard": 0.03,
             "tilt": "balanced",
             "weights": {"momentum": 0.30, "low_vol": 0.20, "roe": 0.20,
                         "valuation": 0.15, "dividend": 0.10, "size": 0.05},
