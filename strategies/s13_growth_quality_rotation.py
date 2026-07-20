@@ -82,15 +82,15 @@ class S13GrowthQualityRotation(BaseStrategy):
 
         min_avg = self.params.get("min_avg_amount", 30_000_000)
         min_cap = self.params.get("min_market_cap", 10e8)
-        max_cap = self.params.get("max_market_cap", 150e8)
-        hold_n = self.params.get("hold_n", 25)
+        max_cap = self.params.get("max_market_cap", 1000e8)  # 放宽市值上限, 纳入中大盘(原150亿过小, 生产库几乎全剔除→常空仓)
+        hold_n = self.params.get("hold_n", 15)
         max_per_sec = self.params.get("max_per_sector", 3)
         roe_min = self.params.get("roe_min", 0.08)
         g_min = self.params.get("growth_min", 0.05)
         g_max = self.params.get("growth_max", 0.80)
         pe_cap = self.params.get("pe_cap", 50)
-        w = self.params.get("weights", {"roe": 0.18, "growth": 0.18, "value": 0.19,
-                                        "momentum": 0.25, "lowvol": 0.20})
+        w = self.params.get("weights", {"roe": 0.15, "growth": 0.20, "value": 0.15,
+                                        "momentum": 0.35, "lowvol": 0.15})
         eff = common.effective_hold_n(hold_n, account.init_capital, self.config, self.strategy_id)
 
         all_codes = [r[0] for r in ctx.conn.execute(
@@ -143,7 +143,7 @@ class S13GrowthQualityRotation(BaseStrategy):
             if ret20 <= 0:
                 continue
             ret60 = closes[-1] / closes[-61] - 1 if len(closes) >= 61 else 0
-            if ret60 > 1.0:          # 近60日>100%过热,避开接盘
+            if ret60 > 2.0:          # 近60日>200%极端过热才避开接盘(放宽, 提高持仓率)
                 continue
             rets = np.diff(closes[-60:])
             vol = float(np.std(rets)) if len(rets) > 1 else 9.9

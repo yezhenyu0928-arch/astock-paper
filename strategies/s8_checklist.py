@@ -510,12 +510,16 @@ class S8LowDrawdown(BaseStrategy):
             "dividend_years": 3,
             "roe_years": 3,
             "roe_min": 0.08,
-            "hold_n": 10,
+            "hold_n": 8,
             "max_per_industry": 3,
-            "low_vol_pct": 0.45,        # 更偏重低波区
+            "low_vol_pct": 0.55,        # 保留更多候选(含动量上行标的)
+            "momentum_window": 252,
+            "momentum_skip": 21,
+            "momentum_min": 0.0,        # 要求上行趋势(空仓等趋势恢复, 控回撤)
             "regime_downsize": True,    # 宏观 risk-off 降仓
-            "weights": {"dividend": 0.20, "low_vol": 0.35, "roe": 0.25,
-                        "valuation": 0.10, "news": 0.10},
+            "regime_good": 1.0, "regime_mid": 0.85, "regime_bad": 0.6,
+            "weights": {"dividend": 0.18, "low_vol": 0.22, "roe": 0.20,
+                        "valuation": 0.10, "news": 0.10, "momentum": 0.20},
         }
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:

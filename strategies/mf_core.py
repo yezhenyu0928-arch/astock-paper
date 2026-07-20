@@ -57,8 +57,12 @@ def select(ctx, date, account, params, strategy_id, config):
     cap_tilt = params.get("cap_tilt", False)
     value_tilt = params.get("value_tilt", False)
     regime_downsize = params.get("regime_downsize", False)
-    w = dict(params.get("weights", {"dividend": 0.35, "low_vol": 0.25,
-                                    "roe": 0.25, "valuation": 0.11, "news": 0.13}))
+    # 动量(12-1月, 跳过最近1月避免短期反转): 趋势择时强收益来源
+    mom_win = params.get("momentum_window", 252)
+    mom_skip = params.get("momentum_skip", 21)
+    mom_min = params.get("momentum_min", None)   # 硬门槛: 仅保留 >= mom_min 的标的(趋势上行); None=不筛
+    w = dict(params.get("weights", {"dividend": 0.25, "low_vol": 0.15, "roe": 0.20,
+                                    "valuation": 0.10, "news": 0.10, "momentum": 0.20}))
 
     eff = common.effective_hold_n(hold_n, account.init_capital, config, strategy_id)
     if regime_downsize:
@@ -66,7 +70,11 @@ def select(ctx, date, account, params, strategy_id, config):
             import macro
             r = macro.compute_market_regime(date, conn=ctx.conn)
             score = r.get("score", 60)
-            ratio = 1.0 if score >= 60 else (0.6 if score >= 40 else 0.25)
+            # 可调降仓比例(默认较旧版温和: 风险市仍留 0.5 仓, 避免踏空反弹)
+            rgood = params.get("regime_good", 1.0)
+            rmid = params.get("regime_mid", 0.75)
+            rbad = params.get("regime_bad", 0.5)
+            ratio = rgood if score >= 60 else (rmid if score >= 40 else rbad)
             eff = max(1, round(eff * ratio))
         except Exception:
             pass
@@ -95,7 +103,13 @@ def select(ctx, date, account, params, strategy_id, config):
         pe = f.get("pe")
         mcap = f.get("market_cap") or 0.0
         ns = _news_score(date, code, ctx.conn)
-        cand.append((code, f["dividend_yield"], vol, roe, ns, pe, mcap))
+        # 动量: 12-1月收益(close[-1]/close[-(win+skip)]-1), 数据不足给 None
+        mom = None
+        if mom_win:
+            mcs = ctx.close(code, mom_win + mom_skip + 1)
+            if len(mcs) >= mom_win + mom_skip + 1 and mcs[-(mom_win + mom_skip + 1)]:
+                mom = mcs[-1] / mcs[-(mom_win + mom_skip + 1)] - 1
+        cand.append((code, f["dividend_yield"], vol, roe, ns, pe, mcap, mom))
 
     if not cand:
         return {"target": [], "weight_per": 0.0, "meta": {}, "cand_codes": set(),
@@ -120,9 +134,17 @@ def select(ctx, date, account, params, strategy_id, config):
                 "keep_codes": set(), "full_rank": {}, "ind_map": {},
                 "eff": eff, "empty_reason": "新闻/结构守卫清空候选"}
 
-    # 低波后 N% 优选
+    # 低波后 N% 优选(low_vol_pct 越大, 保留越多候选含较高收益/较高波动标的)
     cand.sort(key=lambda x: x[2])
     keep = cand[:max(eff, int(len(cand) * low_vol_pct))]
+
+    # 动量硬门槛(趋势择时): 仅保留近期上行标的, 剔除深跌趋势; 空仓等待下一月
+    if mom_min is not None:
+        keep = [c for c in keep if (c[7] or 0) >= mom_min]
+        if not keep:
+            return {"target": [], "weight_per": 0.0, "meta": {}, "cand_codes": set(),
+                    "keep_codes": set(), "full_rank": {}, "ind_map": {},
+                    "eff": eff, "empty_reason": "动量门槛剔除全部候选(空仓等待)"}
 
     by_dy = sorted(keep, key=lambda x: x[1], reverse=True)
     dy_rank = {c[0]: i for i, c in enumerate(by_dy)}
@@ -134,17 +156,27 @@ def select(ctx, date, account, params, strategy_id, config):
     news_rank = {c[0]: i for i, c in enumerate(by_news)}
     by_pe = sorted(keep, key=lambda x: (x[5] is None, x[5] if x[5] is not None else 1e9))
     pe_rank = {c[0]: i for i, c in enumerate(by_pe)}
+    # 动量排名(收益越高名次越前; 缺失者排末尾)
+    by_mom = sorted(keep, key=lambda x: (x[7] is None, x[7] if x[7] is not None else -9e9),
+                    reverse=True)
+    mom_rank = {c[0]: i for i, c in enumerate(by_mom)}
     # 偏小市值 / 偏低估值 倾斜排名
     cap_rank = {c[0]: i for i, c in enumerate(sorted(keep, key=lambda x: x[6]))} if cap_tilt else {}
     val_rank = {c[0]: i for i, c in enumerate(sorted(keep, key=lambda x: (x[5] is None, x[5] if x[5] is not None else 1e9)))} if value_tilt else {}
 
-    def _w(key, rank_map, default=0.0):
-        return w.get(key, default) * rank_map.get(code, len(keep))
+    def _score(c):
+        """按各因子名次加权打分(名次越小越优); 修复原 _w(code) 闭包误用最后一只候选的 bug。"""
+        code = c[0]
+        return (w.get("dividend", 0.0) * dy_rank.get(code, len(keep))
+                + w.get("low_vol", 0.0) * vol_rank.get(code, len(keep))
+                + w.get("roe", 0.0) * roe_rank.get(code, len(keep))
+                + w.get("valuation", 0.0) * pe_rank.get(code, len(keep))
+                + w.get("news", 0.0) * news_rank.get(code, len(keep))
+                + w.get("cap", 0.0) * cap_rank.get(code, len(keep))
+                + w.get("value", 0.0) * val_rank.get(code, len(keep))
+                + w.get("momentum", 0.0) * mom_rank.get(code, len(keep)))
 
-    scored = sorted(keep, key=lambda x: (
-        _w("dividend", dy_rank) + _w("low_vol", vol_rank) + _w("roe", roe_rank)
-        + _w("valuation", pe_rank) + _w("news", news_rank)
-        + _w("cap", cap_rank) + _w("value", val_rank)))
+    scored = sorted(keep, key=_score)
 
     ind_map = _ind
     ind_count, target = {}, []

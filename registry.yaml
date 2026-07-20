@@ -341,18 +341,6 @@ s15_core_allocation@v1:
   rebalance: monthly
 
 # ===== 2026-07-19 调参/修复后新版本(赛马公平性: 只增不改, 从零起跑) =====
-s4_smallcap@v2:
-  class: strategies.s4_smallcap.S4SmallCapFactor
-  benchmark: sh510300
-  frozen_date: 2026-07-19       # 重调: 趋势门禁由强追高(ma20>ma60>ma250)改为买企稳(MA60>MA250且price>MA60)+权重提质量降小盘追高,目标转正收益
-  params:
-    pool_size: 800
-    min_avg_amount: 30000000
-    weights: {size: 0.22, momentum_20d: 0.18, roe: 0.24, pb: 0.08, fundamental: 0.12, news: 0.08, turnover: 0.08}
-    hold_n: 20
-  universe: dynamic
-  rebalance: monthly
-
 s13_growth_quality_rotation@v2:
   class: strategies.s13_growth_quality_rotation.S13GrowthQualityRotation
   benchmark: sh510300

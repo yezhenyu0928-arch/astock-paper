@@ -17,6 +17,13 @@ MARKET_PROXY = "sh510300"   # 大盘代理(沪深300ETF)
 # 策略止损类型:trend(8%) / rotation(12%) / none
 _STOP_TYPE = {"s3": "trend", "s1": "rotation", "s2": "rotation", "s4": "rotation", "s5": "none"}
 
+# 策略级回撤熔断线(手册总回撤红线)。用户硬指标:除 s1 外(豁免调整),s4/s8/s13/s14/s15
+# 必须回撤≤5%,故各自熔断线锁 0.05; s1 维持 0.10 不变(尊重"S1不调整")。
+_STRATEGY_MAX_DD = {
+    "s1": 0.10,
+    "s4": 0.05, "s8": 0.05, "s13": 0.05, "s14": 0.05, "s15": 0.05,
+}
+
 
 def _stop_type(sid):
     return _STOP_TYPE.get(sid.split("_")[0], "rotation")
@@ -31,7 +38,8 @@ def _clearance_orders(sid, account, date, reason):
 
 def pre_check(date, ctx, states, cfg):
     date = util.to_date_str(date)
-    max_dd = cfg["risk"]["strategy_max_drawdown"]
+    # 策略级熔断线(优先用 _STRATEGY_MAX_DD,缺省回退全局配置)
+    _global_mdd = cfg["risk"].get("strategy_max_drawdown", 0.10)
     forced, alerts = [], []
 
     # 各账户回撤熔断(可重置):首次触发→清仓+告警+冻结;已冻结(上轮已清仓)→重置峰值+解冻,继续参赛。
@@ -45,6 +53,8 @@ def pre_check(date, ctx, states, cfg):
             continue
         peak = max(st.get("highest_nav", 1.0), acct.nav)
         dd = 1 - acct.nav / peak if peak > 0 else 0
+        # 按策略前缀取熔断线: s4/s8/s13/s14/s15 锁 0.05, s1 维持 0.10
+        max_dd = _STRATEGY_MAX_DD.get(sid.split("_")[0], _global_mdd)
         if dd > max_dd:
             alerts.append(f"🔴 策略 {sid} 回撤 {dd:.1%} 触发熔断线 {max_dd:.0%},清仓降险并告警(次日重置参赛)")
             log.warning(alerts[-1])

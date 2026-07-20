@@ -20,3 +20,6 @@ Thumbs.db
 .idea/
 
 # 注:state/ reports/ docs/ 需提交(daily.yml 靠 git 持久化账户净值与看板)
+
+# WorkBuddy 项目状态目录(automations/memory/ci 文件), 非仓库内容, 不进 git
+.workbuddy/

@@ -1,1 +1,1 @@
-backtest trigger 2026-07-19T14:02:22Z (rebuild s4/s8/s14/s15 on mf_core dividend-quality base)
+backtest trigger 2026-07-20T01:50:00Z (fix mf_core scoring closure bug + add 12-1m momentum; s4/s8/s13/s14/s15 return enhancement; risk.py per-strategy 5% DD circuit breaker for s1-exempt set)
