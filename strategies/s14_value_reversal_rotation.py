@@ -1,55 +1,25 @@
 # -*- coding: utf-8 -*-
-"""S14 红利价值轮动(@v2 重建)。
+"""S14 个股行业轮动·价值反转倾斜(原低估反转轮动)。
 
-原 v1 逻辑(超跌+企稳+放量反转)在 42 只大蓝筹宇宙里几乎筛不出标的 -> 全程空仓。
-根因: 该数据集仅 42 只有基本面数据且全为大蓝筹, 反转因子风格错配。
-
-v2 重建在已验证的红利质量多因子底座(mf_core)之上, 叠加"深度价值"倾斜
-(偏低 PE/PB + 股息率优先), 行业中性 + 新闻守卫 + 跟踪止损控回撤。
-与 S13(成长质量) 的差异: S13 追成长质量, S14 捡便宜红利价值, 风格互补。
+行业动量抓风口 + 行业内低估值/反转倾斜选股 + 宽基趋势走弱清仓持现金。展示名"行业轮动·价值反转"。
 """
-import logging
-from models import Order
+from models import Order  # noqa: F401
 from strategies.base import BaseStrategy
-from strategies import mf_core
-
-log = logging.getLogger("s14")
+from strategies import sector_stock_core
 
 
 class S14ValueReversalRotation(BaseStrategy):
-    """S14 v2 红利价值: 红利质量底座 + 深度价值(低PE/PB)倾斜。"""
-
     def generate_orders(self, date, ctx, account):
-        if not ctx.is_last_trade_day_of_month(date):
-            return []
-
         params = {
-            "min_dividend_yield": 0.035,   # 略低于 s1(4%), 扩大价值票来源
-            "dividend_years": 3,
-            "roe_years": 3,
-            "roe_min": 0.08,
-            "hold_n": 6,                   # 轻度集中, 提升收益弹性(回撤由 0.04 熔断兜底)
-            "max_per_industry": 3,
-            "low_vol_pct": 0.60,
-            "value_tilt": True,            # 偏低 PE/PB 排名加分(深度价值)
-            "momentum_window": 252,
-            "momentum_skip": 21,
-            "momentum_min": -0.05,
-            "regime_downsize": True,       # 宏观 risk-off 降仓
-            "regime_good": 1.0, "regime_mid": 0.92, "regime_bad": 0.72,
-            "weights": {"dividend": 0.20, "low_vol": 0.06, "roe": 0.17,
-                        "valuation": 0.13, "news": 0.07, "value": 0.10, "momentum": 0.27},
+            "rebalance": "monthly",
+            "n_sectors": 4, "stocks_per_sector": 2, "hold_n": 8,
+            "mom_windows": [60, 120],
+            "trend_slow_ma": 60, "trend_fast_ma": 20,
+            "use_macro": True, "macro_bad_score": 40, "use_news": True,
+            "min_ind_members": 3, "stop_pct": 0.10,
+            "sharp_drop_thr": 0.08,
+            "tilt": "value",
+            "weights": {"momentum": 0.25, "low_vol": 0.10, "roe": 0.10,
+                        "valuation": 0.35, "dividend": 0.10, "size": 0.10},
         }
-        sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
-        if not sel["target"]:
-            # 无候选: 清仓现有持仓(避免裸多)
-            orders = []
-            forced = __import__("strategies.news_guard", fromlist=["guard_holdings"]).guard_holdings(
-                date, list(account.positions.keys()), ctx.conn, self.config)
-            for code in account.positions.keys():
-                if code in forced:
-                    orders.append(Order(self.strategy_id, code, "sell", 0.0,
-                                        f"S14价值:{ctx.name(code)}新闻黑天鹅,清仓", date))
-            return orders
-        return mf_core.build_orders(ctx, date, account, sel, params,
-                                    self.strategy_id, self.config, stop_pct=0.12)
+        return sector_stock_core.generate_core(self, date, ctx, account, params)

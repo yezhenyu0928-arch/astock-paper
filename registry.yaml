@@ -127,24 +127,22 @@ s1_dividend@v3:
 s4_smallcap@v2:
   class: strategies.s4_smallcap_v2.S4SmallcapV2
   benchmark: sh510300
-  frozen_date: 2026-07-06       # P0升级:4因子→7因子(BETA/EARNINGS_YIELD/QUALITY)+macro regime+行业动量倾斜
+  frozen_date: 2026-07-20       # 重构: 个股行业轮动核心(申万一级行业动量选赛道+行业内小盘倾斜+宽基趋势走弱清仓持现金)
   params:
-    min_dividend_yield: 0.035
-    dividend_years: 3
-    roe_years: 3
-    roe_min: 0.08
-    hold_n: 6
-    max_per_industry: 3
-    low_vol_pct: 0.60
-    cap_tilt: true
-    momentum_window: 252
-    momentum_skip: 21
-    momentum_min: -0.05
-    regime_downsize: true
-    regime_good: 1.0
-    regime_mid: 0.92
-    regime_bad: 0.72
-    weights: {dividend: 0.18, low_vol: 0.05, roe: 0.16, valuation: 0.10, news: 0.08, cap: 0.10, momentum: 0.33}
+    # 个股行业轮动·小盘倾斜(策略代码硬编码,此处仅供报告展示)
+    rebalance: monthly
+    n_sectors: 4
+    stocks_per_sector: 2
+    hold_n: 8
+    mom_windows: [60, 120]
+    trend_slow_ma: 60
+    trend_fast_ma: 20
+    macro_bad_score: 40
+    min_ind_members: 3
+    stop_pct: 0.09
+    sharp_drop_thr: 0.08
+    tilt: smallcap
+    weights: {momentum: 0.30, low_vol: 0.10, roe: 0.10, valuation: 0.10, dividend: 0.10, size: 0.30}
   universe: dynamic
   rebalance: monthly
 
@@ -356,74 +354,87 @@ s15_core_allocation@v1:
 s13_growth_quality_rotation@v2:
   class: strategies.s13_growth_quality_rotation.S13GrowthQualityRotation
   benchmark: sh510300
-  frozen_date: 2026-07-19       # 修复: 行业轮动降级(strong_ind空时不过滤),解决全A库0成交
+  frozen_date: 2026-07-20       # 重构: 个股行业轮动核心(申万一级行业动量选赛道+行业内成长质量倾斜+宽基趋势走弱清仓持现金)
   params:
-    hold_n: 12
-    min_avg_amount: 30000000
-    min_market_cap: 1000000000
-    max_market_cap: 100000000000
-    max_per_sector: 3
-    roe_min: 0.08
-    growth_min: 0.05
-    growth_max: 0.80
-    pe_cap: 50
-    weights: {roe: 0.15, growth: 0.18, value: 0.13, momentum: 0.42, lowvol: 0.07}
+    # 个股行业轮动·成长质量(策略代码硬编码,此处仅供报告展示)
+    rebalance: monthly
+    n_sectors: 4
+    stocks_per_sector: 2
+    hold_n: 8
+    mom_windows: [60, 120]
+    trend_slow_ma: 60
+    trend_fast_ma: 20
+    macro_bad_score: 40
+    min_ind_members: 3
+    stop_pct: 0.10
+    sharp_drop_thr: 0.08
+    tilt: growth
+    weights: {momentum: 0.30, low_vol: 0.10, roe: 0.28, valuation: 0.10, dividend: 0.05, size: 0.12}
   universe: dynamic
   rebalance: monthly
 
 s14_value_reversal_rotation@v2:
   class: strategies.s14_value_reversal_rotation.S14ValueReversalRotation
   benchmark: sh510300
-  frozen_date: 2026-07-19       # 修复: 行业轮动降级(strong_ind空时不过滤),解决全A库0成交
+  frozen_date: 2026-07-20       # 重构: 个股行业轮动核心(申万一级行业动量选赛道+行业内价值反转倾斜+宽基趋势走弱清仓持现金)
   params:
-    min_dividend_yield: 0.035
-    dividend_years: 3
-    roe_years: 3
-    roe_min: 0.08
-    hold_n: 6
-    max_per_industry: 3
-    low_vol_pct: 0.60
-    value_tilt: true
-    momentum_window: 252
-    momentum_skip: 21
-    momentum_min: -0.05
-    regime_downsize: true
-    regime_good: 1.0
-    regime_mid: 0.92
-    regime_bad: 0.72
-    weights: {dividend: 0.20, low_vol: 0.06, roe: 0.17, valuation: 0.13, news: 0.07, value: 0.10, momentum: 0.27}
+    # 个股行业轮动·价值反转(策略代码硬编码,此处仅供报告展示)
+    rebalance: monthly
+    n_sectors: 4
+    stocks_per_sector: 2
+    hold_n: 8
+    mom_windows: [60, 120]
+    trend_slow_ma: 60
+    trend_fast_ma: 20
+    macro_bad_score: 40
+    min_ind_members: 3
+    stop_pct: 0.10
+    sharp_drop_thr: 0.08
+    tilt: value
+    weights: {momentum: 0.25, low_vol: 0.10, roe: 0.10, valuation: 0.35, dividend: 0.10, size: 0.10}
   universe: dynamic
   rebalance: monthly
 
 s15_core_allocation@v2:
   class: strategies.s15_core_allocation.S15CoreAllocation
   benchmark: sh510300
-  frozen_date: 2026-07-19       # 激活配置: 放宽两袖门槛(股息率2%↓/连续分红2年↓/ROE2年↓/成长同比0~100%),解决几乎空仓
+  frozen_date: 2026-07-20       # 重构: 个股行业轮动核心(更宽行业覆盖的均衡轮动+宽基趋势走弱清仓持现金)
   params:
-    dividend_sleeve: {min_dividend_yield: 0.04, hold_n: 5, low_vol_pct: 0.60, momentum_min: 0.0, regime_mid: 0.92, regime_bad: 0.72, weights: {dividend: 0.32, low_vol: 0.08, roe: 0.13, valuation: 0.10, news: 0.05, momentum: 0.32}}
-    growth_sleeve: {min_dividend_yield: 0.015, hold_n: 5, low_vol_pct: 0.60, momentum_min: 0.0, regime_mid: 0.92, regime_bad: 0.72, weights: {dividend: 0.07, low_vol: 0.06, roe: 0.29, valuation: 0.20, news: 0.10, momentum: 0.28}}
+    # 个股行业轮动·核心均衡(策略代码硬编码,此处仅供报告展示)
+    rebalance: monthly
+    n_sectors: 5
+    stocks_per_sector: 2
+    hold_n: 10
+    mom_windows: [60, 120]
+    trend_slow_ma: 60
+    trend_fast_ma: 20
+    macro_bad_score: 40
+    min_ind_members: 3
+    stop_pct: 0.08
+    sharp_drop_thr: 0.08
+    tilt: balanced
+    weights: {momentum: 0.30, low_vol: 0.20, roe: 0.20, valuation: 0.15, dividend: 0.10, size: 0.05}
   universe: dynamic
   rebalance: monthly
 
 s8_checklist@v2:
   class: strategies.s8_checklist.S8LowDrawdown
   benchmark: sh510300
-  frozen_date: 2026-07-19       # 换选股逻辑:高质量低回撤动量(质量+低回撤+低波动+动量+趋势 复合打分)+宏观regime降仓+持有期跟踪止损,目标高收益低回撤
+  frozen_date: 2026-07-20       # 重构: 个股行业轮动核心(申万一级行业动量选赛道+行业内红利质量倾斜+宽基趋势走弱清仓持现金)
   params:
-    min_dividend_yield: 0.04
-    dividend_years: 3
-    roe_years: 3
-    roe_min: 0.08
-    hold_n: 6
-    max_per_industry: 3
-    low_vol_pct: 0.60
-    momentum_window: 252
-    momentum_skip: 21
-    momentum_min: 0.0
-    regime_downsize: true
-    regime_good: 1.0
-    regime_mid: 0.92
-    regime_bad: 0.72
-    weights: {dividend: 0.16, low_vol: 0.15, roe: 0.19, valuation: 0.10, news: 0.10, momentum: 0.30}
+    # 个股行业轮动·红利质量(策略代码硬编码,此处仅供报告展示)
+    rebalance: monthly
+    n_sectors: 4
+    stocks_per_sector: 2
+    hold_n: 8
+    mom_windows: [60, 120]
+    trend_slow_ma: 60
+    trend_fast_ma: 20
+    macro_bad_score: 40
+    min_ind_members: 3
+    stop_pct: 0.08
+    sharp_drop_thr: 0.08
+    tilt: dividend
+    weights: {momentum: 0.22, low_vol: 0.18, roe: 0.22, valuation: 0.10, dividend: 0.28, size: 0.00}
   universe: dynamic
   rebalance: monthly

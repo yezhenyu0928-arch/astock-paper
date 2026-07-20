@@ -1,55 +1,26 @@
 # -*- coding: utf-8 -*-
-"""S4 红利中小盘倾斜(@v2 重建)。
+"""S4 个股行业轮动·小盘倾斜。
 
-原 v2 的 Barra 7因子(小市值/动量/价值/流动性/BETA/盈利yield/质量)在 42 只大蓝筹宇宙里
-因子方向相互打架 -> 选股无效, 主回测 -6.3%、胜率仅 1.6%。
-
-v2 重建在已验证的红利质量多因子底座(mf_core)之上, 叠加 cap_tilt(偏小市值排名加分),
-在本数据集的有限大蓝筹里挑"相对偏小盘的高股息质量票", 行业中性 + 宏观降仓 + 跟踪止损。
-展示名: "红利中小盘倾斜(沪深300)"。
+原红利质量多因子在 42 只大蓝筹里因子互斥 -> 选股失效。现改为: 申万一级行业动量选
+最强行业(抓风口) -> 行业内偏小市值倾斜选股 -> 宽基趋势走弱清仓持现金。展示名"行业轮动·小盘倾斜"。
 """
-import logging
-from models import Order
+from models import Order  # noqa: F401
 from strategies.base import BaseStrategy
-from strategies import mf_core
-from strategies import news_guard
-
-log = logging.getLogger("s4")
-POOL_INDEX = "sh000300"
+from strategies import sector_stock_core
 
 
 class S4SmallcapV2(BaseStrategy):
-    """S4 v2 红利中小盘倾斜: 红利质量 + 偏小市值排名。"""
-
     def generate_orders(self, date, ctx, account):
-        if not ctx.is_last_trade_day_of_month(date):
-            return []
-
         params = {
-            "min_dividend_yield": 0.035,
-            "dividend_years": 3,
-            "roe_years": 3,
-            "roe_min": 0.08,
-            "hold_n": 6,                   # 轻度集中, 提升收益弹性(回撤由 0.04 熔断兜底)
-            "max_per_industry": 3,
-            "low_vol_pct": 0.60,          # 放宽低波过滤, 保留更多含收益标的
-            "cap_tilt": True,             # 偏小市值排名加分(规模溢价)
-            "momentum_window": 252,
-            "momentum_skip": 21,
-            "momentum_min": -0.05,        # 剔除深跌, 保留上行/横盘趋势
-            "regime_downsize": True,
-            "regime_good": 1.0, "regime_mid": 0.92, "regime_bad": 0.72,
-            "weights": {"dividend": 0.18, "low_vol": 0.05, "roe": 0.16,
-                        "valuation": 0.10, "news": 0.08, "cap": 0.10, "momentum": 0.33},
+            "rebalance": "monthly",
+            "n_sectors": 4, "stocks_per_sector": 2, "hold_n": 8,
+            "mom_windows": [60, 120],
+            "trend_slow_ma": 60, "trend_fast_ma": 20,
+            "use_macro": True, "macro_bad_score": 40, "use_news": True,
+            "min_ind_members": 3, "stop_pct": 0.09,
+            "sharp_drop_thr": 0.08,
+            "tilt": "smallcap",
+            "weights": {"momentum": 0.30, "low_vol": 0.10, "roe": 0.10,
+                        "valuation": 0.10, "dividend": 0.10, "size": 0.30},
         }
-        sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
-        if not sel["target"]:
-            forced = news_guard.guard_holdings(date, list(account.positions.keys()), ctx.conn, self.config)
-            return [Order(self.strategy_id, code, "sell", 0.0,
-                          f"S4中小盘:{ctx.name(code)}新闻黑天鹅,清仓", date)
-                    for code in account.positions.keys() if code in forced] + \
-                   [Order(self.strategy_id, code, "sell", 0.0,
-                          f"S4中小盘:{ctx.name(code)}无候选,清仓", date)
-                    for code in account.positions.keys() if code not in forced]
-        return mf_core.build_orders(ctx, date, account, sel, params,
-                                    self.strategy_id, self.config, stop_pct=0.11)
+        return sector_stock_core.generate_core(self, date, ctx, account, params)
