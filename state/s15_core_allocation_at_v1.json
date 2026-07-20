@@ -1,15 +1,11 @@
 {
- "strategy_id": "s8_checklist@v1",
+ "strategy_id": "s15_core_allocation@v1",
  "init_capital": 50000.0,
  "cash": 50000.0,
  "positions": {},
  "frozen": false,
  "nav": 1.0,
  "nav_history": [
-  [
-   "2026-07-17",
-   1.0
-  ],
   [
    "2026-07-20",
    1.0
@@ -18,7 +14,6 @@
  "pending": [],
  "highest_nav": 1.0,
  "settled_dates": [
-  "2026-07-17",
   "2026-07-20"
  ],
  "applied_div": [],
