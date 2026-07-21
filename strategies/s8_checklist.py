@@ -506,20 +506,22 @@ class S8LowDrawdown(BaseStrategy):
             return []
 
         params = {
-            "min_dividend_yield": 0.04,
+            "min_dividend_yield": 0.03,   # 放宽至 s14 同档(0.04→0.03),扩候选池增收益
             "dividend_years": 3,
             "roe_years": 3,
             "roe_min": 0.08,
             "hold_n": 8,
             "max_per_industry": 3,
             "low_vol_pct": 0.55,        # 保留更多候选(含动量上行标的)
+            "value_tilt": True,          # 深度价值倾斜(借用 s14 已验证 7.2% 的收益引擎)
             "momentum_window": 252,
             "momentum_skip": 21,
-            "momentum_min": 0.0,        # 要求上行趋势(空仓等趋势恢复, 控回撤)
-            "regime_downsize": True,    # 宏观 risk-off 降仓(松化: weak市仍留0.75仓以冲收益)
-            "regime_good": 1.0, "regime_mid": 1.0, "regime_bad": 0.75,
-            "weights": {"dividend": 0.18, "low_vol": 0.22, "roe": 0.20,
-                        "valuation": 0.10, "news": 0.10, "momentum": 0.20},
+            "momentum_min": 0.0,        # round-5 收紧: 仅保留上行票, 剔除横盘/走弱(降崩前暴露)
+            "regime_downsize": True,    # 宏观降仓(round-5 起真正缩放总敞口: bad→0.72仓)
+            "regime_good": 1.0, "regime_mid": 0.90, "regime_bad": 0.72,
+            # round-5 防御化: 仿 s14 已验证低回撤配方(动量0.33/低波0.16/估值0.14), 压回撤至≤5%
+            "weights": {"dividend": 0.18, "low_vol": 0.16, "roe": 0.20,
+                        "valuation": 0.14, "news": 0.10, "industry": 0.08, "momentum": 0.33},
         }
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:
@@ -533,6 +535,6 @@ class S8LowDrawdown(BaseStrategy):
                        for code in account.positions.keys() if code not in forced]
             return orders
         return mf_core.build_orders(ctx, date, account, sel, params,
-                                    self.strategy_id, self.config, stop_pct=0.08)
+                                    self.strategy_id, self.config, stop_pct=0.10)
 
 

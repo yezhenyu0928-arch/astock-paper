@@ -1,1 +1,1 @@
-backtest trigger 2026-07-20T01:50:00Z (fix mf_core scoring closure bug + add 12-1m momentum; s4/s8/s13/s14/s15 return enhancement; risk.py per-strategy 5% DD circuit breaker for s1-exempt set)
+round-5: mf_core gross-scaling fix + s1/s8/s13/s15 defensive selection — cloud backtest 2026-07-21T06:37 EDT

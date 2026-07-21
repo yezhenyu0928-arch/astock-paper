@@ -17,12 +17,12 @@ MARKET_PROXY = "sh510300"   # 大盘代理(沪深300ETF)
 # 策略止损类型:trend(8%) / rotation(12%) / none
 _STOP_TYPE = {"s3": "trend", "s1": "rotation", "s2": "rotation", "s4": "rotation", "s5": "none"}
 
-# 策略级回撤熔断线(手册总回撤红线)。用户硬指标:除 s1 外(豁免调整),s4/s8/s13/s14/s15
-# 必须回撤≤5%。注意:pre_check 每日查、清仓单次日结算,存在 1 日滞后,故熔断线取 0.04
-# (留 ~1% 滞后缓冲),使报告峰值回撤结构性落在 ≤5%; s1 维持 0.10 不变(尊重"S1不调整")。
+# 策略级回撤熔断线(手册总回撤红线)。用户硬指标:全部策略回撤≤5%(低回撤不可破,
+# 比高收益更不可妥协),故 s1/s4/s8/s13/s14/s15 熔断线全部锁 0.05。s1 原先豁免 0.10,
+# 但用户最新指令"所有策略回撤≤5%"已覆盖,统一收紧到 0.05。
 _STRATEGY_MAX_DD = {
-    "s1": 0.10,
-    "s4": 0.04, "s8": 0.04, "s13": 0.04, "s14": 0.04, "s15": 0.04,
+    "s1": 0.05,
+    "s4": 0.05, "s8": 0.05, "s13": 0.05, "s14": 0.05, "s15": 0.05,
 }
 
 
@@ -54,7 +54,7 @@ def pre_check(date, ctx, states, cfg):
             continue
         peak = max(st.get("highest_nav", 1.0), acct.nav)
         dd = 1 - acct.nav / peak if peak > 0 else 0
-        # 按策略前缀取熔断线: s4/s8/s13/s14/s15 锁 0.05, s1 维持 0.10
+        # 按策略前缀取熔断线: 全部策略锁 0.05(用户硬指标:回撤≤5%)
         max_dd = _STRATEGY_MAX_DD.get(sid.split("_")[0], _global_mdd)
         if dd > max_dd:
             alerts.append(f"🔴 策略 {sid} 回撤 {dd:.1%} 触发熔断线 {max_dd:.0%},清仓降险并告警(次日重置参赛)")

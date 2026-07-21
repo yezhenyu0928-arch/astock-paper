@@ -36,6 +36,51 @@ def _news_score(date, code, conn):
         return 0.0
 
 
+def _growth_score(date, codes, conn):
+    """盈利同比(earnings YoY)排名因子, 单条 SQL 批量取近两年净利润(防未来函数 pub_date<=date)。
+    返回 {code: 同比增幅}(None=数据不足, 给中性 0)。仅当 weights 含 'growth'>0 时才调用(不影响其他策略)。"""
+    try:
+        placeholders = ",".join("?" for _ in codes)
+        d = str(date)[:10]
+        rows = conn.execute(
+            f"SELECT code, net_profit FROM stock_annual "
+            f"WHERE code IN ({placeholders}) AND pub_date IS NOT NULL AND pub_date<>'' AND pub_date<=? "
+            f"ORDER BY code, stat_year DESC", (*codes, d)).fetchall()
+        by_code = {}
+        for code, np0 in rows:
+            by_code.setdefault(code, []).append(np0)
+        out = {}
+        for code, lst in by_code.items():
+            if len(lst) >= 2 and lst[1] is not None and lst[1] != 0 and lst[0] is not None:
+                out[code] = (lst[0] - lst[1]) / abs(lst[1])
+            else:
+                out[code] = None
+        return out
+    except Exception:
+        return {}
+
+
+def _industry_leadership(cand, ind_map):
+    """个股行业地位因子(可回测的'新闻/行业地位'代理): 同一行业内按 ROE 质量排名,
+    业内质量龙头(高 ROE)得高分 —— 市值中性, 不与小盘倾斜(cap_tilt)打架。
+    返回 {code: 0..1}。实盘可由 news_engine 主题扫描(行业ETF信号)进一步增强。"""
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for c in cand:
+        groups[ind_map.get(c[0]) or "未知"].append(c)
+    score = {}
+    for ind, members in groups.items():
+        if len(members) <= 1:
+            for c in members:
+                score[c[0]] = 1.0
+            continue
+        roes = {c[0]: (c[3] or 0.0) for c in members}   # c[3] = roe
+        maxro = max(roes.values()) or 1.0
+        for c in members:
+            score[c[0]] = roes[c[0]] / maxro             # 业内质量龙头(ROE 归一)
+    return score
+
+
 def select(ctx, date, account, params, strategy_id, config):
     """红利质量多因子选股。返回 selection dict, 供 build_orders 使用。
 
@@ -62,23 +107,26 @@ def select(ctx, date, account, params, strategy_id, config):
     mom_skip = params.get("momentum_skip", 21)
     mom_min = params.get("momentum_min", None)   # 硬门槛: 仅保留 >= mom_min 的标的(趋势上行); None=不筛
     w = dict(params.get("weights", {"dividend": 0.25, "low_vol": 0.15, "roe": 0.20,
-                                    "valuation": 0.10, "news": 0.10, "momentum": 0.20}))
+                                    "valuation": 0.10, "news": 0.12, "industry": 0.15,
+                                    "momentum": 0.20}))
 
     eff = common.effective_hold_n(hold_n, account.init_capital, config, strategy_id)
+    # regime_downsize 现在缩放【总敞口】(而不仅是持仓数): ratio 直接乘到 weight_per,
+    # 使坏行情真正降仓(原实现只减 eff, 而 target_weight 归一化使总仓恒为~98%, 降仓无效)。
+    # ratio 在 regime_downsize 关闭时取 1.0(满仓)。
+    ratio = 1.0
     if regime_downsize:
         try:
             import macro
             r = macro.compute_market_regime(date, conn=ctx.conn)
             score = r.get("score", 60)
-            # 可调降仓比例(默认较旧版温和: 风险市仍留 0.5 仓, 避免踏空反弹)
             rgood = params.get("regime_good", 1.0)
             rmid = params.get("regime_mid", 0.75)
             rbad = params.get("regime_bad", 0.5)
             ratio = rgood if score >= 60 else (rmid if score >= 40 else rbad)
-            eff = max(1, round(eff * ratio))
         except Exception:
             pass
-    weight_per = common.target_weight(eff)
+    weight_per = common.target_weight(eff) * ratio
 
     pool = ctx.members(POOL_INDEX, date)
     pool = common.main_board_universe(ctx, pool, config, date)
@@ -123,6 +171,10 @@ def select(ctx, date, account, params, strategy_id, config):
         _ind = _fac.get_industry(ctx.conn, _cc)
     except Exception:
         pass
+    # 个股行业地位因子(可回测的'新闻/行业地位'代理): 龙头加分
+    ind_lead_score = _industry_leadership(cand, _ind)
+    # 成长因子(盈利同比)排名: 仅当 weights 含 growth 时计算(默认权重不含, 不影响 s4/s8/s14/s15)
+    grow_score = _growth_score(date, _cc, ctx.conn) if w.get("growth") else {}
     _ban_n, _ = news_guard.guard_candidates(date, _cc, ctx.conn, config)
     _ban_i = news_guard.guard_industry(date, _cc, ctx.conn, config, _ind)
     _ban_s = {c for c in _cc if news_guard.structural_ban(date, c, ctx)[0]}
@@ -163,15 +215,24 @@ def select(ctx, date, account, params, strategy_id, config):
     # 偏小市值 / 偏低估值 倾斜排名
     cap_rank = {c[0]: i for i, c in enumerate(sorted(keep, key=lambda x: x[6]))} if cap_tilt else {}
     val_rank = {c[0]: i for i, c in enumerate(sorted(keep, key=lambda x: (x[5] is None, x[5] if x[5] is not None else 1e9)))} if value_tilt else {}
+    # 个股行业地位排名(龙头优先): 行业内市值/ROE 综合, 越高名次越前
+    ind_lead_rank = {code: i for i, code in enumerate(
+        sorted(ind_lead_score, key=lambda x: -ind_lead_score.get(x, 0)))}
+    # 成长(盈利同比)排名: 越高名次越前; 缺失者排末尾
+    grow_rank = {code: i for i, code in enumerate(
+        sorted(grow_score, key=lambda x: -(grow_score.get(x) or -9e9)))} if grow_score else {}
 
     def _score(c):
-        """按各因子名次加权打分(名次越小越优); 修复原 _w(code) 闭包误用最后一只候选的 bug。"""
+        """按各因子名次加权打分(名次越小越优); 修复原 _w(code) 闭包误用最后一只候选的 bug。
+        新增 industry 项: 个股行业地位(龙头)加分; news 项在实盘取真实舆情分, 回测取 0(由 industry 代理)。"""
         code = c[0]
         return (w.get("dividend", 0.0) * dy_rank.get(code, len(keep))
                 + w.get("low_vol", 0.0) * vol_rank.get(code, len(keep))
                 + w.get("roe", 0.0) * roe_rank.get(code, len(keep))
                 + w.get("valuation", 0.0) * pe_rank.get(code, len(keep))
                 + w.get("news", 0.0) * news_rank.get(code, len(keep))
+                + w.get("industry", 0.0) * ind_lead_rank.get(code, len(keep))
+                + w.get("growth", 0.0) * grow_rank.get(code, len(keep))
                 + w.get("cap", 0.0) * cap_rank.get(code, len(keep))
                 + w.get("value", 0.0) * val_rank.get(code, len(keep))
                 + w.get("momentum", 0.0) * mom_rank.get(code, len(keep)))
