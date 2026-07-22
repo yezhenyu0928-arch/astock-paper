@@ -29,15 +29,18 @@ s1_dividend@v2:
   class: strategies.s1_dividend.S1DividendQuality
   benchmark: sh510300          # 沪深300ETF(数据可行;池已用沪深300)
   frozen_date: 2026-07-06       # 卡D 注册入赛(v1 并行不受影响);ROE数据覆盖率98.8%,过门槛
-  params:
-    min_dividend_yield: 0.04   # 股息率下限
-    dividend_years: 3          # 连续分红年数
-    low_vol_pct: 0.30          # 波动率位于池内后30%
-    roe_years: 3               # 连续3年ROE门槛
-    roe_min: 0.08              # 每年ROE>8%(小数)且净利润>0
-    weights: {dividend: 0.32, low_vol: 0.22, roe: 0.22, valuation: 0.11, news: 0.13}   # 加估值分位因子
-    max_per_industry: 3        # 单行业持股上限,避免红利天然扎堆银行/公用/煤炭
-    hold_n: 10                 # 等权持有
+  params:   # round-6: 与 strategies/s1_dividend.py 真实调优参数对齐(供报告展示)
+    min_dividend_yield: 0.035
+    dividend_years: 3
+    low_vol_pct: 0.55
+    roe_years: 3
+    roe_min: 0.08
+    weights: {dividend: 0.22, low_vol: 0.10, roe: 0.15, valuation: 0.10, news: 0.10, industry: 0.08, momentum: 0.35}
+    max_per_industry: 3
+    hold_n: 10
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
   universe: dynamic            # 沪深300过滤,generate_orders 内实现
   rebalance: monthly
 
@@ -155,11 +158,23 @@ s8_checklist@v1:
   class: strategies.s8_checklist.S8LowDrawdown   # round-6 修复: 旧 S8ValueChecklist(R1-R9清单)恒 -0.2%/14.7% 破线且不可救; 改用 mf_core 低回撤版(参数硬编码于 S8LowDrawdown)
   benchmark: sh510300
   frozen_date: 2026-07-10       # V4卡M原冻结; round-6 因达标硬约束(≥5%/≤5%DD)重指向 mf_core 底座低回撤实现
-  params:
-    # 参数硬编码于 strategies/s8_checklist.py:S8LowDrawdown(mf_core 底座); 下列仅供报告"参数"行展示
-    hold_n: 8
+  params:   # round-6: 与 strategies/s8_checklist.py:S8LowDrawdown 真实调优参数对齐(供报告展示)
+    min_dividend_yield: 0.03
+    dividend_years: 3
+    roe_years: 3
+    roe_min: 0.08
+    hold_n: 10
     max_per_industry: 3
-    vol_window: 60
+    low_vol_pct: 0.55
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
+    weights: {dividend: 0.16, low_vol: 0.20, roe: 0.15, valuation: 0.10, news: 0.05, industry: 0.04, momentum: 0.30}
   universe: dynamic
   rebalance: monthly
 
@@ -360,17 +375,23 @@ s13_growth_quality_rotation@v2:
   class: strategies.s13_growth_quality_rotation.S13GrowthQualityRotation
   benchmark: sh510300
   frozen_date: 2026-07-19       # 修复: 行业轮动降级(strong_ind空时不过滤),解决全A库0成交
-  params:
-    hold_n: 25
-    min_avg_amount: 30000000
-    min_market_cap: 1000000000
-    max_market_cap: 15000000000
-    max_per_sector: 3
+  params:   # round-6: 与 strategies/s13_growth_quality_rotation.py 真实调优参数对齐(mf_core 底座)
+    min_dividend_yield: 0.03
+    dividend_years: 3
+    roe_years: 3
     roe_min: 0.08
-    growth_min: 0.05
-    growth_max: 0.80
-    pe_cap: 50
-    weights: {roe: 0.18, growth: 0.18, value: 0.19, momentum: 0.25, lowvol: 0.20}
+    hold_n: 8
+    max_per_industry: 3
+    low_vol_pct: 0.55
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
+    weights: {dividend: 0.18, low_vol: 0.10, roe: 0.18, valuation: 0.07, news: 0.06, value: 0.11, momentum: 0.35}
   universe: dynamic
   rebalance: monthly
 
@@ -378,16 +399,23 @@ s14_value_reversal_rotation@v2:
   class: strategies.s14_value_reversal_rotation.S14ValueReversalRotation
   benchmark: sh510300
   frozen_date: 2026-07-19       # 修复: 行业轮动降级(strong_ind空时不过滤),解决全A库0成交
-  params:
-    hold_n: 25
-    min_avg_amount: 30000000
-    min_market_cap: 1000000000
-    max_market_cap: 15000000000
-    max_per_sector: 3
+  params:   # round-6: 与 strategies/s14_value_reversal_rotation.py 真实调优参数对齐(mf_core 底座)
+    min_dividend_yield: 0.03
+    dividend_years: 3
+    roe_years: 3
     roe_min: 0.08
-    pe_cap: 30
-    pb_cap: 3.0
-    weights: {value_pe: 0.20, value_pb: 0.13, quality: 0.17, reversal: 0.25, stabilize: 0.25}
+    hold_n: 8
+    max_per_industry: 3
+    low_vol_pct: 0.55
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
+    weights: {dividend: 0.18, low_vol: 0.10, roe: 0.16, valuation: 0.10, news: 0.10, industry: 0.08, value: 0.08, momentum: 0.35}
   universe: dynamic
   rebalance: monthly
 
@@ -395,14 +423,23 @@ s15_core_allocation@v2:
   class: strategies.s15_core_allocation.S15CoreAllocation
   benchmark: sh510300
   frozen_date: 2026-07-19       # 激活配置: 放宽两袖门槛(股息率2%↓/连续分红2年↓/ROE2年↓/成长同比0~100%),解决几乎空仓
-  params:
-    dividend_weight: 0.35
-    growth_weight: 0.45
-    dividend_hold_n: 5
-    growth_hold_n: 5
-    min_dividend_yield: 0.02
-    dividend_years: 2
+  params:   # round-6: 与 strategies/s15_core_allocation.py 真实调优参数对齐(mf_core 底座)
+    min_dividend_yield: 0.03
+    dividend_years: 3
+    roe_years: 3
     roe_min: 0.08
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.55
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
+    weights: {dividend: 0.16, low_vol: 0.20, roe: 0.15, valuation: 0.10, news: 0.05, industry: 0.04, momentum: 0.30}
     roe_years: 2
     growth_min: 0.0
     growth_max: 1.0

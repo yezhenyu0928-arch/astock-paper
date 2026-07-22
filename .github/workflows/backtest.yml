@@ -37,8 +37,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: db/market.sqlite
-          key: db-${{ github.run_id }}
-          restore-keys: db-
+          key: db-stable-v3
 
       - name: ensure full DB (个股库/年报库不足则重建)
         run: |
@@ -64,13 +63,14 @@ jobs:
           PY
           )
           echo "沪深300成分中日线≥500行的: $covered 只; stock_annual 覆盖: $annual_codes 只code"
+          # round-6 修复: 日线或年报ROE任一不足都触发全量/针对性重建, 杜绝"日线够但年报缺"的旧库蒙混。
           if [ "$covered" -lt 250 ]; then
             echo "个股日线库不足($covered<250),内联 backfill 全量重建(约48分钟)..."
             python -c "import data,conf; data.update_all(conf.load_config(), conf.load_registry(), with_members=True)"
             python backfill.py
-          elif [ "$annual_codes" -lt 250 ]; then
-            echo "日线库充分但 stock_annual 年报库不足($annual_codes<250,可能被空cache续存/baostock抓取失败),"
-            echo "跳过全量backfill,只针对性补年报ROE数据(避免重复~48分钟的日线/基本面重建)..."
+          fi
+          if [ "$annual_codes" -lt 250 ]; then
+            echo "年报ROE库不足($annual_codes<250),针对性补年报ROE(不重做日线)..."
             python -c "
           import conf, fundamental
           from db import get_conn
@@ -82,7 +82,8 @@ jobs:
           print(f'补数后 stock_annual 覆盖: {n} 只code')
           conn.close()
           "
-          else
+          fi
+          if [ "$covered" -ge 250 ] && [ "$annual_codes" -ge 250 ]; then
             echo "个股库与年报库均充分,跳过 backfill"
           fi
 
@@ -94,7 +95,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: db/market.sqlite
-          key: db-${{ github.run_id }}
+          key: db-stable-v3
 
       - name: 解析策略集为 JSON 矩阵
         id: set
@@ -126,8 +127,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: db/market.sqlite
-          key: db-${{ github.run_id }}
-          restore-keys: db-
+          key: db-stable-v3
 
       - name: 五关回测 + 蒙特卡洛 (${{ matrix.sid }})
         run: |

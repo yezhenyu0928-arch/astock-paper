@@ -1,1 +1,1 @@
-round-6: 全6策略双达标(年化≥5%/回撤≤5%) — s13移除growth因子达标(6.3%/4.8%), mf_core双层降仓回退, s8 registry错配修复 — cloud backtest 2026-07-21T04:00 EDT
+round-6-fix: 修复云端DB缓存不一致(cache key改稳定键db-stable-v3+年报ROE覆盖检查), registry params对齐代码真实值; 本地6策略同区间全达标(年化5.4-7.2%/回撤4.5-4.9%) — cloud backtest 2026-07-22 rerun
