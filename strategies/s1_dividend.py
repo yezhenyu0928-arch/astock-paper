@@ -145,9 +145,11 @@ class S1DividendQuality(BaseStrategy):
             "low_vol_pct": 0.55,            # 放宽低波过滤, 保留更多含收益标的
             "momentum_window": 252,
             "momentum_skip": 21,
-            "momentum_min": 0.0,            # 收紧趋势门槛: 仅保留上行票, 剔除横盘/走弱(降崩前暴露)
+            "momentum_min": 0.0,            # 上行趋势门槛(同 s14): 剔除走弱票, 控回撤
+            # round-6 对齐 s4/s14 达标配方: regime_mid 1.0(不降仓)/ bad 0.75(温和集中),
+            # 敞口降仓交给 risk 层; 早期压低 mid/bad 造成过度集中反拖累, 已回退。
             "regime_downsize": True,
-            "regime_good": 1.0, "regime_mid": 0.90, "regime_bad": 0.70,
+            "regime_good": 1.0, "regime_mid": 1.0, "regime_bad": 0.75,
             "weights": {"dividend": 0.22, "low_vol": 0.10, "roe": 0.15,
                         "valuation": 0.10, "news": 0.10, "industry": 0.08, "momentum": 0.35},
         }

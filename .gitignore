@@ -23,3 +23,12 @@ Thumbs.db
 
 # WorkBuddy 项目状态目录(automations/memory/ci 文件), 非仓库内容, 不进 git
 .workbuddy/
+
+# 调参/回测临时脚本与日志(下划线前缀), 本地探索用, 不进 git
+_*.py
+_*.log
+_*.out
+_*.sh
+_cache/
+_ci_r2/
+reports_cloud/

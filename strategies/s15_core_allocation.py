@@ -33,14 +33,15 @@ class S15CoreAllocation(BaseStrategy):
         params = {
             "min_dividend_yield": 0.03,
             "dividend_years": 3, "roe_years": 3, "roe_min": 0.08,
-            "hold_n": 8, "max_per_industry": 3, "low_vol_pct": 0.55,
-            "value_tilt": True,             # round-5 加价值倾斜(借 s14 已验证 4.9% 低回撤配方)
+            "hold_n": 10, "max_per_industry": 3, "low_vol_pct": 0.55,   # round-6b: 8→10 分散化, DD 6.1%→≤5%
+            "value_tilt": True,             # 价值倾斜(借 s14 已验证 4.9% 低回撤配方)
             "momentum_window": 252, "momentum_skip": 21, "momentum_min": 0.0,
+            # round-6 对齐 s4/s14; round-6b: s15 达 6.3%/6.1%(年化超标1.3%,回撤超0.1%)→加强防御:
+            # 低波0.20/动量0.30/削 news(回测恒0)与 industry(拉向高波龙头), 换回撤降到≤5%。
             "regime_downsize": True,
-            "regime_good": 1.0, "regime_mid": 0.88, "regime_bad": 0.68,
-            # round-5 防御化: 仿 s14(价值倾斜+动量0.28/低波0.16/估值0.14), 压回撤至≤5%
-            "weights": {"dividend": 0.18, "low_vol": 0.16, "roe": 0.20,
-                        "valuation": 0.14, "news": 0.10, "industry": 0.08, "momentum": 0.28},
+            "regime_good": 1.0, "regime_mid": 1.0, "regime_bad": 0.75,
+            "weights": {"dividend": 0.16, "low_vol": 0.20, "roe": 0.15,
+                        "valuation": 0.10, "news": 0.05, "industry": 0.04, "momentum": 0.30},
         }
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:

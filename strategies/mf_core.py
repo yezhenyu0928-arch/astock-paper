@@ -111,10 +111,12 @@ def select(ctx, date, account, params, strategy_id, config):
                                     "momentum": 0.20}))
 
     eff = common.effective_hold_n(hold_n, account.init_capital, config, strategy_id)
-    # regime_downsize 现在缩放【总敞口】(而不仅是持仓数): ratio 直接乘到 weight_per,
-    # 使坏行情真正降仓(原实现只减 eff, 而 target_weight 归一化使总仓恒为~98%, 降仓无效)。
-    # ratio 在 regime_downsize 关闭时取 1.0(满仓)。
-    ratio = 1.0
+    # 【降仓职责单一化 — round-6 修复】敞口的宏观降仓由 risk 层 macro_exposure_mult 权威处理
+    # (mult=0.70+score*0.20, 中性压到 70% 仓)。此处 regime_downsize 仅做【集中度调节】:
+    # 坏行情减少持仓数 eff(持更少、更强的票)后, target_weight 仍归一化到 ~98% 仓 —— 这是
+    # s4(6.2%/4.5%)/s14(7.2%/4.9%) 已验证达标的原始配方。
+    # round-5 曾误改为 weight_per*=ratio(真降仓), 与 risk 层叠成双层降仓(0.70×0.72≈0.50 仓),
+    # 使 s4/s14 崩到 1.8-3.2% —— 已回退。控回撤靠【选股防御性】+ 集中度, 不靠二次砍总仓。
     if regime_downsize:
         try:
             import macro
@@ -124,9 +126,10 @@ def select(ctx, date, account, params, strategy_id, config):
             rmid = params.get("regime_mid", 0.75)
             rbad = params.get("regime_bad", 0.5)
             ratio = rgood if score >= 60 else (rmid if score >= 40 else rbad)
+            eff = max(1, round(eff * ratio))
         except Exception:
             pass
-    weight_per = common.target_weight(eff) * ratio
+    weight_per = common.target_weight(eff)
 
     pool = ctx.members(POOL_INDEX, date)
     pool = common.main_board_universe(ctx, pool, config, date)
@@ -262,10 +265,14 @@ def select(ctx, date, account, params, strategy_id, config):
             "eff": eff, "empty_reason": None}
 
 
-def build_orders(ctx, date, account, sel, params, strategy_id, config, stop_pct=0.10):
-    """依据 selection 构建买卖单, 含持有期跟踪止损。"""
+def build_orders(ctx, date, account, sel, params, strategy_id, config, stop_pct=0.10, exposure=1.0):
+    """依据 selection 构建买卖单, 含持有期跟踪止损。
+
+    exposure: 单一次敞口标量(默认1.0=满仓归一化)。仅 s13 用 0.90 留现金垫压单日暴跌尖峰;
+    这是【一次性】降仓, 与 risk 层 macro_exposure_mult 不叠加成双层(round-5 双层降仓教训)。
+    """
     target = sel["target"]
-    wgt = sel["weight_per"]
+    wgt = sel["weight_per"] * exposure
     tset = set(target)
     orders = []
     held = set(account.positions.keys())

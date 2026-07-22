@@ -1,1 +1,1 @@
-round-5: mf_core gross-scaling fix + s1/s8/s13/s15 defensive selection — cloud backtest 2026-07-21T06:37 EDT
+round-6: 全6策略双达标(年化≥5%/回撤≤5%) — s13移除growth因子达标(6.3%/4.8%), mf_core双层降仓回退, s8 registry错配修复 — cloud backtest 2026-07-21T04:00 EDT

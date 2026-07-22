@@ -182,25 +182,126 @@ def page_trades():
 
 
 def page_news():
-    st.title("📰 消息面")
+    st.title("📰 持仓重点新闻 · 消息面择时")
     from db import get_conn
+    import news_engine as ne
+
+    conn = get_conn()
+    accts = load_accounts()
+
+    # —— 聚合所有策略的当前持仓 ——
+    hold_rows = []  # (策略中文, 代码bare, 名称)
+    for sid, a in accts.items():
+        for code in a.get("positions", {}):
+            hold_rows.append((cn(sid), util.bare(code), _name_of(code)))
+    codes_full = []
+    for sid, a in accts.items():
+        codes_full += list(a.get("positions", {}).keys())
+    codes_full = sorted(set(codes_full))
+
+    # —— 1) 市场消息面分(择时总览) ——
+    st.subheader("① 市场消息面 · 大盘择时")
+    mkt = conn.execute(
+        "SELECT signal_date,score,evidence FROM news_signal WHERE scope='market' "
+        "ORDER BY signal_date DESC LIMIT 1").fetchone()
+    if mkt:
+        sd, sc, ev = mkt
+        sc = int(sc)
+        if sc >= 1:
+            badge, advice = "🟢偏多", "消息面友好,可适度加仓/持有"
+        elif sc == 0:
+            badge, advice = "⚪中性", "消息面无明确方向,按策略纪律执行"
+        elif sc == -1:
+            badge, advice = "🟡避险", "消息面偏空,建议降敞口/持现金"
+        else:
+            badge, advice = "🔴强避险", "黑天鹅/系统性风险,建议清仓观望"
+        st.markdown(f"**{badge} 市场分 {sc:+d}**（{sd}）  →  {advice}")
+        if ev:
+            st.caption("证据: " + "；".join(ev[:6]))
+    else:
+        st.info("暂无市场消息信号(news_signal 为空)。启用 news_layer 并由 run_daily 抓取新闻后,本栏将实时显示大盘择时分。")
+
+    # —— 2) 持仓股关联重点新闻(择时核心) ——
+    st.subheader("② 持仓股重点新闻(高度相关 · 择时)")
+    if not codes_full:
+        st.write("当前无持仓。")
+    else:
+        # 关联 news_raw(按代码匹配, 兼容全码/纯数字)
+        bare = {util.bare(c) for c in codes_full}
+        full = {c for c in codes_full}
+        allf = list(bare | full)
+        ph = ",".join("?" for _ in allf)
+        rows = conn.execute(
+            f"SELECT ts,code,source,title FROM news_raw WHERE code IN ({ph}) "
+            f"ORDER BY ts DESC LIMIT 300", allf).fetchall()
+        by_code = {}
+        for ts, code, src, title in rows:
+            by_code.setdefault(util.bare(code), []).append((ts, src, title))
+        # 个股语义分(news_signal stock:scope)
+        sig_rows = conn.execute(
+            "SELECT scope,score FROM news_signal WHERE scope LIKE 'stock:%'").fetchall()
+        sig_map = {s.replace("stock:", ""): float(sc) for s, sc in sig_rows}
+        # 黑天鹅/警示扫描(无网络时静默降级)
+        try:
+            flags = ne.scan_holdings(util.today_str(), codes_full, conn)
+        except Exception:
+            flags = {}
+
+        table = []
+        for sid_cn, cbare, nm in hold_rows:
+            news = by_code.get(cbare, [])
+            n_news = len(news)
+            sc = sig_map.get(cbare, 0.0)
+            fl = flags.get(cbare)
+            if fl and fl[0] == -2:
+                status = "🔴黑天鹅"
+            elif fl and fl[0] == -1:
+                status = "🟡警示"
+            elif sc <= -1:
+                status = "🟡偏空"
+            elif sc >= 1:
+                status = "🟢偏多"
+            else:
+                status = "⚪未监控" if n_news == 0 and sc == 0 else "⚪中性"
+            top = news[0][2][:40] if news else "—"
+            table.append({"策略": sid_cn, "代码": cbare, "名称": nm,
+                          "关联新闻": n_news, "语义分": f"{sc:+.0f}" if sc else "—",
+                          "状态": status, "最新一条": top})
+        st.dataframe(pd.DataFrame(table), use_container_width=True, hide_index=True)
+        # 展开: 每只持仓的明细新闻
+        sel = st.selectbox("查看个股新闻明细", ["（不展开）"] + [f"{r['代码']} {r['名称']}" for r in table])
+        if sel != "（不展开）":
+            cbare = sel.split()[0]
+            items = by_code.get(cbare, [])
+            if items:
+                for ts, src, title in items[:15]:
+                    st.write(f"· `{ts}` _{src}_ — {title}")
+            else:
+                st.caption("该标的暂无关联新闻(news_raw 为空)。接入实时新闻后显示。")
+
+    # —— 3) 行业主题热度(若有) ——
+    st.subheader("③ 行业主题热度")
     try:
-        conn = get_conn()
-        sig = pd.read_sql_query(
-            "SELECT signal_date,scope,score,level,evidence FROM news_signal ORDER BY signal_date DESC LIMIT 100", conn)
-        conn.close()
+        boosts = ne.get_all_sector_boosts(util.today_str(), conn)
     except Exception:
-        sig = pd.DataFrame()
-    if sig.empty:
-        st.info("暂无消息面信号(消息层未启用或无数据)")
-        return
-    mkt = sig[sig["scope"] == "market"]
-    if not mkt.empty:
-        st.subheader("市场风险分(负=降敞口)")
-        s = pd.Series({r["signal_date"]: r["score"] for _, r in mkt.iterrows()}).sort_index()
-        st.bar_chart(s, height=200)
-    st.subheader("信号明细")
-    st.dataframe(sig, use_container_width=True, hide_index=True)
+        boosts = {}
+    if boosts:
+        bs = pd.Series(boosts).sort_values(ascending=False)
+        st.bar_chart(bs, height=180)
+    else:
+        st.caption("暂无行业主题信号(需启用 news_layer + LLM 产业主题扫描)。")
+
+    conn.close()
+    st.divider()
+    st.caption("消息面仅作择时参考:利好不直接追高,黑天鹅(-2)强卖为硬安全网。模拟/历史不代表未来。")
+
+
+def _name_of(code):
+    try:
+        from data import SqlContext
+        return SqlContext(None).name(code)
+    except Exception:
+        return util.bare(code)
 
 
 def page_system():

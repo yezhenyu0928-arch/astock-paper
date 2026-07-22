@@ -31,23 +31,25 @@ class S13GrowthQualityRotation(BaseStrategy):
         # + 行业地位(industry, ROE龙头代理"个股行业地位"消息面) + 松化regime(risk市仍留0.75仓)
         # + 偏宽止损0.13。news 权重在回测恒为0(新闻库空), 实盘由 news_engine 接真实舆情。
         params = {
-            "min_dividend_yield": 0.025,   # 扩候选池(对齐 s4)增收益
+            "min_dividend_yield": 0.03,    # round-6c: 对齐 s14(0.03)
             "dividend_years": 3,
             "roe_years": 3,
-            "roe_min": 0.10,
-            "hold_n": 8,
+            "roe_min": 0.08,               # round-6c: 0.10→0.08 放回(对齐 s14, 扩候选池)
+            "hold_n": 8,                   # round-6c 最优版基座(6.3%/5.2%)
             "max_per_industry": 3,
             "low_vol_pct": 0.55,
-            "value_tilt": False,           # round-4 回退: value_tilt+高动量(0.42)反而砸年化(3.2%), 回归 s4 已验证基础配方
+            "value_tilt": True,            # 深度价值收益引擎(借 s14 已验证 7.2%)
             "momentum_window": 252,
             "momentum_skip": 21,
-            "momentum_min": 0.0,           # round-5 收紧: 仅保留上行票, 降崩前暴露
+            "momentum_min": 0.0,           # 上行趋势门槛(同 s14): 剔除走弱票, 控回撤
+            # round-6m: exposure=0.90 只缩放新买单, 对暴跌日的存量持仓无效(DD 仍 5.2%), 已回退。
+            #   s13 vs s14(4.9%) 唯一实质差异=growth 因子(选高盈利增速=高 beta 票, 暴跌跌更狠)。
+            #   彻底移除 growth, 权重给回 roe/value; s13 靠 value_tilt+动量+ROE质量 维持"成长质量"身份。
             "regime_downsize": True,
-            "regime_good": 1.0, "regime_mid": 0.90, "regime_bad": 0.72,
-            # round-5 防御化: 仿 s4 基础配方 + 成长点缀(growth0.12); 动量0.33/低波0.16/估值0.12 压回撤
-            "weights": {"dividend": 0.16, "low_vol": 0.16, "roe": 0.18,
-                        "valuation": 0.12, "news": 0.10, "industry": 0.08,
-                        "growth": 0.12, "momentum": 0.33},
+            "regime_good": 1.0, "regime_mid": 1.0, "regime_bad": 0.75,
+            "weights": {"dividend": 0.18, "low_vol": 0.10, "roe": 0.18,
+                        "valuation": 0.08, "news": 0.06,
+                        "value": 0.11, "momentum": 0.35},
         }
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:
@@ -60,4 +62,4 @@ class S13GrowthQualityRotation(BaseStrategy):
                           f"成长质量:{ctx.name(code)}无候选,清仓", date)
                     for code in account.positions.keys() if code not in forced]
         return mf_core.build_orders(ctx, date, account, sel, params,
-                                    self.strategy_id, self.config, stop_pct=0.11)
+                                    self.strategy_id, self.config, stop_pct=0.12)
