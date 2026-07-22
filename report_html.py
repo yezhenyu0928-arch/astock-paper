@@ -54,22 +54,27 @@ STRAT_META = {
                     ("风险控制", "特质风险>30%降仓+行业≤2只")],
         "rebalance": "每月最后交易日 · 等权约6-10只 · 池=沪深300"},
     "s4_smallcap@v2": {
-        "name": "多因子价值增强(沪深300)·7因子", "risk": "★★★★☆ 中高", "fit": "≥5万",
-        "tagline": "在沪深300内用 7 个 Barra 因子选小市值+价值+动量+流动性+高弹性+质优股，宏观regime自适+行业动量倾斜，残差波动帽过滤。",
-        "factors": [("-SIZE(小市值,负向)", "20%"), ("MOMENTUM(RSTR 12-1月)", "20%"), ("VALUE(EP+BP+DY)", "15%"),
-                    ("LIQUIDITY(流动性)", "10%"), ("BETA(牛市弹性)", "15%"), ("EARNINGS_YIELD(盈利收益)", "10%"),
-                    ("QUALITY(ROE+低杠杆)", "10%"),
-                    ("风险过滤", "剔除残差波动z>1.28的高波股"),
-                    ("宏观自适应", "扩张期提MOMENTUM/BETA权重，收缩期提VALUE/QUALITY防御"),
-                    ("行业动量倾斜", "所属行业近60日涨幅前30%获加分"),
-                    ("行业约束", "每行业≤3只")],
-        "rebalance": "每月最后交易日 · 等权约6只 · 池=沪深300"},
+        "name": "红利质量多因子·小盘倾斜", "risk": "★★★★☆ 中", "fit": "≥5万",
+        "tagline": "红利质量多因子底座(mf_core)叠加小市值规模溢价(cap_tilt):高股息+连续分红+ROE质量+低波+估值+新闻,动量确认上行趋势,偏配小市值股博规模溢价。",
+        "factors": [("股息率排名", "16%"), ("低波动排名", "7%"), ("ROE质量排名", "15%"),
+                    ("估值分位(EP/BP)", "9%"), ("新闻语义分", "7%(新闻库空,暂为0)"),
+                    ("小市值规模溢价(cap_tilt)", "11%"), ("动量(12-1月,确认上行)", "35%"),
+                    ("入选门槛", "股息率≥2.5% + 连续3年分红 + 连续3年ROE>8% + 动量不深跌"),
+                    ("宏观自适应", "regime good/mid/bad=1.0/1.0/0.75仓,市场弱仍留75%仓"),
+                    ("风险过滤", "止损14% + 单行业≤3只")],
+        "rebalance": "每月最后交易日 · 等权8只 · 池=沪深300成分",
+        "data_source": "行情/估值/分红/ROE:baostock(daily_bar/stock_annual/dividend); 成分股:index_members(沪深300); 宏观regime:macro_indicator(PMI/社融/北向/融资余额); 新闻:news_raw/news_signal(表已建,历史回测区间待回灌,当前权重恒0)"},
     "s1_dividend@v2": {
-        "name": "红利低波·质量增强", "risk": "★☆☆☆☆ 低", "fit": "≥3万",
-        "tagline": "在红利低波基础上再加盈利质量门槛：只买连续3年ROE>8%、净利润为正的高股息低波股，剔除“高股息陷阱”。",
-        "factors": [("股息率排名", "40%"), ("低波动排名(250日)", "30%"), ("ROE盈利质量排名", "30%"),
-                    ("入选门槛", "股息率≥4% + 连续3年分红 + 连续3年ROE>8%且净利>0 + 低波后30%")],
-        "rebalance": "每月最后交易日 · 等权约6-10只 · 池=沪深300"},
+        "name": "红利质量多因子·低波红利", "risk": "★☆☆☆☆ 低", "fit": "≥3万",
+        "tagline": "红利质量多因子底座(mf_core)的稳健红利版:高股息+连续分红+ROE质量+低波+估值+行业地位+新闻,动量确认上行,低波过滤压回撤,适合稳健底仓。",
+        "factors": [("股息率排名", "22%"), ("低波动排名", "10%"), ("ROE质量排名", "15%"),
+                    ("估值分位", "10%"), ("新闻语义分", "10%(新闻库空,暂为0)"),
+                    ("个股行业地位(industry)", "8%"), ("动量(12-1月,确认上行)", "35%"),
+                    ("入选门槛", "股息率≥3.5% + 连续3年分红 + 连续3年ROE>8% + 低波后55%"),
+                    ("宏观自适应", "regime good/mid/bad=1.0/1.0/0.75仓"),
+                    ("风险过滤", "止损12% + 单行业≤3只")],
+        "rebalance": "每月最后交易日 · 等权10只 · 池=沪深300成分",
+        "data_source": "行情/估值/分红/ROE:baostock(daily_bar/stock_annual/dividend); 成分股:index_members(沪深300); 宏观regime:macro_indicator; 新闻:news_raw/news_signal(历史回测区间待回灌,当前权重恒0)"},
     "s3_ma_trend@v1": {
         "name": "双均线趋势", "risk": "★★★☆☆ 中", "fit": "≥3万",
         "tagline": "20日均线上穿60日均线且放量时买入，跌破20日均线立即卖出。macro_score调节放量阈值：紧缩1.5x防假突破、扩张0.7x积极入场。",
@@ -106,6 +111,50 @@ STRAT_META = {
                     ("绝对动量过滤", "短窗收益<0的赛道剔除，顺势不逆势"),
                     ("入选池", "券商/半导体/医药/消费/军工/新能源/酒/光伏/银行/国债")],
         "rebalance": "每月最后交易日 · 持1-2只 · 赛道集中"},
+    "s8_checklist@v1": {
+        "name": "红利质量多因子·低回撤", "risk": "★☆☆☆☆ 低", "fit": "≥3万",
+        "tagline": "红利质量多因子底座(mf_core)的低回撤版(原R1-R9清单类已弃用):高股息+ROE质量+低波为主,动量适度,深度价值倾斜(value_tilt),分散持10只压回撤,定位稳健防御底仓。",
+        "factors": [("股息率排名", "16%"), ("低波动排名", "20%"), ("ROE质量排名", "15%"),
+                    ("估值分位", "10%"), ("新闻语义分", "5%(新闻库空,暂为0)"),
+                    ("个股行业地位(industry)", "4%"), ("动量(12-1月,确认上行)", "30%"),
+                    ("入选门槛", "股息率≥3% + 连续3年分红 + 连续3年ROE>8% + 深度价值倾斜"),
+                    ("宏观自适应", "regime good/mid/bad=1.0/1.0/0.75仓"),
+                    ("风险过滤", "止损10% + 单行业≤3只 + 分散10只")],
+        "rebalance": "每月最后交易日 · 等权10只 · 池=沪深300成分",
+        "data_source": "行情/估值/分红/ROE:baostock(daily_bar/stock_annual/dividend); 成分股:index_members(沪深300); 宏观regime:macro_indicator; 新闻:news_raw/news_signal(历史回测区间待回灌,当前权重恒0)"},
+    "s13_growth_quality_rotation@v2": {
+        "name": "红利质量多因子·成长质量", "risk": "★★★☆☆ 中", "fit": "≥5万",
+        "tagline": "红利质量多因子底座(mf_core)的成长质量版:在红利+ROE质量+低波+估值基础上叠加深度价值倾斜与动量确认,原 growth 因子因单日暴跌选高beta票、回撤超线已移除,现以质量+价值+动量实现稳健成长风格。",
+        "factors": [("股息率排名", "18%"), ("低波动排名", "10%"), ("ROE质量排名", "18%"),
+                    ("估值分位", "7%"), ("新闻语义分", "6%(新闻库空,暂为0)"),
+                    ("价值倾斜(value_tilt)", "11%"), ("动量(12-1月,确认上行)", "35%"),
+                    ("入选门槛", "股息率≥3% + 连续3年分红 + 连续3年ROE>8% + 动量不走弱"),
+                    ("宏观自适应", "regime good/mid/bad=1.0/1.0/0.75仓"),
+                    ("风险过滤", "止损12% + 单行业≤3只")],
+        "rebalance": "每月最后交易日 · 等权8只 · 池=沪深300成分",
+        "data_source": "行情/估值/分红/ROE:baostock(daily_bar/stock_annual/dividend); 成分股:index_members(沪深300); 宏观regime:macro_indicator; 新闻:news_raw/news_signal(历史回测区间待回灌,当前权重恒0)"},
+    "s14_value_reversal_rotation@v2": {
+        "name": "红利质量多因子·价值反转", "risk": "★★★☆☆ 中", "fit": "≥5万",
+        "tagline": "红利质量多因子底座(mf_core)的价值反转版:高股息+ROE质量+低波+深度价值倾斜,叠加个股行业地位(industry)与动量确认,偏配被错杀的优质价值股,收益弹性最高。",
+        "factors": [("股息率排名", "18%"), ("低波动排名", "10%"), ("ROE质量排名", "16%"),
+                    ("估值分位", "10%"), ("新闻语义分", "10%(新闻库空,暂为0)"),
+                    ("个股行业地位(industry)", "8%"), ("价值倾斜(value_tilt)", "8%"), ("动量(12-1月,确认上行)", "35%"),
+                    ("入选门槛", "股息率≥3% + 连续3年分红 + 连续3年ROE>8% + 深度价值倾斜"),
+                    ("宏观自适应", "regime good/mid/bad=1.0/1.0/0.75仓"),
+                    ("风险过滤", "止损12% + 单行业≤3只")],
+        "rebalance": "每月最后交易日 · 等权8只 · 池=沪深300成分",
+        "data_source": "行情/估值/分红/ROE:baostock(daily_bar/stock_annual/dividend); 成分股:index_members(沪深300); 宏观regime:macro_indicator; 新闻:news_raw/news_signal(历史回测区间待回灌,当前权重恒0)"},
+    "s15_core_allocation@v2": {
+        "name": "红利质量多因子·核心配置", "risk": "★☆☆☆☆ 低", "fit": "≥3万",
+        "tagline": "红利质量多因子底座(mf_core)的核心配置版:与 s8 同防御骨架(高股息+ROE质量+低波为主、动量适度),分散持10只,作为组合稳健核心仓位。",
+        "factors": [("股息率排名", "16%"), ("低波动排名", "20%"), ("ROE质量排名", "15%"),
+                    ("估值分位", "10%"), ("新闻语义分", "5%(新闻库空,暂为0)"),
+                    ("个股行业地位(industry)", "4%"), ("动量(12-1月,确认上行)", "30%"),
+                    ("入选门槛", "股息率≥3% + 连续3年分红 + 连续3年ROE>8% + 深度价值倾斜"),
+                    ("宏观自适应", "regime good/mid/bad=1.0/1.0/0.75仓"),
+                    ("风险过滤", "止损10% + 单行业≤3只 + 分散10只")],
+        "rebalance": "每月最后交易日 · 等权10只 · 池=沪深300成分",
+        "data_source": "行情/估值/分红/ROE:baostock(daily_bar/stock_annual/dividend); 成分股:index_members(沪深300); 宏观regime:macro_indicator; 新闻:news_raw/news_signal(历史回测区间待回灌,当前权重恒0)"},
 }
 
 
@@ -113,7 +162,8 @@ def _meta(sid):
     return STRAT_META.get(sid, {
         "name": sid, "risk": "—", "fit": "—",
         "tagline": "（该策略暂无介绍文案）",
-        "factors": [], "rebalance": "—"})
+        "factors": [], "rebalance": "—",
+        "data_source": "（未登记）"})
 
 
 def _cn(sid):
@@ -700,8 +750,11 @@ def _factor_block(meta):
                    for n, wt in meta.get("factors", []))
     tbl = (f"<table class='fx'><tr><th>选股因子 / 规则</th><th>权重 / 说明</th></tr>{rows}</table>"
            if rows else "")
+    ds = meta.get("data_source")
+    ds_html = (f"<div class='ds'>📡 数据来源：{html.escape(ds)}</div>" if ds else "")
     return (f"<div class='tagline'>{html.escape(meta['tagline'])}</div>{tbl}"
-            f"<div class='rb'>调仓：{html.escape(meta['rebalance'])} · 适合资金：{html.escape(meta['fit'])}</div>")
+            f"<div class='rb'>调仓：{html.escape(meta['rebalance'])} · 适合资金：{html.escape(meta['fit'])}</div>"
+            f"{ds_html}")
 
 
 def _positions_table(conn, a, sid, log_rows):
@@ -1487,6 +1540,7 @@ th{background:#f0f2f5;color:var(--mut);font-weight:600}td.l,th:first-child{text-
 .tagline{font-size:13px;color:#374151;margin:4px 0 8px}
 .fx{margin:6px 0;font-size:12.5px}.fx th{font-size:12px}
 .rb{font-size:12px;color:var(--mut);margin:6px 0}
+.ds{font-size:11.5px;color:#2563a8;background:#eef4fb;border-left:3px solid #3b82f6;padding:5px 8px;margin:8px 0;border-radius:4px;line-height:1.5}
 details{margin:8px 0}summary{cursor:pointer;font-size:13.5px;color:#334155;padding:4px 0}
 .sub2{font-size:13px;font-weight:600;color:#334155;margin:10px 0 4px}
 .pos{font-size:12.5px}.pos .why td{text-align:left;color:var(--mut);font-size:11.5px;background:#fafafa;padding:4px 8px}
