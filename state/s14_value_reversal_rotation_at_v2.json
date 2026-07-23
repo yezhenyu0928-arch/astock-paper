@@ -11,7 +11,64 @@
    1.0
   ]
  ],
- "pending": [],
+ "pending": [
+  {
+   "strategy_id": "s14_value_reversal_rotation@v2",
+   "code": "sh600066",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s14_value_reversal_rotation@v2:买入宇通客车(股息率8.1%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  },
+  {
+   "strategy_id": "s14_value_reversal_rotation@v2",
+   "code": "sh600690",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s14_value_reversal_rotation@v2:买入海尔智家(股息率5.6%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  },
+  {
+   "strategy_id": "s14_value_reversal_rotation@v2",
+   "code": "sh600887",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s14_value_reversal_rotation@v2:买入伊利股份(股息率5.1%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  },
+  {
+   "strategy_id": "s14_value_reversal_rotation@v2",
+   "code": "sh600795",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s14_value_reversal_rotation@v2:买入国电电力(股息率4.8%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  }
+ ],
  "highest_nav": 1.0,
  "settled_dates": [
   "2026-07-23"
