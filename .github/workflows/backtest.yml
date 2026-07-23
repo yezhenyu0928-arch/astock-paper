@@ -79,10 +79,16 @@ jobs:
           )
           echo "沪深300日线≥500: $covered 只; 主板日线≥500: $mb_cov 只; stock_annual: $annual_codes 只"
           # 主板流动性池(~1300只)不足 → 全量重建(backfill.py 现默认构建 mainboard + 日线 + 基本面)
+          # 2026-07-23 加固: backfill 不再硬失败。原 set -e 下 build_universe 单源不可达会抛异常→
+          #   backfill 非零退出→prep 整步失败→backtest 矩阵被 skipped(即 run #39 的崩溃形态)。
+          #   build_universe 已多源兜底不抛异常;此处再设 ||echo warning,确保即便 backfill 异常,prep 仍
+          #   成功、矩阵照常跑(空主板池将以"无标的"结果暴露,而非整轮崩溃)。
           if [ "$mb_cov" -lt 800 ] || [ "$covered" -lt 250 ]; then
             echo "主板/沪深300库不足(mb=$mb_cov, sh300=$covered),内联 backfill 全量重建..."
-            python -c "import data,conf; data.update_all(conf.load_config(), conf.load_registry(), with_members=True)"
-            python backfill.py
+            python -c "import data,conf; data.update_all(conf.load_config(), conf.load_registry(), with_members=True)" \
+              || echo "::warning::data.update_all 失败,继续尝试 backfill"
+            python backfill.py \
+              || echo "::warning::backfill 失败(主板池可能为空),prep 继续但 @v3 策略可能无标的"
           fi
           if [ "$annual_codes" -lt 250 ]; then
             echo "年报ROE库不足($annual_codes<250),针对性补年报ROE(不重做日线)..."

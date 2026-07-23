@@ -554,9 +554,9 @@ def macro_score_7(date, conn=None, cfg=None):
 def macro_exposure_mult(date, ctx, cfg=None):
     """由 macro_score_7 映射总仓位敞口系数(手册:总仓位0-90%,现金≥10%)。
 
-    分档(中性=0.70,对应约30%现金,与手册"中性偏防御"一致):
-      score >= 0 : mult = 0.70 + score*0.20  → [0.70, 0.90]
-      score <  0 : mult = 0.70 + score*0.60  → [0.10, 0.70)
+    分档(中性=0.80,对应约20%现金;冲击年化>10%主动提仓,仍受 0.90 上限与回撤分层/硬止损兜底):
+      score >= 0 : mult = 0.80 + score*0.10  → [0.80, 0.90]
+      score <  0 : mult = 0.80 + score*0.60  → [0.20, 0.80)
     仅降不升(取 min 与消息面系数叠加)。无数据/异常 → 1.0(不干预)。"""
     try:
         # 无数据连接 → 不做宏观干预(回测/实盘 ctx 必带 conn;单测 MockCtx 无 conn 即视为无数据)
@@ -566,7 +566,7 @@ def macro_exposure_mult(date, ctx, cfg=None):
         score, _ = macro_score_7(date, conn=conn, cfg=cfg)
     except Exception:
         return 1.0
-    mult = (0.70 + score * 0.20) if score >= 0 else (0.70 + score * 0.60)
+    mult = (0.80 + score * 0.10) if score >= 0 else (0.80 + score * 0.60)
     return float(max(0.10, min(0.90, mult)))
 
 

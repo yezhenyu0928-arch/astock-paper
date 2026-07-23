@@ -502,7 +502,7 @@ s1_dividend@v3:
     regime_mid: 1.0
     regime_bad: 0.75
     stop_pct: 0.12
-    weights: {dividend: 0.28, low_vol: 0.18, roe: 0.16, valuation: 0.12, news: 0.06, industry: 0.05, momentum: 0.15}
+    weights: {dividend: 0.28, low_vol: 0.18, roe: 0.18, valuation: 0.12, news: 0.06, industry: 0.05, momentum: 0.18}
   universe: dynamic
   rebalance: weekly
 
@@ -529,7 +529,7 @@ s15_core_allocation@v3:
     regime_mid: 1.0
     regime_bad: 0.75
     stop_pct: 0.10
-    weights: {dividend: 0.16, low_vol: 0.14, roe: 0.22, valuation: 0.10, news: 0.06, industry: 0.10, momentum: 0.22}
+    weights: {dividend: 0.16, low_vol: 0.14, roe: 0.24, valuation: 0.10, news: 0.06, industry: 0.10, momentum: 0.24}
   universe: dynamic
   rebalance: weekly
 
@@ -575,17 +575,17 @@ s4_smallcap@v3:
     roe_min: 0.0                 # 放开ROE硬门槛(小盘成长早期ROE低), 仅作排名因子
     hold_n: 15                   # 小盘广度分散控回撤
     max_per_industry: 3
-    low_vol_pct: 0.60
+    low_vol_pct: 0.72
     cap_tilt: true               # 偏小市值排名加分
     momentum_window: 126         # 半年动量(小盘轮动更快)
     momentum_skip: 21
     momentum_min: -0.05
     regime_downsize: true
     regime_good: 1.0
-    regime_mid: 0.85
-    regime_bad: 0.6
+    regime_mid: 1.0
+    regime_bad: 0.75
     stop_pct: 0.15
-    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.12, valuation: 0.08, news: 0.06, cap: 0.24, growth: 0.15, momentum: 0.25}
+    weights: {dividend: 0.0, low_vol: 0.06, roe: 0.15, valuation: 0.06, news: 0.06, cap: 0.24, growth: 0.18, momentum: 0.30}
   universe: dynamic
   rebalance: daily
 
@@ -603,16 +603,16 @@ s13_growth_quality_rotation@v3:
     roe_min: 0.08                # 成长要质量: 保留ROE门槛
     hold_n: 12
     max_per_industry: 3
-    low_vol_pct: 0.65            # 成长容忍较高波动
+    low_vol_pct: 0.75            # 成长容忍较高波动(放宽至后75%,纳入更多高beta成长票)
     momentum_window: 252
     momentum_skip: 21
     momentum_min: 0.0            # 上行趋势门槛
     regime_downsize: true
     regime_good: 1.0
-    regime_mid: 0.9
-    regime_bad: 0.65
+    regime_mid: 1.0
+    regime_bad: 0.75
     stop_pct: 0.13
-    weights: {dividend: 0.0, low_vol: 0.08, roe: 0.16, valuation: 0.06, news: 0.06, industry: 0.12, growth: 0.22, momentum: 0.30}
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.20, valuation: 0.06, news: 0.06, industry: 0.12, growth: 0.26, momentum: 0.34}
   universe: dynamic
   rebalance: daily
 
@@ -637,10 +637,10 @@ s14_value_reversal_rotation@v3:
     momentum_min: null           # 反转策略不设动量下限(允许买入近期走弱的超跌票)
     regime_downsize: true
     regime_good: 1.0
-    regime_mid: 0.9
-    regime_bad: 0.65
+    regime_mid: 1.0
+    regime_bad: 0.75
     stop_pct: 0.14
     # 逆动量: momentum 负权重 → 偏好近期跌得多的(反转); value/valuation 主导
-    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.08, valuation: 0.22, news: 0.06, value: 0.24, momentum: -0.12, growth: 0.0}
+    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.10, valuation: 0.22, news: 0.06, value: 0.24, momentum: -0.12, growth: 0.0}
   universe: dynamic
   rebalance: daily

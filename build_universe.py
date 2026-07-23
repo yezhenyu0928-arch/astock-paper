@@ -46,19 +46,54 @@ def _with_prefix(code6: str) -> str:
     return "sz" + c
 
 
-def _base_mainboard():
-    """全A代码+名称 → 主板基础池 [(code6, name)]。端点稳定, 本地云端均可用。"""
-    import akshare as ak
-    df = ak.stock_info_a_code_name()
-    out = []
-    for r in df.itertuples(index=False):
-        code, name = str(r.code).zfill(6), str(r.name)
-        if code[:3] not in MAIN_PREFIX:
-            continue
-        if any(b in name for b in _BAD_NAME):
-            continue
-        out.append((code, name))
-    return out
+def _base_mainboard(conn=None):
+    """全A代码+名称 → 主板基础池 [(code6, name)]。
+    多源兜底(海外 Runner 对国内端点常不可达, 曾致 backtest prep 崩溃):
+      主源 akshare 代码表 → 东财实时快照(与 _snapshot 同源) → 本地库已有日线/成分推导。
+    任一成功即返回; 全失败返回空列表(**不抛异常**, 避免 prep 的 ensure-full-DB 步骤整体失败)。"""
+    # 1) 主源: akshare 代码表(国内端点)
+    try:
+        import akshare as ak
+        df = ak.stock_info_a_code_name()
+        out = [(str(r.code).zfill(6), str(r.name))
+               for r in df.itertuples(index=False)
+               if str(r.code).zfill(6)[:3] in MAIN_PREFIX
+               and not any(b in str(r.name) for b in _BAD_NAME)]
+        if out:
+            print(f"== 主板基础池(主源 akshare): {len(out)} 只 ==", flush=True)
+            return out
+    except Exception as e:
+        print(f"  [降级] stock_info_a_code_name 不可达({repr(e)[:60]}), 试东财快照", flush=True)
+    # 2) 兜底: 东财实时快照(含全市场代码; 与 _snapshot 同源, 海外多可达)
+    try:
+        snap = _snapshot()
+        if snap:
+            out = [(c, "") for c in snap.keys() if c[:3] in MAIN_PREFIX]
+            if out:
+                print(f"== 主板基础池(东财快照兜底): {len(out)} 只 ==", flush=True)
+                return out
+    except Exception as e:
+        print(f"  [降级] 东财快照兜底不可达({repr(e)[:60]}), 试本地库", flush=True)
+    # 3) 最后兜底: 本地库已有日线/成分中挑主板前缀
+    try:
+        c = conn if conn is not None else get_conn()
+        rows = c.execute(
+            "SELECT DISTINCT code FROM daily_bar "
+            "WHERE code LIKE 'sh6%' OR code LIKE 'sz0%' OR code LIKE 'sz00%'").fetchall()
+        out = []
+        for (code,) in rows:
+            c6 = code[2:] if code[:2] in ("sh", "sz") else code
+            if c6[:3] in MAIN_PREFIX:
+                out.append((c6, ""))
+        if conn is None:
+            c.close()
+        if out:
+            print(f"== 主板基础池(本地库兜底): {len(out)} 只 ==", flush=True)
+            return out
+    except Exception as e:
+        print(f"  [降级] 本地库兜底失败({repr(e)[:60]})", flush=True)
+    print("  [警告] 所有源均不可达, 主板基础池为空(本回合无主板成分)", flush=True)
+    return []
 
 
 def _snapshot():
@@ -87,7 +122,7 @@ def build(min_amount=1.0e8, min_mcap=5.0e9, target=1300, conn=None):
     conn = conn or get_conn()
     init_db(conn)
 
-    base = _base_mainboard()
+    base = _base_mainboard(conn=conn)
     print(f"== 主板基础池(前缀+去ST): {len(base)} 只 ==", flush=True)
 
     snap = _snapshot()
