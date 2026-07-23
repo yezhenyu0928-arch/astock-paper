@@ -232,8 +232,9 @@ def _buy_info(sid, code, log_rows, fallback_date=""):
 
 
 def _backtest_summary(sid):
-    """从 reports/ 读回测主线 + 入池判定,供看板展示历史参考。
+    """从 reports/ 读主回测(2022-今)的年化/回撤,按用户硬约束(年化≥5% 且 回撤≤5%)打达标/不达标标。
     兼容主回测报告({slug}.md)和五段回测报告({slug}_v3.md)。
+    返回 (bt_line, verdict):bt_line 为纯文本(含达标徽章 emoji),看板两处渲染(一处 html.escape)。
     """
     slug = sid.replace("@", "_at_")
     bt_line, verdict = "", ""
@@ -242,21 +243,24 @@ def _backtest_summary(sid):
         rp = conf.REPORTS_DIR / rp_name
         if rp.exists():
             text = rp.read_text(encoding="utf-8")
-            # 五段回测格式: 汇总统计行
-            m = re.search(r"年化收益均值:\s*([+\-\d.]+%)", text)
+            # 主回测行: "- 累计25.7% 年化5.4% 回撤4.8% Calmar1.13 ..."
+            m = re.search(r"主回测\([^)]*\)[^\n]*\n\s*-\s*累计[^\n]*?年化\s*([\d.]+%)[^回]*回撤\s*([\d.]+%)", text)
             if m:
-                ann = m.group(1)
-            else:
-                m = re.search(r"年化\s*([+\-\d.]+%)", text)
-                ann = m.group(1) if m else "?"
-            m = re.search(r"Calmar 均值:\s*([+\-\d.]+)", text)
-            if m:
-                cal = m.group(1)
-            else:
-                m = re.search(r"Calmar([+\-\d.]+)", text)
-                cal = m.group(1) if m else "?"
-            bt_line = f"年化{ann}·Calmar{cal}"
-            break
+                ann, dd = m.group(1), m.group(2)
+                try:
+                    ok = float(ann.rstrip("%")) >= 5.0 and float(dd.rstrip("%")) <= 5.0
+                except Exception:
+                    ok = False
+                badge = "✅达标" if ok else "❌不达标"
+                bt_line = f"年化{ann}·回撤{dd} {badge}"
+                break
+            # 兜底:老格式只有 年化收益均值 / 年化 行(无主回测段)
+            m2 = re.search(r"年化收益均值:\s*([+\-\d.]+%)", text)
+            if not m2:
+                m2 = re.search(r"年化\s*([+\-\d.]+%)", text)
+            if m2:
+                bt_line = f"年化{m2.group(1)} (主回测段缺失)"
+                break
     vp = conf.REPORTS_DIR / f"{slug}_validate.md"
     if vp.exists():
         m = re.search(r"## 结论:\*\*(.+?)\*\*", vp.read_text(encoding="utf-8"))
@@ -961,9 +965,46 @@ _SRC_NAME = {"sina_roll": "新浪", "em_global": "东财", "news_cctv": "央视"
 _SRC_COLOR = {"sina_roll": "#e6162d", "em_global": "#d92b2b", "news_cctv": "#c0392b"}
 
 
+# ---------------- 新闻含金量过滤 ----------------
+# 低价值(与 A 股投资决策无关)→ 直接剔除:娱乐八卦/天气/体育/人名轶事/社会花边。
+_NEWS_JUNK_RE = re.compile(
+    r"(张雪峰|热浪|演唱会|离婚|结婚|出轨|综艺|春晚|世界杯|奥运|欧洲杯|亚运|电影票房|电视剧|"
+    r"明星|网红|微博热搜|天气|降温|升温|暴雨|暴雨预警|台风|沙尘暴|大雾|结冰|彩票|"
+    r"相亲|选秀|粉丝|代言|绯闻|去世|病逝|悼念|讣告|婚礼|满月|寿宴|度假|旅游攻略|"
+    r"演唱会门票|票房|收视率|综艺节目|脱口秀|相声|小品)")
+
+# 市场强信号(命中则重要性拉满):政策/监管/央行/财报/并购/风险事件等真正影响 A 股的东西。
+_NEWS_BOOST_RE = re.compile(
+    r"(涨停|跌停|央行|降准|加息|MLF|逆回购|GDP|CPI|PPI|PMI|财报|季报|年报|业绩|"
+    r"营收|净利润|亏损|盈利|收购|重组|借壳|退市|ST|减持|增持|回购|分红|派息|配股|"
+    r"证监会|央行|银保监会|国务院|政治局|国常会|发改委|工信部|商务部|财政部|"
+    r"关税|制裁|贸易战|反倾销|出口管制|实体清单|美联储|非农|加息|缩表|"
+    r"IPO|新股|申购|北向资金|外资|净流入|净流出|融资余额|融券|"
+    r"利好|利空|暴雷|违约|债务|商誉减值|立案|问询函|风险提示|"
+    r"半导体|芯片|新能源|光伏|锂电|医药|创新药|军工|券商|银行|地产|白酒|消费|"
+    r"黄金|原油|期货|大宗商品|汇率|人民币|美元|指数|沪指|深成指|创业板|科创板|"
+    r"放量|缩量|成交额|破万亿|历史新高|新低)")
+
+# 信源基础分(权威源更具参考价值):央视(S0)>东财全球(S3权威量大)>新浪滚动(S3)。
+_SRC_BASE = {"news_cctv": 3, "em_global": 3, "em_global_cjzc": 3, "sina_roll": 2,
+             "sina_global": 2, "cls_global": 2, "em_global_np": 2}
+
+
+def _news_importance(title, source):
+    """新闻重要性评分(越高越重要)。基础分(信源) + 市场强信号命中加权。"""
+    score = _SRC_BASE.get(source, 1)
+    t = title or ""
+    if _NEWS_BOOST_RE.search(t):
+        score += 5
+    # 较长标题通常信息更实质(短讯如"X涨超3%"也保留,但不过度加权)
+    if len(t) >= 24:
+        score += 1
+    return score
+
+
 def _news_flash_section(conn):
-    """今日重点快讯(原始快讯标题列表,与信号标签互补,直接展示'看到了什么新闻')。
-    读 news_raw 当日(含昨日兜底)条目;云端海外 Runner 经 news_adapter 快照兜底后库内即有数据。"""
+    """今日重点快讯:提升含金量——剔除娱乐/天气等低价值新闻,按重要性排序,
+    默认仅展示最重要 5 条,其余折叠(点'展开全部'展开)。"""
     if not conn:
         return ""
     today = util.today_str()
@@ -972,7 +1013,7 @@ def _news_flash_section(conn):
         rows = conn.execute(
             "SELECT ts, title, source FROM news_raw "
             "WHERE (ts LIKE ? OR ts >= ?) AND length(title)>0 "
-            "ORDER BY ts DESC LIMIT 28",
+            "ORDER BY ts DESC LIMIT 60",
             (today + "%", cutoff)).fetchall()
         if not rows:
             return ""
@@ -982,7 +1023,13 @@ def _news_flash_section(conn):
                 continue
             seen.add(title)
             items.append((str(ts), str(title), str(source)))
-        # epoch 时间戳转可读(防御:旧缓存可能残留非日期 ts)
+        # 过滤低价值新闻(娱乐/天气/八卦等),保留对 A 股决策有用的内容
+        items = [it for it in items if not _NEWS_JUNK_RE.search(it[1])]
+        if not items:
+            return ""
+        # 按重要性降序(同分按时间新→旧),保证"最重要"的排在前面
+        items.sort(key=lambda it: (_news_importance(it[1], it[2]), it[0]), reverse=True)
+
         def _fmt(ts):
             if ts.isdigit() and len(ts) >= 10:
                 try:
@@ -990,20 +1037,26 @@ def _news_flash_section(conn):
                 except Exception:
                     return ""
             return ts[:16]
-        parts = []
-        for ts, title, source in items:
-            color = _SRC_COLOR.get(source, "var(--mut)")
-            parts.append(
-                f"<div class='flash-item'>"
-                f"<span class='flash-time'>{_fmt(ts)}</span>"
-                f"<span class='flash-src' style='color:{color}'>{_SRC_NAME.get(source, source)}</span>"
-                f"<span class='flash-title'>{html.escape(title)}</span>"
-                f"</div>")
-        return (f"<div class='sec'>📰 今日重点快讯</div>"
-                f"<div class='flash-list'>{''.join(parts)}</div>")
-    except Exception:
-        return ""
 
+        def _render(it):
+            ts, title, source = it
+            color = _SRC_COLOR.get(source, "var(--mut)")
+            return (f"<div class='flash-item'>"
+                    f"<span class='flash-time'>{_fmt(ts)}</span>"
+                    f"<span class='flash-src' style='color:{color}'>{_SRC_NAME.get(source, source)}</span>"
+                    f"<span class='flash-title'>{html.escape(title)}</span>"
+                    f"</div>")
+
+        top5 = items[:5]
+        rest = items[5:]
+        parts = [f"<div class='flash-list'>{''.join(_render(it) for it in top5)}</div>"]
+        if rest:
+            rest_html = "".join(_render(it) for it in rest)
+            parts.append(
+                f"<details class='flash-more'><summary>展开全部 {len(items)} 条</summary>"
+                f"<div class='flash-list'>{rest_html}</div></details>")
+        return (f"<div class='sec'>📰 今日重点快讯 <span class='sec-sub'>（已过滤娱乐/天气等低价值，按重要性排序）</span></div>"
+                f"{''.join(parts)}")
     except Exception:
         return ""
 
@@ -1585,6 +1638,12 @@ th{background:#f0f2f5;color:var(--mut);font-weight:600}td.l,th:first-child{text-
 .flash-time{color:var(--mut);font-size:11.5px;flex:0 0 auto;width:62px;font-variant-numeric:tabular-nums}
 .flash-src{flex:0 0 auto;width:30px;font-size:11.5px;font-weight:700}
 .flash-title{color:var(--fg);flex:1 1 auto}
+.flash-more{margin-top:2px}
+.flash-more>summary{cursor:pointer;color:#2563eb;font-size:12.5px;padding:5px 2px;user-select:none;list-style:none}
+.flash-more>summary::-webkit-details-marker{display:none}
+.flash-more>summary:hover{text-decoration:underline}
+.flash-more .flash-list{max-height:520px}
+.sec-sub{font-size:11.5px;font-weight:400;color:var(--mut);margin-left:4px}
 .rg-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:6px 0}
 .rg-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
 .rg-badge{color:#fff;font-weight:700;font-size:14px;padding:4px 12px;border-radius:8px}

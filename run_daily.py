@@ -297,7 +297,7 @@ def run(date=None, only=None):
         if mkt_score is not None and mkt_score < 0:
             note += f" | ⚠消息面市场分{mkt_score}(已降敞口)"
         t, c = notify.build_heartbeat(today, last, note)
-        notify.push(t, c, "heartbeat", cfg)
+        notify.push(t, c, "heartbeat", cfg, smtp_fallback=False)
         # 刷新静态看板(国内可达,零依赖)
         try:
             import report_html

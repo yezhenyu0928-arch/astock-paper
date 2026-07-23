@@ -57,8 +57,9 @@ def _push_smtp(title, content, cfg):
     return True
 
 
-def push(title, content, level="op", cfg=None) -> bool:
-    """level∈{op,alert,heartbeat}。主 PushPlus→备 SMTP→都失败抛异常。
+def push(title, content, level="op", cfg=None, smtp_fallback=True) -> bool:
+    """level∈{op,alert,heartbeat}。主 PushPlus(微信)→备 SMTP(邮箱,可关闭)。
+    smtp_fallback=False 时(如心跳)仅走微信,失败不回落邮箱——避免心跳刷邮箱。
     完全未配置通道时:仅打印(本地开发),返回 False。"""
     cfg = cfg or conf.load_config()
     token = conf.secret("PUSHPLUS_TOKEN")
@@ -76,15 +77,19 @@ def push(title, content, level="op", cfg=None) -> bool:
             return True
         except Exception as e:
             errs.append(f"PushPlus:{e}")
-            log.warning("PushPlus 失败,转 SMTP: %s", e)
-    if auth:
+            log.warning("PushPlus 失败%s: %s",
+                        "" if smtp_fallback else "(不回落邮箱)", e)
+    if smtp_fallback and auth:
         try:
             _push_smtp(title, content, cfg)
             log.info("SMTP 推送成功: %s", title)
             return True
         except Exception as e:
             errs.append(f"SMTP:{e}")
-    raise RuntimeError("所有推送通道失败: " + " | ".join(errs))
+    if errs:
+        # 关键通道(PushPlus)失败且无可用回落 → 抛异常让 Actions 变红(仅 heartbeat 关回落时常见)
+        raise RuntimeError("所有推送通道失败: " + " | ".join(errs))
+    return False
 
 
 # ---------------- 消息模板(严格按 SPEC) ----------------
@@ -144,7 +149,7 @@ def main(argv=None):
             push(t, c, "alert")
         elif args.heartbeat:
             t, c = build_heartbeat(util.today_str(), util.today_str(), "测试心跳")
-            push(t, c, "heartbeat")
+            push(t, c, "heartbeat", smtp_fallback=False)
         elif args.test:
             push("【测试】", args.test, "op")
         else:
