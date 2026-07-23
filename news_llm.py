@@ -73,9 +73,9 @@ def _get_api_key(api_key_env):
     return key
 
 
-def _call_openai_compatible(base_url, model, api_key, messages, max_tokens=1024, provider=""):
-    """调用 OpenAI 兼容的 /chat/completions 端点(GLM-4.7-Flash / MiMo 等)。
-    base_url 需含到版本前缀(GLM: .../api/paas/v4;MiMo: .../v1),本函数只补 /chat/completions。"""
+def _call_openai_compatible(base_url, model, api_key, messages, max_tokens=1024, provider="", timeout=90):
+    """调用 OpenAI 兼容的 /chat/completions 端点(GLM-4.7-Flash / MiMo / agnes 等)。
+    base_url 需含到版本前缀,本函数只补 /chat/completions。空内容/超时一律抛错,交由上层重试。"""
     import requests
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -91,10 +91,13 @@ def _call_openai_compatible(base_url, model, api_key, messages, max_tokens=1024,
     # GLM-4.7-Flash 默认开启深度思考;禁用以拿到干净 JSON、更快更省 token
     if provider == "glm":
         payload["thinking"] = {"type": "disabled"}
-    resp = requests.post(url, json=payload, headers=headers, timeout=60)
+    resp = requests.post(url, json=payload, headers=headers, timeout=timeout)
     resp.raise_for_status()
     data = resp.json()
-    return data["choices"][0]["message"]["content"]
+    content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+    if not content or not content.strip():
+        raise ValueError(f"LLM 返回空内容(可能过载/超时): {str(data)[:160]}")
+    return content
 
 
 def _call_anthropic(model, api_key, messages, max_tokens=1024):
@@ -111,15 +114,21 @@ def _call_anthropic(model, api_key, messages, max_tokens=1024):
 
 
 def _parse_json_response(text):
-    """容错解析 JSON 响应。"""
+    """容错解析 JSON 响应(支持 ```json 代码块围栏)。空文本直接判错。"""
+    if not text or not text.strip():
+        raise ValueError(f"LLM 无JSON: {text[:200]}")
     s, e = text.find("{"), text.rfind("}")
     if s < 0 or e < 0:
+        import re
+        m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
+        if m:
+            return json.loads(m.group(1))
         raise ValueError(f"LLM 无JSON: {text[:200]}")
     return json.loads(text[s:e + 1])
 
 
 def _call_llm(prompt, cfg, max_tokens=1024):
-    """统一 LLM 调用入口,返回文本响应。"""
+    """统一 LLM 调用入口(含重试),返回文本响应。失败抛错(由调用方兜底)。"""
     llm_cfg = _get_llm_config(cfg)
     api_key = _get_api_key(llm_cfg["api_key_env"])
     if not api_key:
@@ -127,12 +136,19 @@ def _call_llm(prompt, cfg, max_tokens=1024):
 
     messages = [{"role": "user", "content": prompt}]
     provider = llm_cfg["provider"]
-
-    if provider == "anthropic":
-        return _call_anthropic(llm_cfg["model"], api_key, messages, max_tokens)
-    # glm / mimo / 其它 OpenAI 兼容端点
-    return _call_openai_compatible(llm_cfg["base_url"], llm_cfg["model"], api_key,
-                                   messages, max_tokens, provider=provider)
+    last_err = None
+    for attempt in range(3):                      # 端点偶发慢/空响应:重试 3 次
+        try:
+            if provider == "anthropic":
+                return _call_anthropic(llm_cfg["model"], api_key, messages, max_tokens)
+            # glm / mimo / agnes 等 OpenAI 兼容端点
+            return _call_openai_compatible(llm_cfg["base_url"], llm_cfg["model"], api_key,
+                                           messages, max_tokens, provider=provider)
+        except Exception as e:
+            last_err = e
+            log.warning("LLM 调用失败(第%d次,%.1fs后重试): %s", attempt + 1, 2 + attempt * 2, repr(e)[:140])
+            import time; time.sleep(2 + attempt * 2)
+    raise last_err
 
 
 def market_score(date, titles, cfg, holdings=None):
