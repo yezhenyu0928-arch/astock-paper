@@ -36,6 +36,7 @@ jobs:
           SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          AGNES_LLM_KEY: ${{ secrets.AGNES_LLM_KEY }}
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: |
           MODE=auto

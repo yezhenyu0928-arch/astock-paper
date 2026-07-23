@@ -36,6 +36,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
           GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          AGNES_LLM_KEY: ${{ secrets.AGNES_LLM_KEY }}
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: python run_daily.py
       - name: bundle Chart.js locally (no CDN dependency)
