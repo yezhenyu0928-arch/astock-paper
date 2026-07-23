@@ -20,9 +20,10 @@ from engine import Engine
 log = logging.getLogger("run_daily")
 
 # 海外 Runner 数据更新超时(秒)。超时后降级继续跑引擎,不挂死 30 分钟。
-# ETF 数据(~15个)约 30-60 秒能取完;个股(~300个)yfinance 每个 1-2 秒,
-# 超时后引擎用缓存DB+已有ETF新数据继续,不影响 ETF动量轮动/网格策略。
-_DATA_TIMEOUT = 180  # 3 分钟
+# 沪深300成分(~300只)首次回填(从2018起)每只约3秒,全量约15分钟;
+# 故放宽到 900s 让单次运行尽量填满个股日线,之后增量更新极快不再触顶。
+# 注意:此超时只包裹 update_all/update_daily,引擎/消息面/看板仍在 30min 限额内完成。
+_DATA_TIMEOUT = 900  # 15 分钟
 
 
 class TimeoutError(Exception):
@@ -48,16 +49,27 @@ def _check_timeout(flag):
 
 
 def _stock_universe(cfg, reg, conn):
-    """启用的个股策略所需的日线更新范围(S3=沪深300成分;S1/S4 全A 由 P9 数据流补,暂取沪深300兜底)。"""
+    """启用的个股策略所需的日线更新范围(沪深300成分兜底;全A补数见 P7/P9)。
+
+    ⚠ 关键修复(2026-07):必须按策略「前缀」识别,而非写死的 @v1 ID。
+    此前仅判断 s1_dividend@v1 / s4_smallcap@v1 / s3_ma_trend@v1;
+    当 config 切到 v2(s1_dividend@v2 等)后,这些 v1 ID 全部为 false →
+    返回空集 → run_daily 永远不调用 update_daily → 个股日线永不刷新 →
+    候选池空 → 全部策略 0 交易(即本期"为什么没有操作"的根因)。
+    改为:任一启用的「个股策略前缀」命中即拉沪深300成分日线(版本无关,新增个股策略须加入前缀表)。
+    """
     codes = set()
-    enabled = [s for s, on in cfg.get("strategies", {}).items() if on]
-    need_members = any(s in enabled for s in ("s3_ma_trend@v1",))
-    need_full = any(s in enabled for s in ("s1_dividend@v1", "s4_smallcap@v1"))
-    if need_members or need_full:
+    enabled = {s for s, on in cfg.get("strategies", {}).items() if on}
+    # 需要个股日线数据的策略前缀(版本无关)。新增个股策略务必在此登记,否则会再次掉进"0交易"坑。
+    stock_strategy_prefixes = (
+        "s1_dividend", "s4_smallcap", "s8_checklist",
+        "s13_growth_quality_rotation", "s14_value_reversal_rotation", "s15_core_allocation",
+    )
+    need_stock = any(s.split("@", 1)[0] in stock_strategy_prefixes for s in enabled)
+    if need_stock:
         rows = conn.execute("SELECT code FROM index_members WHERE index_code='sh000300'").fetchall()
         codes |= {r[0] for r in rows}
-    if need_full:
-        log.warning("S1/S4 需全A历史,当前以沪深300成分兜底(完整全A补数见 P7/P9)")
+        log.info("个股策略已启用,日线更新范围=%d 只(沪深300成分兜底)", len(codes))
     return codes
 
 
