@@ -97,13 +97,16 @@ def scan_market(date, conn=None):
         l1s = l1.get("market_score", 0)
         if nl.get("llm_shadow") and not nl.get("llm"):
             _log_shadow(date, l0_score, l1s, l1.get("top_risks", []))   # 影子:signal 仍用 L0
+            log.info("[L1] 影子档生效: L0=%s L1=%s (仅记录不干预)", l0_score, l1s)
         elif abs(l1s - l0_score) >= 2:   # 大幅分歧 → 取均值(双向校准,不再只降不升)
             blended = int(round((l0_score + l1s) / 2))
             ev.append(f"[L0={l0_score}与L1={l1s}分歧大,取均值{blended}] " + "；".join(l1.get("top_risks", [])[:2]))
             score = blended
             level = ("L1-AUTH" if base_level.endswith("AUTH") else "L1")
+            log.info("[L1] 研判生效(分歧取均值): L0=%s L1=%s -> %s [%s]", l0_score, l1s, score, level)
         else:
             ev.append(f"[L1={l1s}与L0一致] " + "；".join(l1.get("top_risks", [])[:2]))
+            log.info("[L1] 研判生效(与L0一致): L0=%s L1=%s (采用L0, L1佐证) [%s]", l0_score, l1s, level)
     na.store_signal(date, "market", score, level, ev[:20], conn=conn)
     if own:
         conn.close()
