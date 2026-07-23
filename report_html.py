@@ -15,7 +15,7 @@ import os
 import re
 import csv
 import html
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import conf
 import util
@@ -956,6 +956,58 @@ def _news_industry_section(conn):
         return ""
 
 
+# 快讯来源展示名/色(与 news_adapter.SOURCE_META 对齐)
+_SRC_NAME = {"sina_roll": "新浪", "em_global": "东财", "news_cctv": "央视"}
+_SRC_COLOR = {"sina_roll": "#e6162d", "em_global": "#d92b2b", "news_cctv": "#c0392b"}
+
+
+def _news_flash_section(conn):
+    """今日重点快讯(原始快讯标题列表,与信号标签互补,直接展示'看到了什么新闻')。
+    读 news_raw 当日(含昨日兜底)条目;云端海外 Runner 经 news_adapter 快照兜底后库内即有数据。"""
+    if not conn:
+        return ""
+    today = util.today_str()
+    cutoff = (datetime.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    try:
+        rows = conn.execute(
+            "SELECT ts, title, source FROM news_raw "
+            "WHERE (ts LIKE ? OR ts >= ?) AND length(title)>0 "
+            "ORDER BY ts DESC LIMIT 28",
+            (today + "%", cutoff)).fetchall()
+        if not rows:
+            return ""
+        seen, items = set(), []
+        for ts, title, source in rows:
+            if title in seen:
+                continue
+            seen.add(title)
+            items.append((str(ts), str(title), str(source)))
+        # epoch 时间戳转可读(防御:旧缓存可能残留非日期 ts)
+        def _fmt(ts):
+            if ts.isdigit() and len(ts) >= 10:
+                try:
+                    return datetime.fromtimestamp(int(ts[:10])).strftime("%m-%d %H:%M")
+                except Exception:
+                    return ""
+            return ts[:16]
+        parts = []
+        for ts, title, source in items:
+            color = _SRC_COLOR.get(source, "var(--mut)")
+            parts.append(
+                f"<div class='flash-item'>"
+                f"<span class='flash-time'>{_fmt(ts)}</span>"
+                f"<span class='flash-src' style='color:{color}'>{_SRC_NAME.get(source, source)}</span>"
+                f"<span class='flash-title'>{html.escape(title)}</span>"
+                f"</div>")
+        return (f"<div class='sec'>📰 今日重点快讯</div>"
+                f"<div class='flash-list'>{''.join(parts)}</div>")
+    except Exception:
+        return ""
+
+    except Exception:
+        return ""
+
+
 # ETF名称映射(与data_adapter同步)
 _ETF_NAMES = {
     "sh510300": "沪深300ETF", "sh510500": "中证500ETF", "sh512890": "红利低波ETF",
@@ -1146,6 +1198,7 @@ def generate(out_path=None):
         f"{banner}"
         f"{market_section}"
         f"{_market_regime_section(conn)}"
+        f"{_news_flash_section(conn)}"
         f"{_news_industry_section(conn)}"
         f"<div class='sec'>{ops_title}</div>{ops_section}"
         f"<div class='sec'>实盘赛马总览（2026-07-06 起算）</div>{overview}"
@@ -1527,6 +1580,11 @@ th{background:#f0f2f5;color:var(--mut);font-weight:600}td.l,th:first-child{text-
 .news-bar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0}
 .news-tag{display:inline-block;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;color:#fff}
 .news-tag.positive{background:#0a9e6b}.news-tag.negative{background:#d92b2b}
+.flash-list{display:flex;flex-direction:column;gap:6px;padding:6px 0;max-height:440px;overflow:auto}
+.flash-item{display:flex;gap:8px;align-items:baseline;font-size:13px;line-height:1.5}
+.flash-time{color:var(--mut);font-size:11.5px;flex:0 0 auto;width:62px;font-variant-numeric:tabular-nums}
+.flash-src{flex:0 0 auto;width:30px;font-size:11.5px;font-weight:700}
+.flash-title{color:var(--fg);flex:1 1 auto}
 .rg-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:6px 0}
 .rg-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
 .rg-badge{color:#fff;font-weight:700;font-size:14px;padding:4px 12px;border-radius:8px}
