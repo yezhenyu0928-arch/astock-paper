@@ -70,6 +70,52 @@ def _growth_score(date, codes, conn):
         return {}
 
 
+def _cap_segment_pool(ctx, pool, segment):
+    """按总市值分位把可投池切成不同"市值段", 让各策略从不同子池选股 → 操作真正岔开。
+
+    segment 取值:
+      'large'    : 市值最大的前 33%(大盘核心/红利)
+      'mid'      : 市值 33%~70% 区间(中盘成长)
+      'small'    : 市值最小的后 45%(中小盘弹性)
+      'midsmall' : 市值后 70%(中小盘, 价值反转用)
+      'all'/None : 不切分(全池)
+    缺市值数据的票统一归入"未知", 从宽保留(避免因数据缺失把整段清空)。
+    """
+    if not segment or segment == "all":
+        return pool
+    caps = []
+    unknown = []
+    for code in pool:
+        try:
+            f = ctx.fundamental(code) or {}
+            mc = f.get("market_cap")
+        except Exception:
+            mc = None
+        if mc and mc > 0:
+            caps.append((code, float(mc)))
+        else:
+            unknown.append(code)
+    if len(caps) < 10:                       # 市值数据太少 → 不切分, 从宽返回全池
+        return pool
+    caps.sort(key=lambda x: x[1], reverse=True)   # 市值降序
+    n = len(caps)
+    if segment == "large":
+        seg = caps[:max(1, int(n * 0.33))]
+    elif segment == "mid":
+        seg = caps[int(n * 0.33):int(n * 0.70)]
+    elif segment == "small":
+        seg = caps[int(n * 0.55):]
+    elif segment == "midsmall":
+        seg = caps[int(n * 0.30):]
+    else:
+        return pool
+    keep = [c for c, _ in seg]
+    # 未知市值的票并入(从宽), 但大盘段不并入(大盘要求市值明确)
+    if segment != "large":
+        keep += unknown
+    return keep
+
+
 def _industry_leadership(cand, ind_map):
     """个股行业地位因子(可回测的'新闻/行业地位'代理): 同一行业内按 ROE 质量排名,
     业内质量龙头(高 ROE)得高分 —— 市值中性, 不与小盘倾斜(cap_tilt)打架。
@@ -141,8 +187,14 @@ def select(ctx, date, account, params, strategy_id, config):
             pass
     weight_per = common.target_weight(eff)
 
-    pool = ctx.members(POOL_INDEX, date)
+    # 可投池: 优先用 params.pool_index(扩池后为 'mainboard' 全主板流动性池),
+    # 缺失/为空时回退 sh000300(兼容旧行为)。再走主板硬约束过滤 + 市值分段(差异化关键)。
+    pool_index = params.get("pool_index", POOL_INDEX)
+    pool = ctx.members(pool_index, date)
+    if not pool and pool_index != POOL_INDEX:
+        pool = ctx.members(POOL_INDEX, date)          # mainboard 未回填时兜底
     pool = common.main_board_universe(ctx, pool, config, date)
+    pool = _cap_segment_pool(ctx, pool, params.get("cap_segment"))
 
     cand = []  # (code, dy, vol, roe, news, pe, mcap)
     # 诊断计数(海外 baostock 不可达时定位"为何无候选")
@@ -157,16 +209,27 @@ def select(ctx, date, account, params, strategy_id, config):
             continue
         # 股息率门槛:腾讯快照海外不提供股息率(留 0/None)→ 视为无数据,从宽不据此剔除
         dy = f.get("dividend_yield")
-        if dy is not None and dy > 0 and dy < min_dy:
+        if min_dy > 0 and dy is not None and dy > 0 and dy < min_dy:
             n_dy += 1
             continue
-        if ctx.dividend_years(code, years) < years:
+        # 连续分红年数门槛: 仅当 dividend_years>0 时启用。
+        # 【差异化关键】成长/小盘/反转策略设 dividend_years=0 → 跳过分红门槛, 不再被强制收敛到
+        # "分红大盘蓝筹", 从而与红利类策略(s1/s15)选出真正不同的标的。
+        if years > 0 and ctx.dividend_years(code, years) < years:
             n_div += 1
             continue
-        ok, roe = _roe_quality_ok(code, date, ctx.conn, roe_years, roe_min)
-        if not ok:
-            n_roe += 1
-            continue
+        # ROE 质量门槛: 仅当 roe_min>0 时启用(设 0 可放开, 供深度价值/反转从宽)。
+        if roe_min > 0:
+            ok, roe = _roe_quality_ok(code, date, ctx.conn, roe_years, roe_min)
+            if not ok:
+                n_roe += 1
+                continue
+        else:
+            roe = 0.0
+            try:
+                _o, roe = _roe_quality_ok(code, date, ctx.conn, roe_years, 0.0)
+            except Exception:
+                pass
         c = ctx.close(code, 251)
         if len(c) < 200:
             n_bar += 1

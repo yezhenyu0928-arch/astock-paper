@@ -25,26 +25,9 @@ class S4SmallcapV2(BaseStrategy):
         if not mf_core.should_rebalance(date, self.params):
             return mf_core.risk_orders(date, ctx, account, self.params, self.strategy_id, self.config)
 
-        # 调优锁定(s4/C, 本地主回测 2022-2026: 年化6.3%/回撤4.5%/Calmar1.40):
-        # 松 regime 降仓(市场weak时仍留 0.75 仓) + 降股息floor到2.5% + 宽止损14% + 动量权重35%(cap_tilt规模溢价)。
-        # 在回撤≤5% 硬约束下取到的最高收益。
-        params = {
-            "min_dividend_yield": 0.025,
-            "dividend_years": 3,
-            "roe_years": 3,
-            "roe_min": 0.08,
-            "hold_n": 8,
-            "max_per_industry": 3,
-            "low_vol_pct": 0.55,          # 放宽低波过滤, 保留更多含收益标的
-            "cap_tilt": True,             # 偏小市值排名加分(规模溢价)
-            "momentum_window": 252,
-            "momentum_skip": 21,
-            "momentum_min": -0.05,        # 剔除深跌, 保留上行/横盘趋势
-            "regime_downsize": True,
-            "regime_good": 1.0, "regime_mid": 1.0, "regime_bad": 0.75,
-            "weights": {"dividend": 0.16, "low_vol": 0.07, "roe": 0.15,
-                        "valuation": 0.09, "news": 0.07, "cap": 0.11, "momentum": 0.35},
-        }
+        # 调优参数统一收口到 registry(params 字段, 与 mf_core 对齐); 不再硬编码, 避免与 registry 双源漂移。
+        # 历史基线(s4/C, 本地主回测 2022-2026: 年化6.3%/回撤4.5%/Calmar1.40)对应 registry 默认 params。
+        params = dict(self.params)
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:
             forced = news_guard.guard_holdings(date, list(account.positions.keys()), ctx.conn, self.config)
@@ -55,4 +38,5 @@ class S4SmallcapV2(BaseStrategy):
                           f"S4中小盘:{ctx.name(code)}无候选,清仓", date)
                     for code in account.positions.keys() if code not in forced]
         return mf_core.build_orders(ctx, date, account, sel, params,
-                                    self.strategy_id, self.config, stop_pct=0.14)
+                                    self.strategy_id, self.config,
+                                    stop_pct=params.get("stop_pct", 0.14))

@@ -30,7 +30,7 @@ s1_dividend@v2:
   benchmark: sh510300          # 沪深300ETF(数据可行;池已用沪深300)
   frozen_date: 2026-07-06       # 卡D 注册入赛(v1 并行不受影响);ROE数据覆盖率98.8%,过门槛
   params:   # round-6: 与 strategies/s1_dividend.py 真实调优参数对齐(供报告展示)
-    rebalance: daily            # 日频再平衡(用户要求: 每日抓机会+逃风险; 风控每日强卖)
+    rebalance: weekly           # 周频再平衡(稳健防御); 风控仍每日强卖逃风险
     min_dividend_yield: 0.035
     dividend_years: 3
     low_vol_pct: 0.55
@@ -43,7 +43,7 @@ s1_dividend@v2:
     regime_mid: 1.0
     regime_bad: 0.75
   universe: dynamic            # 沪深300过滤,generate_orders 内实现
-  rebalance: daily
+  rebalance: weekly
 
 s3_ma_trend@v1:
   class: strategies.s3_ma_trend.S3MaTrend
@@ -113,21 +113,6 @@ s6_sector@v1:
   universe: [sh512000, sh512480, sh512010, sz159928, sh512660, sh516160,
              sh512690, sh515790, sh512800, sh511010]
 
-s1_dividend@v3:
-  class: strategies.s1_dividend_v3.S1DividendV3
-  benchmark: sh510300
-  frozen_date: 2026-07-06       # P0升级:4因子→7因子(BETA/EARNINGS_YIELD/LEVERAGE)+macro regime自适应
-  params:
-    min_dividend_yield: 0.04
-    dividend_years: 3
-    roe_years: 3
-    roe_min: 0.08
-    factor_weights: {VALUE: 0.20, QUALITY: 0.15, LOW_VOL: 0.15, SIZE: 0.10, BETA: 0.15, EARNINGS_YIELD: 0.15, LEVERAGE: 0.10}
-    hold_n: 10
-    max_per_industry: 2
-  universe: dynamic
-  rebalance: monthly
-
 s4_smallcap@v2:
   class: strategies.s4_smallcap_v2.S4SmallcapV2
   benchmark: sh510300
@@ -153,7 +138,7 @@ s4_smallcap@v2:
     stop_pct: 0.14
     weights: {dividend: 0.16, low_vol: 0.07, roe: 0.15, valuation: 0.09, news: 0.07, cap: 0.11, momentum: 0.35}
   universe: dynamic
-  rebalance: monthly
+  rebalance: daily
 
 s8_checklist@v1:
   class: strategies.s8_checklist.S8LowDrawdown   # round-6 修复: 旧 S8ValueChecklist(R1-R9清单)恒 -0.2%/14.7% 破线且不可救; 改用 mf_core 低回撤版(参数硬编码于 S8LowDrawdown)
@@ -427,7 +412,7 @@ s15_core_allocation@v2:
   benchmark: sh510300
   frozen_date: 2026-07-19       # 激活配置: 放宽两袖门槛(股息率2%↓/连续分红2年↓/ROE2年↓/成长同比0~100%),解决几乎空仓
   params:   # round-6: 与 strategies/s15_core_allocation.py 真实调优参数对齐(mf_core 底座)
-    rebalance: daily            # 日频再平衡(用户要求: 每日抓机会+逃风险)
+    rebalance: weekly           # 周频再平衡(核心均衡,稳健); 风控仍每日强卖逃风险
     min_dividend_yield: 0.03
     dividend_years: 3
     roe_years: 3
@@ -453,7 +438,7 @@ s15_core_allocation@v2:
     max_per_industry: 2
     pe_cap: 50
   universe: dynamic
-  rebalance: daily
+  rebalance: weekly
 
 s8_checklist@v2:
   class: strategies.s8_checklist.S8LowDrawdown
@@ -461,7 +446,7 @@ s8_checklist@v2:
   frozen_date: 2026-07-19       # 换选股逻辑:高质量低回撤动量(质量+低回撤+低波动+动量+趋势 复合打分)+宏观regime降仓+持有期跟踪止损,目标高收益低回撤
   params:
     # 红利质量多因子底座(mf_core)·低回撤; 实际参数硬编码于 strategies/s8_checklist.py
-    rebalance: daily            # 日频再平衡(用户要求)
+    rebalance: weekly           # 周频再平衡(低回撤,稳健); 风控仍每日强卖逃风险
     min_dividend_yield: 0.04
     dividend_years: 3
     roe_years: 3
@@ -478,5 +463,184 @@ s8_checklist@v2:
     regime_bad: 0.75
     stop_pct: 0.08
     weights: {dividend: 0.18, low_vol: 0.22, roe: 0.20, valuation: 0.10, news: 0.10, momentum: 0.20}
+  universe: dynamic
+  rebalance: weekly
+
+# ============================================================================
+# 2026-07-23 扩池 + 差异化重构(赛马公平性: 只增不改, @v3 从零起跑)
+# 用户口径: 主板全市场可投(除创/科/北) → pool_index: mainboard(约1000-1500只流动性池)。
+# 差异化关键: 6 策略各取不同【市值分段 cap_segment】+ 不同【分红门槛】+ 不同【因子权重】,
+# 使选股真正岔开(此前 6 策略共用 sh000300 + 红利门槛 → 操作 100% 雷同)。
+#   s1  红利价值   weekly large    分红3年   dividend/low_vol/roe   防御收入
+#   s15 核心配置   weekly large    分红2年   roe/dividend/momentum  大盘核心
+#   s8  低波价值   weekly all      不要分红  low_vol/valuation      全市场低波
+#   s4  中小盘成长 daily  small    不要分红  cap/momentum/growth    小盘弹性
+#   s13 景气成长   daily  mid      不要分红  growth/momentum/roe    中盘成长
+#   s14 价值反转   daily  midsmall 不要分红  value/valuation(逆动量) 中小盘逆向
+# ============================================================================
+
+s1_dividend@v3:
+  class: strategies.s1_dividend.S1DividendQuality
+  benchmark: sh510300
+  frozen_date: 2026-07-23       # 扩池+差异化: 主板大盘红利价值(pool=mainboard, cap=large)
+  params:
+    pool_index: mainboard
+    cap_segment: large           # 大盘段(市值前33%): 红利蓝筹
+    rebalance: weekly
+    min_dividend_yield: 0.035
+    dividend_years: 3            # 红利策略保留分红门槛
+    roe_years: 3
+    roe_min: 0.08
+    hold_n: 12
+    max_per_industry: 3
+    low_vol_pct: 0.50
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
+    stop_pct: 0.12
+    weights: {dividend: 0.28, low_vol: 0.18, roe: 0.16, valuation: 0.12, news: 0.06, industry: 0.05, momentum: 0.15}
+  universe: dynamic
+  rebalance: weekly
+
+s15_core_allocation@v3:
+  class: strategies.s15_core_allocation.S15CoreAllocation
+  benchmark: sh510300
+  frozen_date: 2026-07-23       # 扩池+差异化: 主板大盘核心配置(pool=mainboard, cap=large, 质量+动量)
+  params:
+    pool_index: mainboard
+    cap_segment: large
+    rebalance: weekly
+    min_dividend_yield: 0.02
+    dividend_years: 2            # 核心配置放宽到2年分红(比 s1 松, 纳入更多质量成长)
+    roe_years: 3
+    roe_min: 0.08
+    hold_n: 12
+    max_per_industry: 2
+    low_vol_pct: 0.55
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
+    stop_pct: 0.10
+    weights: {dividend: 0.16, low_vol: 0.14, roe: 0.22, valuation: 0.10, news: 0.06, industry: 0.10, momentum: 0.22}
+  universe: dynamic
+  rebalance: weekly
+
+s8_checklist@v3:
+  class: strategies.s8_checklist.S8LowDrawdown
+  benchmark: sh510300
+  frozen_date: 2026-07-23       # 扩池+差异化: 主板全市场低波价值(pool=mainboard, cap=all, 不要分红)
+  params:
+    pool_index: mainboard
+    cap_segment: all             # 全市场(不限市值段): 在整个主板里找最低波
+    rebalance: weekly
+    min_dividend_yield: 0.0      # 不要分红门槛
+    dividend_years: 0            # 关闭分红门槛 → 与红利类岔开
+    roe_years: 3
+    roe_min: 0.05                # 保留基本质量安全网
+    hold_n: 15                   # 低波需广度分散
+    max_per_industry: 3
+    low_vol_pct: 0.35            # 收紧低波过滤(只留最低波35%) → 低回撤身份
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
+    stop_pct: 0.08
+    weights: {dividend: 0.0, low_vol: 0.38, roe: 0.12, valuation: 0.18, news: 0.05, industry: 0.05, value: 0.12, momentum: 0.10}
+  universe: dynamic
+  rebalance: weekly
+
+s4_smallcap@v3:
+  class: strategies.s4_smallcap_v2.S4SmallcapV2
+  benchmark: sh510300
+  frozen_date: 2026-07-23       # 扩池+差异化: 主板中小盘成长(pool=mainboard, cap=small, 不要分红)
+  params:
+    pool_index: mainboard
+    cap_segment: small           # 中小盘段(市值后45%): 弹性/规模溢价
+    rebalance: daily
+    min_dividend_yield: 0.0
+    dividend_years: 0            # 关闭分红门槛(小盘多不分红)
+    roe_years: 3
+    roe_min: 0.0                 # 放开ROE硬门槛(小盘成长早期ROE低), 仅作排名因子
+    hold_n: 15                   # 小盘广度分散控回撤
+    max_per_industry: 3
+    low_vol_pct: 0.60
+    cap_tilt: true               # 偏小市值排名加分
+    momentum_window: 126         # 半年动量(小盘轮动更快)
+    momentum_skip: 21
+    momentum_min: -0.05
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 0.85
+    regime_bad: 0.6
+    stop_pct: 0.15
+    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.12, valuation: 0.08, news: 0.06, cap: 0.24, growth: 0.15, momentum: 0.25}
+  universe: dynamic
+  rebalance: daily
+
+s13_growth_quality_rotation@v3:
+  class: strategies.s13_growth_quality_rotation.S13GrowthQualityRotation
+  benchmark: sh510300
+  frozen_date: 2026-07-23       # 扩池+差异化: 主板中盘景气成长(pool=mainboard, cap=mid, 成长+动量)
+  params:
+    pool_index: mainboard
+    cap_segment: mid             # 中盘段(市值33%~70%): 景气成长主战场
+    rebalance: daily
+    min_dividend_yield: 0.0
+    dividend_years: 0            # 关闭分红门槛
+    roe_years: 3
+    roe_min: 0.08                # 成长要质量: 保留ROE门槛
+    hold_n: 12
+    max_per_industry: 3
+    low_vol_pct: 0.65            # 成长容忍较高波动
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0            # 上行趋势门槛
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 0.9
+    regime_bad: 0.65
+    stop_pct: 0.13
+    weights: {dividend: 0.0, low_vol: 0.08, roe: 0.16, valuation: 0.06, news: 0.06, industry: 0.12, growth: 0.22, momentum: 0.30}
+  universe: dynamic
+  rebalance: daily
+
+s14_value_reversal_rotation@v3:
+  class: strategies.s14_value_reversal_rotation.S14ValueReversalRotation
+  benchmark: sh510300
+  frozen_date: 2026-07-23       # 扩池+差异化: 主板中小盘价值反转(pool=mainboard, cap=midsmall, 逆向)
+  params:
+    pool_index: mainboard
+    cap_segment: midsmall        # 中小盘段(市值后70%): 低估反转空间大
+    rebalance: daily
+    min_dividend_yield: 0.0
+    dividend_years: 0            # 关闭分红门槛
+    roe_years: 3
+    roe_min: 0.0                 # 反转策略从宽(捡便宜), ROE 仅作弱排名
+    hold_n: 15
+    max_per_industry: 3
+    low_vol_pct: 0.65
+    value_tilt: true             # 深度价值(低PE/PB)倾斜 → 与 s13 成长岔开
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: null           # 反转策略不设动量下限(允许买入近期走弱的超跌票)
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 0.9
+    regime_bad: 0.65
+    stop_pct: 0.14
+    # 逆动量: momentum 负权重 → 偏好近期跌得多的(反转); value/valuation 主导
+    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.08, valuation: 0.22, news: 0.06, value: 0.24, momentum: -0.12, growth: 0.0}
   universe: dynamic
   rebalance: daily

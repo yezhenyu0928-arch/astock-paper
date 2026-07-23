@@ -30,7 +30,7 @@ class S15CoreAllocation(BaseStrategy):
         # 调优锁定(s15/C, 单通道核心均衡): 锚定 s4/s14 已验证配方(regime_bad 0.75 / 动量0.35 /
         # 止损0.12 / low_vol_pct 0.55), 权重均衡化(股息0.18+质量0.20+动量0.30+估值0.10+news0.10+
         # industry0.08), 不极端倾斜。hold_n 10 比 s4/s14 的 8 更分散, 压回撤。
-        params = {
+        _defaults = {
             "min_dividend_yield": 0.03,
             "dividend_years": 3, "roe_years": 3, "roe_min": 0.08,
             "hold_n": 10, "max_per_industry": 3, "low_vol_pct": 0.55,   # round-6b: 8→10 分散化, DD 6.1%→≤5%
@@ -43,6 +43,8 @@ class S15CoreAllocation(BaseStrategy):
             "weights": {"dividend": 0.16, "low_vol": 0.20, "roe": 0.15,
                         "valuation": 0.10, "news": 0.05, "industry": 0.04, "momentum": 0.30},
         }
+        # registry params 覆盖硬编码默认(扩池差异化)
+        params = {**_defaults, **dict(self.params)}
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:
             forced = news_guard.guard_holdings(date, list(account.positions.keys()), ctx.conn, self.config)

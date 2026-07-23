@@ -5,13 +5,20 @@ name: backtest
 # 架构(2026-07-19 改):prep 单次建库/缓存 → backtest 用 matrix 并行跑各策略(每策略独立 runner,~1h,
 #   互不拖累,根治单 job 串行 6 策略 5.5h 撞 timeout-minutes:330 被强杀的问题) → collect 汇总各策略
 #   产物 artifact 后统一 commit 回 main。
+#
+# 2026-07-23 扩池+差异化:
+#   * 默认策略集切到 6 个 @v3(主板全市场差异化版: 各取不同市值段+分红门槛 → 操作真正岔开)。
+#   * prep 的 "ensure full DB" 现会构建/校验 index_members['mainboard'](~1300只)及其日线/基本面,
+#     主板池不足即内联 backfill.py 全量重建(backfill.py 现默认构建 mainboard 流动性池)。
+#   * 缓存 key 改为 run 内唯一 db-${{ github.run_id }}(prep 存 / matrix 取),
+#     避免旧稳定键 db-stable-v3 被冻结、matrix 取到陈旧库导致 @v3 回退到 sh000300。
 on:
   workflow_dispatch:
     inputs:
       sids:
         description: "回测策略(逗号分隔;留空=下列默认新策略集)"
         required: false
-        default: "s1_dividend@v2,s4_smallcap@v2,s8_checklist@v2,s13_growth_quality_rotation@v2,s14_value_reversal_rotation@v2,s15_core_allocation@v2"
+        default: "s1_dividend@v3,s4_smallcap@v3,s8_checklist@v3,s13_growth_quality_rotation@v3,s14_value_reversal_rotation@v3,s15_core_allocation@v3"
   push:
     paths:
       - '.backtest-trigger'
@@ -24,7 +31,7 @@ jobs:
   # ---------- ① 建库/缓存 + 解析策略集(单次,供并行 matrix 复用) ----------
   prep:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
     steps:
@@ -33,39 +40,47 @@ jobs:
         with: { python-version: '3.11' }
       - run: pip install -r requirements.txt
 
-      - name: restore DB cache
+      - name: restore DB cache (seed for incremental, best-effort)
         uses: actions/cache/restore@v4
         with:
           path: db/market.sqlite
           key: db-stable-v3
+          restore-keys: |
+            db-
 
-      - name: ensure full DB (个股库/年报库不足则重建)
+      - name: ensure full DB (主板池/沪深300/年报库不足则重建)
         run: |
-          read covered annual_codes <<< $(python - <<'PY'
+          read covered annual_codes mb_cov <<< $(python - <<'PY'
           import sqlite3, os
-          n, an = 0, 0
+          n, an, mb = 0, 0, 0
           if os.path.exists("db/market.sqlite"):
               try:
                   c = sqlite3.connect("db/market.sqlite")
                   members = [r[0] for r in c.execute(
                       "SELECT code FROM index_members WHERE index_code='sh000300'")]
+                  try:
+                      mb_members = [r[0] for r in c.execute(
+                          "SELECT code FROM index_members WHERE index_code='mainboard'")]
+                  except Exception:
+                      mb_members = []
                   cnt = {code: k for code, k in c.execute(
                       "SELECT code, COUNT(1) FROM daily_bar GROUP BY code")}
                   n = sum(1 for m in members if cnt.get(m, 0) >= 500)
+                  mb = sum(1 for m in mb_members if cnt.get(m, 0) >= 500)
                   try:
                       an = c.execute("SELECT COUNT(DISTINCT code) FROM stock_annual").fetchone()[0]
                   except Exception:
                       an = 0
                   c.close()
               except Exception:
-                  n, an = 0, 0
-          print(n, an)
+                  n, an, mb = 0, 0, 0
+          print(n, an, mb)
           PY
           )
-          echo "沪深300成分中日线≥500行的: $covered 只; stock_annual 覆盖: $annual_codes 只code"
-          # round-6 修复: 日线或年报ROE任一不足都触发全量/针对性重建, 杜绝"日线够但年报缺"的旧库蒙混。
-          if [ "$covered" -lt 250 ]; then
-            echo "个股日线库不足($covered<250),内联 backfill 全量重建(约48分钟)..."
+          echo "沪深300日线≥500: $covered 只; 主板日线≥500: $mb_cov 只; stock_annual: $annual_codes 只"
+          # 主板流动性池(~1300只)不足 → 全量重建(backfill.py 现默认构建 mainboard + 日线 + 基本面)
+          if [ "$mb_cov" -lt 800 ] || [ "$covered" -lt 250 ]; then
+            echo "主板/沪深300库不足(mb=$mb_cov, sh300=$covered),内联 backfill 全量重建..."
             python -c "import data,conf; data.update_all(conf.load_config(), conf.load_registry(), with_members=True)"
             python backfill.py
           fi
@@ -83,26 +98,26 @@ jobs:
           conn.close()
           "
           fi
-          if [ "$covered" -ge 250 ] && [ "$annual_codes" -ge 250 ]; then
-            echo "个股库与年报库均充分,跳过 backfill"
+          if [ "$mb_cov" -ge 800 ] && [ "$covered" -ge 250 ] && [ "$annual_codes" -ge 250 ]; then
+            echo "主板/沪深300/年报库均充分,跳过 backfill"
           fi
 
       - name: macro indicators backfill (PMI/社融/北向/融资余额)
         run: |
           python -c "import macro_data; print('macro backfill:', macro_data.backfill())" || echo "::warning::macro backfill 失败(回测将降级为价格类指标)"
 
-      - name: save DB cache
+      - name: save DB cache (run 内唯一键, 供 matrix 复用)
         uses: actions/cache/save@v4
         with:
           path: db/market.sqlite
-          key: db-stable-v3
+          key: db-${{ github.run_id }}
 
       - name: 解析策略集为 JSON 矩阵
         id: set
         run: |
           SIDS="${{ github.event.inputs.sids }}"
           if [ -z "$SIDS" ]; then
-            SIDS="s1_dividend@v2,s4_smallcap@v2,s8_checklist@v2,s13_growth_quality_rotation@v2,s14_value_reversal_rotation@v2,s15_core_allocation@v2"
+            SIDS="s1_dividend@v3,s4_smallcap@v3,s8_checklist@v3,s13_growth_quality_rotation@v3,s14_value_reversal_rotation@v3,s15_core_allocation@v3"
           fi
           JSON=$(python -c "import json,sys; print(json.dumps([s.strip() for s in sys.argv[1].split(',') if s.strip()]))" "$SIDS")
           echo "策略矩阵: $JSON"
@@ -127,7 +142,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: db/market.sqlite
-          key: db-stable-v3
+          key: db-${{ github.run_id }}
 
       - name: 五关回测 + 蒙特卡洛 (${{ matrix.sid }})
         run: |

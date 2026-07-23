@@ -68,9 +68,15 @@ def _stock_universe(cfg, reg, conn):
     )
     need_stock = any(s.split("@", 1)[0] in stock_strategy_prefixes for s in enabled)
     if need_stock:
-        rows = conn.execute("SELECT code FROM index_members WHERE index_code='sh000300'").fetchall()
+        # 扩池后优先用主板流动性可投池(index_code='mainboard', 约1000-1500只);
+        # 未回填(空)时回退沪深300成分, 保证永不返回空集(旧"0交易"坑)。
+        rows = conn.execute("SELECT code FROM index_members WHERE index_code='mainboard'").fetchall()
+        src = "mainboard主板流动性池"
+        if not rows:
+            rows = conn.execute("SELECT code FROM index_members WHERE index_code='sh000300'").fetchall()
+            src = "沪深300成分兜底"
         codes |= {r[0] for r in rows}
-        log.info("个股策略已启用,日线更新范围=%d 只(沪深300成分兜底)", len(codes))
+        log.info("个股策略已启用,日线更新范围=%d 只(%s)", len(codes), src)
     return codes
 
 

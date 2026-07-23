@@ -505,7 +505,7 @@ class S8LowDrawdown(BaseStrategy):
         if not mf_core.should_rebalance(date, self.params):
             return mf_core.risk_orders(date, ctx, account, self.params, self.strategy_id, self.config)
 
-        params = {
+        _defaults = {
             "min_dividend_yield": 0.03,   # 放宽至 s14 同档(0.04→0.03),扩候选池增收益
             "dividend_years": 3,
             "roe_years": 3,
@@ -525,6 +525,8 @@ class S8LowDrawdown(BaseStrategy):
             "weights": {"dividend": 0.16, "low_vol": 0.20, "roe": 0.15,
                         "valuation": 0.10, "news": 0.05, "industry": 0.04, "momentum": 0.30},
         }
+        # registry params 覆盖硬编码默认(扩池差异化)
+        params = {**_defaults, **dict(self.params)}
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:
             from strategies import news_guard

@@ -23,24 +23,8 @@ class S14ValueReversalRotation(BaseStrategy):
         if not mf_core.should_rebalance(date, self.params):
             return mf_core.risk_orders(date, ctx, account, self.params, self.strategy_id, self.config)
 
-        params = {
-            "min_dividend_yield": 0.03,    # 略低于 s1(4%), 扩大价值票来源
-            "dividend_years": 3,
-            "roe_years": 3,
-            "roe_min": 0.08,
-            "hold_n": 8,
-            "max_per_industry": 3,
-            "low_vol_pct": 0.55,
-            "value_tilt": True,            # 偏低 PE/PB 排名加分(深度价值)
-            "momentum_window": 252,
-            "momentum_skip": 21,
-            "momentum_min": 0.0,           # 要求上行趋势(控回撤, 拉回≤5%)
-            "regime_downsize": True,       # 宏观 risk-off 降仓(松化: weak市仍留0.75仓冲收益)
-            "regime_good": 1.0, "regime_mid": 1.0, "regime_bad": 0.75,
-            "weights": {"dividend": 0.18, "low_vol": 0.10, "roe": 0.16,
-                        "valuation": 0.10, "news": 0.10, "industry": 0.08,
-                        "value": 0.08, "momentum": 0.35},
-        }
+        # 调优参数统一收口到 registry(params 字段, 与 mf_core 对齐); 不再硬编码, 避免与 registry 双源漂移。
+        params = dict(self.params)
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:
             # 无候选: 清仓现有持仓(避免裸多)
@@ -53,4 +37,5 @@ class S14ValueReversalRotation(BaseStrategy):
                                         f"S14价值:{ctx.name(code)}新闻黑天鹅,清仓", date))
             return orders
         return mf_core.build_orders(ctx, date, account, sel, params,
-                                    self.strategy_id, self.config, stop_pct=0.12)
+                                    self.strategy_id, self.config,
+                                    stop_pct=params.get("stop_pct", 0.12))

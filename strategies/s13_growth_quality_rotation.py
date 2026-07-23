@@ -26,31 +26,9 @@ class S13GrowthQualityRotation(BaseStrategy):
         if not mf_core.should_rebalance(date, self.params):
             return mf_core.risk_orders(date, ctx, account, self.params, self.strategy_id, self.config)
 
-        # 调优锁定(s13/C, 本地主回测目标 ≥5% / 回撤≤5%):
-        # 低股息floor(成长股股息低) + 质量门ROE≥10% + 成长(growth)与动量(momentum)双高权重
-        # + 行业地位(industry, ROE龙头代理"个股行业地位"消息面) + 松化regime(risk市仍留0.75仓)
-        # + 偏宽止损0.13。news 权重在回测恒为0(新闻库空), 实盘由 news_engine 接真实舆情。
-        params = {
-            "min_dividend_yield": 0.03,    # round-6c: 对齐 s14(0.03)
-            "dividend_years": 3,
-            "roe_years": 3,
-            "roe_min": 0.08,               # round-6c: 0.10→0.08 放回(对齐 s14, 扩候选池)
-            "hold_n": 8,                   # round-6c 最优版基座(6.3%/5.2%)
-            "max_per_industry": 3,
-            "low_vol_pct": 0.55,
-            "value_tilt": True,            # 深度价值收益引擎(借 s14 已验证 7.2%)
-            "momentum_window": 252,
-            "momentum_skip": 21,
-            "momentum_min": 0.0,           # 上行趋势门槛(同 s14): 剔除走弱票, 控回撤
-            # round-6m: exposure=0.90 只缩放新买单, 对暴跌日的存量持仓无效(DD 仍 5.2%), 已回退。
-            #   s13 vs s14(4.9%) 唯一实质差异=growth 因子(选高盈利增速=高 beta 票, 暴跌跌更狠)。
-            #   彻底移除 growth, 权重给回 roe/value; s13 靠 value_tilt+动量+ROE质量 维持"成长质量"身份。
-            "regime_downsize": True,
-            "regime_good": 1.0, "regime_mid": 1.0, "regime_bad": 0.75,
-            "weights": {"dividend": 0.18, "low_vol": 0.10, "roe": 0.18,
-                        "valuation": 0.08, "news": 0.06,
-                        "value": 0.11, "momentum": 0.35},
-        }
+        # 调优参数统一收口到 registry(params 字段, 与 mf_core 对齐); 不再硬编码, 避免与 registry 双源漂移。
+        # 历史基线(s13/C, 本地主回测目标 ≥5% / 回撤≤5%)对应 registry 默认 params。
+        params = dict(self.params)
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:
             from strategies import news_guard
@@ -62,4 +40,5 @@ class S13GrowthQualityRotation(BaseStrategy):
                           f"成长质量:{ctx.name(code)}无候选,清仓", date)
                     for code in account.positions.keys() if code not in forced]
         return mf_core.build_orders(ctx, date, account, sel, params,
-                                    self.strategy_id, self.config, stop_pct=0.12)
+                                    self.strategy_id, self.config,
+                                    stop_pct=params.get("stop_pct", 0.12))

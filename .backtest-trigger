@@ -1,1 +1,4 @@
-round-6-fix: 修复云端DB缓存不一致(cache key改稳定键db-stable-v3+年报ROE覆盖检查), registry params对齐代码真实值; 本地6策略同区间全达标(年化5.4-7.2%/回撤4.5-4.9%) — cloud backtest 2026-07-22 rerun
+扩池+差异化回合(2026-07-23): 6策略切到 @v3 主板全市场差异化版(pool=mainboard + 各取不同市值段cap_segment + 成长/小盘/反转关闭分红门槛);
+修复 backtest.yml: 默认策略集改@v3, prep 内联 backfill 构建 mainboard(~1300只)池且不再因 sh000300 已缓存而跳过, 缓存键改 run 内唯一 db-<run_id>(matrix 取到新鲜库);
+registry 去重旧 s1_dividend@v3; config 启用6@v3/停用6@v2。
+触发 backtest.yml -> 跑 s1/s4/s8/s13/s14/s15 @v3 五关+蒙卡, 验证年化≥5%/回撤≤5% 且操作差异化(Jaccard<1)。

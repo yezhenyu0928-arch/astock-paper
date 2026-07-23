@@ -135,7 +135,7 @@ class S1DividendQuality(BaseStrategy):
         # 调优锁定(s1/C, 锚定 s4/s14 已验证配方 + 股息率倾斜):
         # 股息率权重最高(0.22, s1 身份标志) + 动量0.35(收益引擎) + regime_bad 0.75(松化降仓保收益)
         # + 低波0.55(扩候选) + 止损0.13(控回撤入5%) + news0.10/industry0.08(消息面最大化)。
-        params = {
+        _defaults = {
             "min_dividend_yield": 0.035,   # s1 偏红利, floor 略高于 s4(0.025)/s14(0.03)
             "dividend_years": 3,
             "roe_years": 3,
@@ -153,6 +153,8 @@ class S1DividendQuality(BaseStrategy):
             "weights": {"dividend": 0.22, "low_vol": 0.10, "roe": 0.15,
                         "valuation": 0.10, "news": 0.10, "industry": 0.08, "momentum": 0.35},
         }
+        # registry params 覆盖硬编码默认(扩池差异化: pool_index/cap_segment/weights 等由 registry 注入)
+        params = {**_defaults, **dict(self.params)}
         sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
         if not sel["target"]:
             forced = news_guard.guard_holdings(date, list(account.positions.keys()), ctx.conn, self.config)
