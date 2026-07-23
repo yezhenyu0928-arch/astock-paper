@@ -42,7 +42,7 @@ def ensure_annual():
     ensure_table(ANNUAL_DDL)
 
 
-def update_annual_roe(codes, conn=None, start_year=2015, end_year=None):
+def update_annual_roe(codes, conn=None, start_year=2015, end_year=None, _timeout_flag=None, _timeout_check=None):
     """更新年度 ROE/净利润/公告日(卡D)。增量:从库内该code最大 stat_year 起(重取最后一年,防年报后补/更正)。"""
     ensure_annual()
     own = conn is None
@@ -52,6 +52,8 @@ def update_annual_roe(codes, conn=None, start_year=2015, end_year=None):
     end_year = end_year or datetime.date.today().year
     n = 0
     for code in codes:
+        if _timeout_check and _timeout_flag:
+            _timeout_check(_timeout_flag)
         code = util.with_prefix(code) if code[:2] not in ("sh", "sz", "bj") else code
         if da.is_etf_code(code) or util.is_bj(code):
             continue
@@ -92,8 +94,9 @@ def _div_yield_map(conn, code):
     return [(r[0], r[1] or 0) for r in divs]
 
 
-def update_stock_fundamental(codes, conn=None, start=None, end=None):
-    """更新个股 PE/PB/市值/股息率。增量:从库内该code最大fundamental日期次日起。"""
+def update_stock_fundamental(codes, conn=None, start=None, end=None, _timeout_flag=None, _timeout_check=None):
+    """更新个股 PE/PB/市值/股息率。增量:从库内该code最大fundamental日期次日起。
+    支持 _timeout_flag/_timeout_check:超时后停止后续个股(已处理部分保留,不抛异常)。"""
     ensure()
     own = conn is None
     if own:
@@ -101,6 +104,8 @@ def update_stock_fundamental(codes, conn=None, start=None, end=None):
     end = end or util.today_str()
     n_total = 0
     for code in codes:
+        if _timeout_check and _timeout_flag:
+            _timeout_check(_timeout_flag)
         code = util.with_prefix(code) if code[:2] not in ("sh", "sz", "bj") else code
         if da.is_etf_code(code) or util.is_bj(code):
             continue

@@ -23,7 +23,8 @@ log = logging.getLogger("run_daily")
 # 沪深300成分(~300只)首次回填(从2018起)每只约3秒,全量约15分钟;
 # 故放宽到 900s 让单次运行尽量填满个股日线,之后增量更新极快不再触顶。
 # 注意:此超时只包裹 update_all/update_daily,引擎/消息面/看板仍在 30min 限额内完成。
-_DATA_TIMEOUT = 900  # 15 分钟
+_DATA_TIMEOUT = 900  # 15 分钟:个股日线回填(首次从2018起约15分钟),超时仅截断"未更部分"
+_FUND_TIMEOUT = 600   # 10 分钟:基本面(300只 sequential)独立超时,超时才截断,绝不跳过
 
 
 class TimeoutError(Exception):
@@ -171,39 +172,57 @@ def run(date=None, only=None):
     # 2 更新数据 + 质检
     conn = get_conn()
     try:
+        stock_codes = _stock_universe(cfg, reg, conn)
         flag, timer = _timeout_guard(_DATA_TIMEOUT)
         try:
             data.update_all(cfg, reg, with_members=True, _timeout_check=_check_timeout, _timeout_flag=flag)
             _check_timeout(flag)
-            stock_codes = _stock_universe(cfg, reg, conn)
+            # —— 个股日线回填(慢,受 _DATA_TIMEOUT 保护;超时才截断剩余未更,不阻断后续) ——
             if stock_codes:
-                data.update_daily(sorted(stock_codes), conn=conn, timeout_flag=flag, timeout_check=_check_timeout)
-                _check_timeout(flag)
+                try:
+                    data.update_daily(sorted(stock_codes), conn=conn, timeout_flag=flag, timeout_check=_check_timeout)
+                    _check_timeout(flag)
+                except TimeoutError:
+                    log.warning("个股日线回填超时(已部分更新),继续;证券信息/基本面更新不受影响")
+                    flag["expired"] = False   # 解除标记,避免影响后续步骤
+        finally:
+            timer.cancel()
+        # —— 证券信息 + 基本面(独立于日线回填超时,策略选股硬依赖,必须跑) ——
+        # 旧逻辑把这部分放在日线回填的同一超时 try 内:日线回填一超时就连带跳过基本面,
+        # 导致策略有股价无基本面(股息率/市值/ROE)→ 候选池空 → 0 交易(本期二次修复)。
+        if stock_codes:
+            f2, t2 = _timeout_guard(_FUND_TIMEOUT)
+            try:
                 data.update_security(stock_codes, conn=conn)
                 fund_ok = True
                 try:
                     import fundamental as F
-                    F.update_stock_fundamental(sorted(stock_codes), conn=conn)
+                    F.update_stock_fundamental(sorted(stock_codes), conn=conn,
+                                              _timeout_flag=f2, _timeout_check=_check_timeout)
                     # 年报ROE补齐:覆盖不足80%时随时补(修复"仅month<=5才跑导致7月后永不补、候选池空"),
                     # 或在年报季(1-6月)例行刷新;其余时间跳过以节省API额度
                     if cfg.get("strategies", {}).get("s1_dividend@v2"):
                         cov = _annual_coverage(conn)
                         if cov < 0.8 or (1 <= util.now_cn().month <= 6):
-                            F.update_annual_roe(sorted(stock_codes), conn=conn)
+                            F.update_annual_roe(sorted(stock_codes), conn=conn,
+                                               _timeout_flag=f2, _timeout_check=_check_timeout)
+                except TimeoutError:
+                    log.warning("基本面更新超时(已部分更新),引擎用已有基本面继续")
                 except Exception as e:
                     fund_ok = False
                     log.warning("基本面更新失败(不阻断):%s", e)
+                finally:
+                    t2.cancel()
                 _fund_fail_track(not fund_ok, cfg)
-            if cfg.get("strategies", {}).get("s5_grid@v1"):
-                try:
-                    import fundamental as F
-                    F.update_index_pe("sh000300", conn=conn)
-                except Exception as e:
-                    log.warning("指数PE更新失败:%s", e)
-        except TimeoutError:
-            log.warning("数据更新超时(%ds),使用缓存DB继续引擎流程", _DATA_TIMEOUT)
-        finally:
-            timer.cancel()
+            except Exception as e:
+                log.warning("证券信息/基本面更新异常(不阻断):%s", e)
+                _fund_fail_track(True, cfg)
+        if cfg.get("strategies", {}).get("s5_grid@v1"):
+            try:
+                import fundamental as F
+                F.update_index_pe("sh000300", conn=conn)
+            except Exception as e:
+                log.warning("指数PE更新失败:%s", e)
         # 质检:验证今天是否有新数据入库(update_all静默吞异常,不会因数据断流抛错)
         has_today_data = conn.execute(
             "SELECT count(*) FROM daily_bar WHERE trade_date=?", (today,)
