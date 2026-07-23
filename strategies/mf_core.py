@@ -23,9 +23,17 @@ POOL_INDEX = "sh000300"  # 沪深300 大盘红利票池(与 s1 一致)
 def _roe_quality_ok(code, date, conn, roe_years=3, roe_min=0.08):
     try:
         ok, roe = F.roe_quality(code, date, years=roe_years, min_roe=roe_min, conn=conn)
+        if ok:
+            return ok, roe
+        # 区分"无 ROE 数据"与"数据不达标":海外 baostock 不可达 → stock_annual 空,
+        # 此时从宽通过(降级),避免全拒;仅当有数据但不达标才真正剔除。
+        cnt = conn.execute(
+            "SELECT count(*) FROM stock_annual WHERE code=?", (code,)).fetchone()[0] or 0
+        if cnt == 0:
+            return True, 0.0
         return ok, roe
     except Exception:
-        return False, 0.0
+        return True, 0.0
 
 
 def _news_score(date, code, conn):
@@ -135,19 +143,31 @@ def select(ctx, date, account, params, strategy_id, config):
     pool = common.main_board_universe(ctx, pool, config, date)
 
     cand = []  # (code, dy, vol, roe, news, pe, mcap)
+    # 诊断计数(海外 baostock 不可达时定位"为何无候选")
+    n_pool = len(pool)
+    n_no_fund = n_dy = n_div = n_roe = n_bar = 0
     for code in pool:
         if not ctx.is_tradable(code, date):
             continue
         f = ctx.fundamental(code)
-        if not f or not f.get("dividend_yield") or f["dividend_yield"] < min_dy:
+        if not f:
+            n_no_fund += 1
+            continue
+        # 股息率门槛:腾讯快照海外不提供股息率(留 0/None)→ 视为无数据,从宽不据此剔除
+        dy = f.get("dividend_yield")
+        if dy is not None and dy > 0 and dy < min_dy:
+            n_dy += 1
             continue
         if ctx.dividend_years(code, years) < years:
+            n_div += 1
             continue
         ok, roe = _roe_quality_ok(code, date, ctx.conn, roe_years, roe_min)
         if not ok:
+            n_roe += 1
             continue
         c = ctx.close(code, 251)
         if len(c) < 200:
+            n_bar += 1
             continue
         rets = [c[i] / c[i - 1] - 1 for i in range(1, len(c))]
         vol = pstdev(rets) if len(rets) > 1 else 9.9
@@ -160,8 +180,10 @@ def select(ctx, date, account, params, strategy_id, config):
             mcs = ctx.close(code, mom_win + mom_skip + 1)
             if len(mcs) >= mom_win + mom_skip + 1 and mcs[-(mom_win + mom_skip + 1)]:
                 mom = mcs[-1] / mcs[-(mom_win + mom_skip + 1)] - 1
-        cand.append((code, f["dividend_yield"], vol, roe, ns, pe, mcap, mom))
+        cand.append((code, (dy or 0.0), vol, roe, ns, pe, mcap, mom))
 
+    log.info("%s 候选筛选: 池%d 无基本面%d 股息率%d 分红年数%d ROE%d 数据不足%d → 候选%d",
+             strategy_id, n_pool, n_no_fund, n_dy, n_div, n_roe, n_bar, len(cand))
     if not cand:
         return {"target": [], "weight_per": 0.0, "meta": {}, "cand_codes": set(),
                 "keep_codes": set(), "full_rank": {}, "ind_map": {},

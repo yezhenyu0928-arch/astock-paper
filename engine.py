@@ -156,11 +156,18 @@ class SqlContext:
         return F.get_fundamental(code, self.date, self.conn)
 
     def dividend_years(self, code: str, years: int) -> int:
-        """近 years 年中,每年至少有一次现金分红的年份数(用于连续分红判断)。"""
+        """近 years 年中,每年至少有一次现金分红的年份数(用于连续分红判断)。
+        无分红数据(海外 akshare/东财不可达)时从宽返回 years,避免据此全拒。"""
         lo = f"{int(self.date[:4]) - years}-{self.date[5:]}"
         rows = self.conn.execute(
             "SELECT substr(ex_date,1,4) y FROM dividend WHERE code=? AND ex_date>? AND ex_date<=? "
             "AND cash_per_share>0 GROUP BY y", (code, lo, self.date)).fetchall()
+        if not rows:
+            # 该票无分红记录:若分红表本身为空(海外缺失)→ 从宽通过
+            cnt = self.conn.execute(
+                "SELECT count(*) FROM dividend WHERE code=?", (code,)).fetchone()[0] or 0
+            if cnt == 0:
+                return years
         return len(rows)
 
     def is_last_trade_day_of_week(self, date: str) -> bool:

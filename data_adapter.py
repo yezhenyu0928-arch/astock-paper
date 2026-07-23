@@ -673,30 +673,82 @@ def fetch_index_members(index_code: str) -> pd.DataFrame:
         return pd.DataFrame(columns=["code", "in_date", "out_date"])
 
 
+# 海外 GitHub Actions 的 baostock 常不可达(见模块头说明)。首次失败即标记,
+# 本轮后续个股直接走腾讯兜底,避免 300 只每只都卡 baostock 登录超时。
+_BS_FUND_UNREACHABLE = {"v": False}
+
+
 def fetch_stock_fundamental(code: str, start: str, end: str) -> pd.DataFrame:
-    """个股 PE/PB/流通市值(baostock,可靠)。市值≈amount×100/turn(换手率反推)。
-    返回 code,trade_date,pe,pb,market_cap。dividend_yield 由 fundamental.py 用分红表补。"""
+    """个股 PE/PB/流通市值。
+
+    主源 baostock(国内可靠,含历史序列);海外 baostock 常不可达 → 兜底腾讯 gtimg 快照
+    (仅当前值,海外 CDN 可达,见模块头说明)。返回 code,trade_date,pe,pb,market_cap。
+    dividend_yield 由 fundamental.py 用分红表补(腾讯快照无股息率,留 0/None,策略层据此降级)。"""
+    # 主源:baostock(历史序列,国内回测用)
+    if not _BS_FUND_UNREACHABLE["v"]:
+        try:
+            bs = _bs()
+            rs = bs.query_history_k_data_plus(
+                _bs_code(code), "date,close,amount,turn,peTTM,pbMRQ",
+                start_date=start, end_date=end, frequency="d", adjustflag="3")
+            rows = []
+            while (rs.error_code == "0") and rs.next():
+                rows.append(rs.get_row_data())
+            if rows:
+                df = pd.DataFrame(rows, columns=rs.fields).rename(columns={"date": "trade_date"})
+                for c in ("close", "amount", "turn", "peTTM", "pbMRQ"):
+                    df[c] = pd.to_numeric(df[c], errors="coerce")
+                df["pe"] = df["peTTM"]
+                df["pb"] = df["pbMRQ"]
+                df["market_cap"] = (df["amount"] * 100 / df["turn"]).where(df["turn"] > 0)
+                df["code"] = util.with_prefix(code)
+                return df[["code", "trade_date", "pe", "pb", "market_cap"]]
+        except Exception as e:
+            _BS_FUND_UNREACHABLE["v"] = True
+            log.warning("baostock 基本面不可用(海外?),改腾讯兜底: %s", e)
+    # 兜底:腾讯 gtimg 快照(海外可达,仅当前 PE/PB/市值)
     try:
-        bs = _bs()
-        rs = bs.query_history_k_data_plus(
-            _bs_code(code), "date,close,amount,turn,peTTM,pbMRQ",
-            start_date=start, end_date=end, frequency="d", adjustflag="3")
-        rows = []
-        while (rs.error_code == "0") and rs.next():
-            rows.append(rs.get_row_data())
-        if not rows:
-            return pd.DataFrame()
-        df = pd.DataFrame(rows, columns=rs.fields).rename(columns={"date": "trade_date"})
-        for c in ("close", "amount", "turn", "peTTM", "pbMRQ"):
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-        df["pe"] = df["peTTM"]
-        df["pb"] = df["pbMRQ"]
-        df["market_cap"] = (df["amount"] * 100 / df["turn"]).where(df["turn"] > 0)
-        df["code"] = util.with_prefix(code)
-        return df[["code", "trade_date", "pe", "pb", "market_cap"]]
+        return _tx_stock_fundamental(code, end)
     except Exception as e:
-        log.warning("基本面抓取失败 %s: %s", code, e)
+        log.warning("腾讯基本面快照失败 %s: %s", code, e)
         return pd.DataFrame()
+
+
+def _tx_stock_fundamental(code: str, date: str) -> pd.DataFrame:
+    """腾讯 gtimg 基本面快照(海外 baostock 不可达时兜底)。返回单行使:
+    code,trade_date,pe,pb,market_cap。腾讯 qt.gtimg.cn 不提供股息率/ROE/分红历史。
+    f[39]=市盈率(TTM), f[46]=市净率, f[45]=总市值(亿元)。"""
+    import requests
+    six = util.bare(code)
+    tcode = ("sh" if six.startswith("6") else "sz") + six
+    r = requests.get("https://qt.gtimg.cn/q=" + tcode, timeout=6)
+    r.encoding = "gbk"
+    text = r.text
+    for line in text.split(";"):
+        line = line.strip()
+        if not line.startswith("v_") or "=" not in line:
+            continue
+        head, payload = line.split("=", 1)
+        if head[2:].strip() != tcode:
+            continue
+        f = payload.strip().strip('"').split("~")
+        if len(f) < 47:
+            break
+        def _num(x):
+            try:
+                return float(x)
+            except Exception:
+                return None
+        pe = _num(f[39])
+        pb = _num(f[46])
+        mcap_yi = _num(f[45])
+        market_cap = (mcap_yi * 1e8) if mcap_yi else None
+        return pd.DataFrame([{
+            "code": util.with_prefix(code),
+            "trade_date": util.to_date_str(date),
+            "pe": pe, "pb": pb, "market_cap": market_cap,
+        }])
+    return pd.DataFrame()
 
 
 def fetch_annual_profit(code: str, start_year: int, end_year: int) -> pd.DataFrame:

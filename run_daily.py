@@ -223,6 +223,16 @@ def run(date=None, only=None):
                 F.update_index_pe("sh000300", conn=conn)
             except Exception as e:
                 log.warning("指数PE更新失败:%s", e)
+        # 诊断:基本面三表覆盖(海外 baostock 不可达时,fundamental 由腾讯兜底 pe/pb/mcap;
+        # dividend/stock_annual 可能为空,策略层对已缺失项优雅降级,不应再全拒)
+        try:
+            fcnt = conn.execute("SELECT count(*) FROM fundamental").fetchone()[0]
+            dcnt = conn.execute("SELECT count(*) FROM dividend").fetchone()[0]
+            acnt = conn.execute("SELECT count(*) FROM stock_annual").fetchone()[0]
+            log.info("基本面覆盖: fundamental=%d dividend=%d stock_annual=%d (个股策略依赖此三表)",
+                     fcnt, dcnt, acnt)
+        except Exception:
+            pass
         # 质检:验证今天是否有新数据入库(update_all静默吞异常,不会因数据断流抛错)
         has_today_data = conn.execute(
             "SELECT count(*) FROM daily_bar WHERE trade_date=?", (today,)
