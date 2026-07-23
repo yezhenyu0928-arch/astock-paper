@@ -12,8 +12,10 @@ import logging
 from statistics import pstdev
 from models import Order
 from strategies import common, news_guard
+import os
 import fundamental as F
 import factors as _fac
+import trade_calendar as cal
 
 log = logging.getLogger("mf_core")
 
@@ -301,13 +303,14 @@ def build_orders(ctx, date, account, sel, params, strategy_id, config, stop_pct=
     forced = news_guard.guard_holdings(date, list(held), ctx.conn, config)
 
     for code in held:
-        if code in target and code not in forced:
-            continue
         nm = ctx.name(code)
         pos = account.positions.get(code)
         peak = getattr(pos, "highest_close", None) or getattr(pos, "avg_cost", None)
         close = ctx.close(code, 1)[-1] if len(ctx.close(code, 1)) else None
         breach = (close is not None and peak is not None and close < peak * (1 - stop_pct))
+        # 仍在目标、无黑天鹅、未破跟踪止损 → 继续持有; 其余情形一律卖出清仓(含"在目标内但已破止损")。
+        if code in target and code not in forced and not breach:
+            continue
         if code in forced:
             reason = f"{strategy_id}:{nm}新闻黑天鹅,同步清仓"
         elif breach:
@@ -325,4 +328,49 @@ def build_orders(ctx, date, account, sel, params, strategy_id, config, stop_pct=
             dy = m.get("dy", 0.0)
             orders.append(Order(strategy_id, code, "buy", wgt,
                                f"{strategy_id}:买入{nm}(股息率{dy:.1%})", date))
+    return orders
+
+
+def should_rebalance(date, params):
+    """按策略 params['rebalance'] 频率判断今日是否完整再平衡(选股调仓)。
+    daily=每日都调仓; weekly=每周最后交易日; monthly(默认)=每月最后交易日。
+    调试: 环境变量 FORCE_REBALANCE=true 时强制视为再平衡日(验证用)。"""
+    if os.environ.get("FORCE_REBALANCE") == "true":
+        return True
+    freq = (params or {}).get("rebalance", "monthly")
+    if freq == "daily":
+        return True
+    if freq == "weekly":
+        return cal.last_trade_day_of_week(date)
+    return cal.last_trade_day_of_month(date)  # monthly
+
+
+def risk_orders(date, ctx, account, params, strategy_id, config):
+    """每日风控强卖(非再平衡日也调用): 持仓触发 跟踪止损/新闻黑天鹅/结构性排雷 即清仓; 不新开仓。
+    复用 build_orders 的卖出判定, 但不依赖选股排名(无需跑 select), 故可每日低成本运行。
+    日频策略因每日都再平衡, 此路径不会被命中(卖出由 build_orders 统一处理, 且已修复'在目标内也止损');
+    周/月频策略靠它实现'每日逃风险'。"""
+    held = list(account.positions.keys())
+    if not held:
+        return []
+    stop_pct = params.get("stop_pct", 0.10)
+    forced = news_guard.guard_holdings(date, held, ctx.conn, config)
+    orders = []
+    for code in held:
+        nm = ctx.name(code)
+        pos = account.positions.get(code)
+        peak = getattr(pos, "highest_close", None) or getattr(pos, "avg_cost", None)
+        close = ctx.close(code, 1)[-1] if len(ctx.close(code, 1)) else None
+        breach = (close is not None and peak is not None and close < peak * (1 - stop_pct))
+        banned, reason = news_guard.structural_ban(date, code, ctx)
+        if code in forced:
+            orders.append(Order(strategy_id, code, "sell", 0.0,
+                                f"{strategy_id}:{nm}新闻黑天鹅,同步清仓", date))
+        elif banned:
+            orders.append(Order(strategy_id, code, "sell", 0.0,
+                                f"{strategy_id}:{nm}{reason},清仓", date))
+        elif breach:
+            orders.append(Order(strategy_id, code, "sell", 0.0,
+                                f"{strategy_id}:{nm}自高点回撤>{stop_pct:.0%},跟踪止损", date))
+    log.info("%s 每日风控扫描: 持仓%d 触发强卖%d", strategy_id, len(held), len(orders))
     return orders

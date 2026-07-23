@@ -22,8 +22,8 @@ class S4SmallcapV2(BaseStrategy):
     """S4 v2 红利中小盘倾斜: 红利质量 + 偏小市值排名。"""
 
     def generate_orders(self, date, ctx, account):
-        if not ctx.is_last_trade_day_of_month(date):
-            return []
+        if not mf_core.should_rebalance(date, self.params):
+            return mf_core.risk_orders(date, ctx, account, self.params, self.strategy_id, self.config)
 
         # 调优锁定(s4/C, 本地主回测 2022-2026: 年化6.3%/回撤4.5%/Calmar1.40):
         # 松 regime 降仓(市场weak时仍留 0.75 仓) + 降股息floor到2.5% + 宽止损14% + 动量权重35%(cap_tilt规模溢价)。

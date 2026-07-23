@@ -30,6 +30,7 @@ s1_dividend@v2:
   benchmark: sh510300          # 沪深300ETF(数据可行;池已用沪深300)
   frozen_date: 2026-07-06       # 卡D 注册入赛(v1 并行不受影响);ROE数据覆盖率98.8%,过门槛
   params:   # round-6: 与 strategies/s1_dividend.py 真实调优参数对齐(供报告展示)
+    rebalance: daily            # 日频再平衡(用户要求: 每日抓机会+逃风险; 风控每日强卖)
     min_dividend_yield: 0.035
     dividend_years: 3
     low_vol_pct: 0.55
@@ -42,7 +43,7 @@ s1_dividend@v2:
     regime_mid: 1.0
     regime_bad: 0.75
   universe: dynamic            # 沪深300过滤,generate_orders 内实现
-  rebalance: monthly
+  rebalance: daily
 
 s3_ma_trend@v1:
   class: strategies.s3_ma_trend.S3MaTrend
@@ -133,7 +134,7 @@ s4_smallcap@v2:
   frozen_date: 2026-07-06       # P0升级:4因子→7因子(BETA/EARNINGS_YIELD/QUALITY)+macro regime+行业动量倾斜
   params:
     # 红利质量多因子底座(mf_core)·小盘倾斜; 实际参数硬编码于 strategies/s4_smallcap_v2.py
-    rebalance: monthly
+    rebalance: daily            # 日频再平衡(用户要求)
     min_dividend_yield: 0.025
     dividend_years: 3
     roe_years: 3
@@ -376,6 +377,7 @@ s13_growth_quality_rotation@v2:
   benchmark: sh510300
   frozen_date: 2026-07-19       # 修复: 行业轮动降级(strong_ind空时不过滤),解决全A库0成交
   params:   # round-6: 与 strategies/s13_growth_quality_rotation.py 真实调优参数对齐(mf_core 底座)
+    rebalance: daily            # 日频再平衡(用户要求: 每日抓机会+逃风险)
     min_dividend_yield: 0.03
     dividend_years: 3
     roe_years: 3
@@ -393,13 +395,14 @@ s13_growth_quality_rotation@v2:
     regime_bad: 0.75
     weights: {dividend: 0.18, low_vol: 0.10, roe: 0.18, valuation: 0.07, news: 0.06, value: 0.11, momentum: 0.35}
   universe: dynamic
-  rebalance: monthly
+  rebalance: daily
 
 s14_value_reversal_rotation@v2:
   class: strategies.s14_value_reversal_rotation.S14ValueReversalRotation
   benchmark: sh510300
   frozen_date: 2026-07-19       # 修复: 行业轮动降级(strong_ind空时不过滤),解决全A库0成交
   params:   # round-6: 与 strategies/s14_value_reversal_rotation.py 真实调优参数对齐(mf_core 底座)
+    rebalance: daily            # 日频再平衡(用户要求: 每日抓机会+逃风险)
     min_dividend_yield: 0.03
     dividend_years: 3
     roe_years: 3
@@ -417,13 +420,14 @@ s14_value_reversal_rotation@v2:
     regime_bad: 0.75
     weights: {dividend: 0.18, low_vol: 0.10, roe: 0.16, valuation: 0.10, news: 0.10, industry: 0.08, value: 0.08, momentum: 0.35}
   universe: dynamic
-  rebalance: monthly
+  rebalance: daily
 
 s15_core_allocation@v2:
   class: strategies.s15_core_allocation.S15CoreAllocation
   benchmark: sh510300
   frozen_date: 2026-07-19       # 激活配置: 放宽两袖门槛(股息率2%↓/连续分红2年↓/ROE2年↓/成长同比0~100%),解决几乎空仓
   params:   # round-6: 与 strategies/s15_core_allocation.py 真实调优参数对齐(mf_core 底座)
+    rebalance: daily            # 日频再平衡(用户要求: 每日抓机会+逃风险)
     min_dividend_yield: 0.03
     dividend_years: 3
     roe_years: 3
@@ -449,7 +453,7 @@ s15_core_allocation@v2:
     max_per_industry: 2
     pe_cap: 50
   universe: dynamic
-  rebalance: monthly
+  rebalance: daily
 
 s8_checklist@v2:
   class: strategies.s8_checklist.S8LowDrawdown
@@ -457,7 +461,7 @@ s8_checklist@v2:
   frozen_date: 2026-07-19       # 换选股逻辑:高质量低回撤动量(质量+低回撤+低波动+动量+趋势 复合打分)+宏观regime降仓+持有期跟踪止损,目标高收益低回撤
   params:
     # 红利质量多因子底座(mf_core)·低回撤; 实际参数硬编码于 strategies/s8_checklist.py
-    rebalance: monthly
+    rebalance: daily            # 日频再平衡(用户要求)
     min_dividend_yield: 0.04
     dividend_years: 3
     roe_years: 3
@@ -475,4 +479,4 @@ s8_checklist@v2:
     stop_pct: 0.08
     weights: {dividend: 0.18, low_vol: 0.22, roe: 0.20, valuation: 0.10, news: 0.10, momentum: 0.20}
   universe: dynamic
-  rebalance: monthly
+  rebalance: daily

@@ -24,8 +24,8 @@ class S15CoreAllocation(BaseStrategy):
     作为组合里的"核心仓": 高股息 + ROE质量 + 估值 + 动量 + 行业地位 并重, 不极端倾斜。"""
 
     def generate_orders(self, date, ctx, account):
-        if not ctx.is_last_trade_day_of_month(date):
-            return []
+        if not mf_core.should_rebalance(date, self.params):
+            return mf_core.risk_orders(date, ctx, account, self.params, self.strategy_id, self.config)
 
         # 调优锁定(s15/C, 单通道核心均衡): 锚定 s4/s14 已验证配方(regime_bad 0.75 / 动量0.35 /
         # 止损0.12 / low_vol_pct 0.55), 权重均衡化(股息0.18+质量0.20+动量0.30+估值0.10+news0.10+

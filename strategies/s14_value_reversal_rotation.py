@@ -20,8 +20,8 @@ class S14ValueReversalRotation(BaseStrategy):
     """S14 v2 红利价值: 红利质量底座 + 深度价值(低PE/PB)倾斜。"""
 
     def generate_orders(self, date, ctx, account):
-        if not ctx.is_last_trade_day_of_month(date):
-            return []
+        if not mf_core.should_rebalance(date, self.params):
+            return mf_core.risk_orders(date, ctx, account, self.params, self.strategy_id, self.config)
 
         params = {
             "min_dividend_yield": 0.03,    # 略低于 s1(4%), 扩大价值票来源

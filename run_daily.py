@@ -301,6 +301,16 @@ def run(date=None, only=None):
                     log.info("持仓新闻预扫描完成(供策略guard_holdings): %d 只", len(holdings))
             except Exception as e:
                 log.warning("持仓新闻预扫描失败(降级): %s", e)
+        # 5 之前补充: 候选池(沪深300)新闻预扫描, 供各策略 guard_candidates 纯读取
+        # (消除此前在 generate_orders 内逐个抓外部新闻、75s 超时丢候选的根因)
+        if news_on:
+            try:
+                from strategies import news_guard
+                cand = list(ctx.members("sh000300", today))
+                if cand:
+                    news_guard.pre_scan_candidates(today, cand, conn=eng.conn, cfg=cfg)
+            except Exception as e:
+                log.warning("候选新闻预扫描失败(降级): %s", e)
         # 5 生成明日计划(risk 内已按市场分降敞口)
         orders = eng.run_strategies(today)
         # 5.5 持仓黑天鹅:强制清仓单 + 警示

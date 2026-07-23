@@ -23,8 +23,8 @@ class S13GrowthQualityRotation(BaseStrategy):
     """S13 v2 成长质量: 红利质量底座 + 成长(盈利同比)/质量/动量/行业地位 倾斜。"""
 
     def generate_orders(self, date, ctx, account):
-        if not ctx.is_last_trade_day_of_month(date):
-            return []
+        if not mf_core.should_rebalance(date, self.params):
+            return mf_core.risk_orders(date, ctx, account, self.params, self.strategy_id, self.config)
 
         # 调优锁定(s13/C, 本地主回测目标 ≥5% / 回撤≤5%):
         # 低股息floor(成长股股息低) + 质量门ROE≥10% + 成长(growth)与动量(momentum)双高权重

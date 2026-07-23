@@ -74,11 +74,11 @@ def _l0_scan(code, date, conn):
 
 
 def guard_candidates(date, codes, conn, cfg):
-    """候选股公告排雷。
+    """候选股公告排雷(纯读取, 不抓外部新闻)。
 
-    Returns: (banned: set[code], reasons: dict[code->str])
-    回测(news_raw 空) / news_layer 未启用 / 超时 → 返回空(不剔除任何候选, 不影响回测复现)。
-    """
+    依赖 run_daily 数据阶段的 pre_scan_candidates 已把当日个股新闻落库 news_signal(stock:{code}),
+    此处只读取(瞬时, 无超时、不丢候选)。回归 news_guard 自身"外部新闻应在数据阶段落库"的设计铁律。
+    回测(news_raw 空) / news_layer 未启用 → 返回空(不影响回测复现)。"""
     nl = (cfg.get("news_layer") or {}) if cfg else {}
     if not nl.get("enabled"):
         return set(), {}
@@ -86,31 +86,61 @@ def guard_candidates(date, codes, conn, cfg):
         return set(), {}   # 回测 / 无新闻模式: 不扫描, 不影响回测复现
     date = str(date)[:10]
     banned, reasons = set(), {}
-    start = time.time()
-    done = 0
+    warn_action = nl.get("warn_action", "ban")
+    # 一次性读取当日全部 stock:{code} 信号(由 pre_scan_candidates 幂等落库)
+    try:
+        rows = conn.execute(
+            "SELECT scope, score FROM news_signal "
+            "WHERE signal_date=? AND scope LIKE 'stock:%'",
+            (date,)).fetchall()
+    except Exception:
+        return set(), {}
+    sig = {}
+    for (scope, sc) in rows:
+        if scope.startswith("stock:"):
+            sig[scope.split(":", 1)[1]] = int(sc)
     for code in codes:
-        done += 1
-        if time.time() - start > CANDIDATE_SCAN_BUDGET:
-            log.warning("候选股新闻扫描超时(>%ds), 剩余%d只降级跳过",
-                        CANDIDATE_SCAN_BUDGET, len(codes) - done + 1)
-            break
-        try:
-            score, ev = _l0_scan(code, date, conn)
-        except Exception as e:
-            log.debug("候选股 %s 扫描异常: %s", code, e)
+        sc = sig.get(code)
+        if sc is None:
             continue
-        if score == -2:
+        if sc == -2:
             banned.add(code)
-            reasons[code] = f"公告黑天鹅({'/'.join(ev[:2])})"
-        elif score == -1 and nl.get("warn_action", "ban") == "ban":
+            reasons[code] = "公告黑天鹅"
+        elif sc == -1 and warn_action == "ban":
             banned.add(code)
-            reasons[code] = f"公告警示({'/'.join(ev[:2])})"
-        # warn_action=penalize(默认): -1 警示不硬剔,信号已落库,由 mf_core._news_score 自然降权后排;
-        # 既避免问询函等常态公告误剔好票,又保留"排雷后排"的效应。
+            reasons[code] = "公告警示"
+        # warn_action=penalize(默认): -1 不硬剔, 信号已落库, 由 mf_core._news_score 自然降权后排
     if banned:
         log.info("候选股公告排雷剔除 %d 只: %s", len(banned),
                  {c: reasons[c] for c in list(banned)[:5]})
     return banned, reasons
+
+
+def pre_scan_candidates(date, codes, conn, cfg, budget=600):
+    """数据阶段一次性预扫描候选股新闻(只落库 news_signal, 不返回)。
+
+    解决此前在 generate_orders 内逐个抓外部新闻、75s 超时丢候选的根因:
+    把扫描挪到数据阶段(预算宽松), 策略内 guard_candidates 改为纯读取。
+    幂等: 当日已落库信号的个股跳过(避免重复抓外部接口/海外超时)。"""
+    nl = (cfg.get("news_layer") or {}) if cfg else {}
+    if not nl.get("enabled"):
+        return
+    if not _flash_present(date, conn):
+        return
+    date = str(date)[:10]
+    start = time.time()
+    n = 0
+    for code in codes:
+        if time.time() - start > budget:
+            log.warning("候选新闻预扫描超时(>%ds), 剩余%d只留待后续天补扫",
+                        budget, len(codes) - n)
+            break
+        try:
+            _l0_scan(code, date, conn)   # 落库 news_signal(幂等)
+        except Exception as e:
+            log.debug("预扫描 %s 失败: %s", code, e)
+        n += 1
+    log.info("候选新闻预扫描完成: 覆盖%d只(落库 news_signal)", n)
 
 
 def guard_holdings(date, holdings, conn, cfg):

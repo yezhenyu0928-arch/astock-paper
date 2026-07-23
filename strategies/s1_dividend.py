@@ -129,8 +129,8 @@ class S1DividendQuality(BaseStrategy):
     mf_core 打分; 回测中 news 库为空(恒为0, 由 industry 代理), 实盘接 news_engine 真实舆情。
     """
     def generate_orders(self, date, ctx, account):
-        if not ctx.is_last_trade_day_of_month(date):
-            return []
+        if not mf_core.should_rebalance(date, self.params):
+            return mf_core.risk_orders(date, ctx, account, self.params, self.strategy_id, self.config)
 
         # 调优锁定(s1/C, 锚定 s4/s14 已验证配方 + 股息率倾斜):
         # 股息率权重最高(0.22, s1 身份标志) + 动量0.35(收益引擎) + regime_bad 0.75(松化降仓保收益)
