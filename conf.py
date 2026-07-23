@@ -25,7 +25,7 @@ for _d in (DB_DIR, STATE_DIR, REPORTS_DIR):
 
 # 秘钥:环境变量名 → config 里的挂载路径(仅用于运行期,不落盘)
 SECRET_ENVS = ("PUSHPLUS_TOKEN", "SMTP_AUTH_CODE", "DASHBOARD_PASSWORD", "ANTHROPIC_API_KEY",
-               "GLM_API_KEY", "TUSHARE_TOKEN")
+               "GLM_API_KEY", "TUSHARE_TOKEN", "AGNES_LLM_KEY")
 
 # risk_override 校验方向:True=值越小越严(只接受更小),False=值越大越严(只接受更大)
 _RISK_STRICTER_WHEN_SMALLER = {

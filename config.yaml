@@ -73,13 +73,15 @@ schedule:
 
 news_layer:                   # 消息面层:实时新闻研判 + 操作影响系数(确定性 L0 规则档为主)
   enabled: true
-  # —— 研判引擎:默认确定性 L0 规则档(信源分级+事件词典+国际折扣),杜绝模型幻觉/误读 ——
-  llm: false                  # 当前无 GLM_API_KEY;配好 key 后可改 true 接 L1,或先开 llm_shadow 做影子对比
-  llm_shadow: false           # 影子档:记录 L1 与 L0 分歧,只评估不干预
-  llm_provider: glm
-  llm_base_url: https://open.bigmodel.cn/api/paas/v4
-  llm_api_key_env: GLM_API_KEY
-  llm_model: glm-4.7-flash
+  # —— 研判引擎:L0 确定性规则档为主研判底座;L1 大模型档(agnes)做增强,但受 L0 与平滑双重约束 ——
+  #   安全性质:L1 永远无法单独制造 -2(全清)—— -2 要求 L0 自身已 ≤-1;且单日噪声须经平滑(persist)才生效。
+  #   即:无关新闻不会被 L1 误触发操作,重要新闻若 L0 已捕获则 L1 只能同向加固,不会反向掩盖风险。
+  llm: true                   # 启用 L1 大模型研判(agnes 备用通道)
+  llm_shadow: false           # 正式干预档;如需先观望 L1 与 L0 分歧,可临时改 true(只记录 news_shadow.csv 不干预)
+  llm_provider: agnes
+  llm_base_url: "__NEED_BASE_URL__"   # TODO: 填入 agnes OpenAI 兼容端点(含版本前缀,如 https://xxx/v1);留空则优雅降级回 L0
+  llm_api_key_env: AGNES_LLM_KEY      # 密钥存于仓库外 .workbuddy/llm_key.txt(已 gitignore),不落库
+  llm_model: agnes-2.0-flash
   intraday_scan: true         # 盘中黑天鹅扫描(依赖运行环境可达)
 
   # —— 市场分 → 新开仓敞口系数(只降不升,严守低回撤硬约束) ——

@@ -30,6 +30,11 @@ DEFAULT_PROVIDERS = {
         "model": "claude-haiku-4-5-20251001",
         "api_key_env": "ANTHROPIC_API_KEY",
     },
+    "agnes": {  # 备用 OpenAI 兼容通道(agnes-2.0-flash);base_url 由 config.news_layer.llm_base_url 提供
+        "base_url": None,
+        "model": "agnes-2.0-flash",
+        "api_key_env": "AGNES_LLM_KEY",
+    },
 }
 
 MAX_TITLES = 200
@@ -49,12 +54,20 @@ def _get_llm_config(cfg):
 
 
 def _get_api_key(api_key_env):
-    """从环境变量获取 API key。"""
+    """从环境变量获取 API key;回退到本地密钥文件(仓库外的 .workbuddy/,已被 gitignore,不落盘)。"""
     key = os.environ.get(api_key_env, "")
     if not key:
-        # 尝试从 conf.secret 获取
+        # 尝试从 conf.secret(环境变量)获取
         try:
             key = conf.secret(api_key_env)
+        except Exception:
+            pass
+    if not key:
+        # 回退:仓库外 .workbuddy/llm_key.txt(用户本地保管,不进 git)
+        try:
+            p = Path(__file__).resolve().parent.parent / ".workbuddy" / "llm_key.txt"
+            if p.exists():
+                key = p.read_text(encoding="utf-8").strip()
         except Exception:
             pass
     return key
