@@ -102,9 +102,11 @@ def guard_candidates(date, codes, conn, cfg):
         if score == -2:
             banned.add(code)
             reasons[code] = f"公告黑天鹅({'/'.join(ev[:2])})"
-        elif score == -1:
+        elif score == -1 and nl.get("warn_action", "ban") == "ban":
             banned.add(code)
             reasons[code] = f"公告警示({'/'.join(ev[:2])})"
+        # warn_action=penalize(默认): -1 警示不硬剔,信号已落库,由 mf_core._news_score 自然降权后排;
+        # 既避免问询函等常态公告误剔好票,又保留"排雷后排"的效应。
     if banned:
         log.info("候选股公告排雷剔除 %d 只: %s", len(banned),
                  {c: reasons[c] for c in list(banned)[:5]})

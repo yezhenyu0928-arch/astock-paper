@@ -47,6 +47,15 @@ MARKET_EVENT = {
     # 外部冲击(国际源会被×0.3;仅"直接涉华"才全额计,避免海外加息/冲突误冻全市场)
     "美联储加息": -2, "地缘冲突": -2, "冲突升级": -2, "战争": -2, "开战": -2, "制裁": -2,
     "熔断": -2, "千股跌停": -2, "流动性收紧": -1, "汇率破位": -1, "大幅贬值": -1, "违约潮": -1,
+    # —— 扩展:重要系统性/行业风险(防"漏判重大风险") ——
+    "金融危机": -2, "系统性风险": -2, "流动性危机": -2, "贸易战": -2,
+    "资管新规": -1, "去杠杆": -1, "政策转向": -1, "监管收紧": -1, "反垄断": -1, "集采": -1,
+    "北向资金大幅流出": -1, "外资出逃": -1, "人民币贬值": -1, "经济下行": -1,
+    "信用债违约": -1, "理财破净": -1, "房地产暴雷": -1, "业绩雷": -1, "商誉暴雷": -1,
+    "大股东冻结": -1, "司法冻结": -1, "重大诉讼": -1,
+    # —— 扩展:利好(仅用于偏多研判/看板,不放大敞口) ——
+    "稳增长": 1, "资本市场改革": 1, "并购重组": 1, "以旧换新": 1, "设备更新": 1,
+    "新质生产力": 1, "低空经济": 1, "数字经济": 1, "消费复苏": 1, "经济企稳": 1,
 }
 # 国际源中"直接冲击A股"的判定词(命中则国际事件也全额计分)
 CHINA_HINT = ("中国", "A股", "沪深", "央行", "证监会", "国务院", "对华", "中概", "港股", "中美")
@@ -78,8 +87,9 @@ def scan_market(date, conn=None):
         (date, date + "%")).fetchall()
     cfg = conf.load_config()
     nl = cfg.get("news_layer") or {}
-    l0_score, ev = _score_events(rows)
-    level = "L0"
+    l0_score, ev, auth_neg = _score_events(rows)
+    base_level = "L0-AUTH" if (l0_score <= -2 and auth_neg) else "L0"
+    level = base_level
     titles = [r[0] or "" for r in rows]
     l1 = _l1_market(date, cfg, titles)
     score = l0_score
@@ -91,7 +101,7 @@ def scan_market(date, conn=None):
             blended = int(round((l0_score + l1s) / 2))
             ev.append(f"[L0={l0_score}与L1={l1s}分歧大,取均值{blended}] " + "；".join(l1.get("top_risks", [])[:2]))
             score = blended
-            level = "L1"
+            level = ("L1-AUTH" if base_level.endswith("AUTH") else "L1")
         else:
             ev.append(f"[L1={l1s}与L0一致] " + "；".join(l1.get("top_risks", [])[:2]))
     na.store_signal(date, "market", score, level, ev[:20], conn=conn)
@@ -105,6 +115,7 @@ def _score_events(rows):
     规则:一条标题只取最严重(最负)的一条事件,避免"加息"与"美联储加息"双重计分;
     国际源(scope=global)非涉华事件打0.3折并强抑制到±0.2;低权源(快讯/自媒体)封顶±0.5。"""
     score_raw, count, ev = 0.0, 0, []
+    auth_neg = False   # 是否有"权威源(S0/S1)驱动的负面事件"——决定 -2 能否即时全清
     for title, source, tier, scope in rows:
         t = title or ""
         tier = tier or na.SOURCE_META.get(source, (na.DEFAULT_TIER, na.DEFAULT_SCOPE))[0]
@@ -123,14 +134,16 @@ def _score_events(rows):
         elif w_tier <= 0.7:                             # 低权源(快讯/自媒体)贡献封顶±0.5
             contrib = max(-0.5, min(0.5, contrib))
             tag = "[低权封顶±0.5]"
+        if base < 0 and tier in ("S0", "S1"):           # 权威源负面 → 可触发即时全清
+            auth_neg = True
         score_raw += contrib
         count += 1
         ev.append(f"{word}({base:+d},权{w_tier}){tag}:{t[:24]}")
     if count == 0:
-        return 0, ev
+        return 0, ev, False
     avg = score_raw / count
     score = int(round(max(-2.0, min(2.0, math.tanh(avg) * 2))))
-    return score, ev
+    return score, ev, auth_neg
 
 
 def scan_holdings(date, holdings, conn=None):
@@ -190,18 +203,38 @@ def _log_shadow(date, l0, l1, top_risks):
 
 
 def market_exposure_mult(date, ctx, cfg):
-    """由市场分映射敞口系数(只降不升)。读 news_signal;无信号=1.0。"""
-    if not (cfg.get("news_layer") or {}).get("enabled"):
+    """由市场分映射新开仓敞口系数(只降不升)。带平滑:单日噪声不触发降仓。
+
+    读 news_signal 近 N 日市场分:
+      - 当日为 -2 且来自权威源(S0/S1:国务院/央行/证监会/新华社/央视)→ 即时全清,不等平滑;
+      - 否则需近 N 日中 ≥ persist 天偏空(≤-1)才降仓,取窗口内最严重分值定档。
+    无信号 = 1.0(不干预)。
+    """
+    nl = cfg.get("news_layer") or {}
+    if not nl.get("enabled"):
         return 1.0
     date = util.to_date_str(date)
-    r = ctx.conn.execute("SELECT score FROM news_signal WHERE signal_date=? AND scope='market'",
-                         (date,)).fetchone()
-    if r is None:
+    emap = nl.get("exposure_map", {-2: 0.0, -1: 0.6, 0: 1.0, 1: 1.0, 2: 1.0})
+    N = max(1, int(nl.get("smoothing_days", 1) or 1))
+    persist = max(1, int(nl.get("smoothing_persist", 1) or 1))
+    rows = ctx.conn.execute(
+        "SELECT signal_date, score, level FROM news_signal "
+        "WHERE scope='market' AND signal_date <= ? ORDER BY signal_date DESC LIMIT ?",
+        (date, N)).fetchall()
+    if not rows:
         return 1.0
-    emap = (cfg.get("news_layer") or {}).get("exposure_map", {-2: 0.0, -1: 0.5, 0: 1.0, 1: 1.0, 2: 1.0})
-    score = int(round(r[0]))
-    # yaml 的 key 可能是 int
-    return float(emap.get(score, emap.get(str(score), 1.0)))
+    today_score = int(round(rows[0][1]))
+    today_level = rows[0][2] or ""
+    # 当日 -2 且权威来源 → 即时全清(系统性风险不等平滑)
+    if today_score <= -2 and today_level.endswith("AUTH"):
+        return float(emap.get(-2, 0.0))
+    # 持续性:近 N 日偏空(≤-1)天数
+    neg_days = sum(1 for (_, s, _) in rows if int(round(s)) <= -1)
+    if neg_days >= persist:
+        eff = min(int(round(s)) for (_, s, _) in rows)   # 窗口内最严重分值定档
+        eff = max(-2, min(2, eff))
+        return float(emap.get(eff, emap.get(str(eff), 1.0)))
+    return 1.0
 
 
 def blackswan_sells(date, accounts, cfg, conn=None):
