@@ -41,29 +41,47 @@ MAX_TITLES = 200
 
 
 def _get_llm_config(cfg):
-    """获取 LLM 配置(从 config 或默认值)。"""
+    """构造 LLM 通道列表(主 → 备)。返回 list[dict{provider,base_url,model,api_key_env}]。
+    主通道取 llm_provider;若配置了 llm_provider_backup 且不同于主通道,则追加为备通道。
+    主/备分别读取带(或不带)_backup 后缀的 config 键,缺省回落 DEFAULT_PROVIDERS。"""
     nl = cfg.get("news_layer") or {}
-    provider = nl.get("llm_provider", "glm")
-    defaults = DEFAULT_PROVIDERS.get(provider, DEFAULT_PROVIDERS["glm"])
-    return {
-        "provider": provider,
-        "base_url": nl.get("llm_base_url", defaults["base_url"]),
-        "model": nl.get("llm_model", defaults["model"]),
-        "api_key_env": nl.get("llm_api_key_env", defaults["api_key_env"]),
-    }
+    out = []
+    seen = set()
+    for key in ("llm_provider", "llm_provider_backup"):
+        provider = nl.get(key, "glm" if key == "llm_provider" else None)
+        if not provider or provider in seen:
+            continue
+        seen.add(provider)
+        defaults = DEFAULT_PROVIDERS.get(provider, DEFAULT_PROVIDERS["glm"])
+        suffix = "" if key == "llm_provider" else "_backup"
+        out.append({
+            "provider": provider,
+            "base_url": nl.get(f"llm_base_url{suffix}", defaults["base_url"]),
+            "model": nl.get(f"llm_model{suffix}", defaults["model"]),
+            "api_key_env": nl.get(f"llm_api_key_env{suffix}", defaults["api_key_env"]),
+        })
+    return out
 
 
 def _get_api_key(api_key_env):
-    """从环境变量获取 API key;回退到本地密钥文件(仓库外的 .workbuddy/,已被 gitignore,不落盘)。"""
+    """获取 API key:环境变量 → conf.secret(环境变量) → 本地密钥文件(仓库外 .workbuddy/,gitignore,不落盘)。
+    本地文件按 api_key_env 精确匹配,避免 GLM 误用 agnes 的 key。"""
     key = os.environ.get(api_key_env, "")
     if not key:
-        # 尝试从 conf.secret(环境变量)获取
         try:
             key = conf.secret(api_key_env)
         except Exception:
             pass
     if not key:
-        # 回退:仓库外 .workbuddy/llm_key.txt(用户本地保管,不进 git)
+        # 推荐:多密钥 JSON 映射 { "AGNES_LLM_KEY": "...", "GLM_API_KEY": "..." }
+        try:
+            p = Path(__file__).resolve().parent.parent / ".workbuddy" / "llm_keys.json"
+            if p.exists():
+                import json as _json
+                key = _json.loads(p.read_text(encoding="utf-8")).get(api_key_env, "")
+        except Exception:
+            pass
+    if not key and api_key_env == "AGNES_LLM_KEY":   # 兼容旧版单文件
         try:
             p = Path(__file__).resolve().parent.parent / ".workbuddy" / "llm_key.txt"
             if p.exists():
@@ -127,28 +145,38 @@ def _parse_json_response(text):
     return json.loads(text[s:e + 1])
 
 
-def _call_llm(prompt, cfg, max_tokens=1024):
-    """统一 LLM 调用入口(含重试),返回文本响应。失败抛错(由调用方兜底)。"""
-    llm_cfg = _get_llm_config(cfg)
-    api_key = _get_api_key(llm_cfg["api_key_env"])
-    if not api_key:
-        raise RuntimeError(f"缺 {llm_cfg['api_key_env']}")
-
+def _call_llm(prompt, cfg, max_tokens=1024, attempts_per_provider=2):
+    """统一 LLM 调用入口(主备通道 + 每通道内重试)。
+    主通道(llm_provider)经 attempts_per_provider 次重试全失败 → 自动切备通道(llm_provider_backup)重试;
+    所有通道都失败才抛错,交由调用方兜底(如 stock_sentiment 返回中性)。
+    为兼容盘中 8 分钟超时,单通道重试次数保守(默认 2),避免主通道长超时把总时长拖爆。"""
+    providers = _get_llm_config(cfg)
+    if not providers:
+        raise RuntimeError("news_layer 未配置任何 LLM 通道(llm_provider 缺失)")
     messages = [{"role": "user", "content": prompt}]
-    provider = llm_cfg["provider"]
     last_err = None
-    for attempt in range(3):                      # 端点偶发慢/空响应:重试 3 次
-        try:
-            if provider == "anthropic":
-                return _call_anthropic(llm_cfg["model"], api_key, messages, max_tokens)
-            # glm / mimo / agnes 等 OpenAI 兼容端点
-            return _call_openai_compatible(llm_cfg["base_url"], llm_cfg["model"], api_key,
-                                           messages, max_tokens, provider=provider)
-        except Exception as e:
-            last_err = e
-            log.warning("LLM 调用失败(第%d次,%.1fs后重试): %s", attempt + 1, 2 + attempt * 2, repr(e)[:140])
-            import time; time.sleep(2 + attempt * 2)
-    raise last_err
+    for pidx, pcfg in enumerate(providers):
+        provider = pcfg["provider"]
+        api_key = _get_api_key(pcfg["api_key_env"])
+        if not api_key:
+            log.warning("LLM 通道[%s] 缺密钥 %s,跳过该通道", provider, pcfg["api_key_env"])
+            continue
+        tag = "主" if pidx == 0 else f"备{pidx}"
+        for attempt in range(attempts_per_provider):
+            try:
+                if provider == "anthropic":
+                    return _call_anthropic(pcfg["model"], api_key, messages, max_tokens)
+                # glm / mimo / agnes 等 OpenAI 兼容端点
+                return _call_openai_compatible(pcfg["base_url"], pcfg["model"], api_key,
+                                               messages, max_tokens, provider=provider)
+            except Exception as e:
+                last_err = e
+                log.warning("LLM[%s通道 %s] 调用失败(第%d次/共%d,%.1fs后重试): %s",
+                            tag, provider, attempt + 1, attempts_per_provider,
+                            2 + attempt * 2, repr(e)[:160])
+                import time; time.sleep(2 + attempt * 2)
+        log.warning("LLM[%s通道 %s] %d次重试全失败,切下一通道", tag, provider, attempts_per_provider)
+    raise RuntimeError(f"所有 LLM 通道均失败,最后错误: {last_err}")
 
 
 def market_score(date, titles, cfg, holdings=None):
