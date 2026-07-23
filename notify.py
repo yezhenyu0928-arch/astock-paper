@@ -58,6 +58,11 @@ def _push_smtp(title, content, cfg):
 
 
 def push(title, content, level="op", cfg=None, smtp_fallback=True) -> bool:
+    import os
+    # 调试开关 NO_PUSH(默认关闭):验证 run 不推微信,仅落日志,避免污染真实推送。
+    if os.environ.get("NO_PUSH", "").lower() in ("1", "true", "yes"):
+        log.info("[NO_PUSH] 跳过推送: %s", title)
+        return False
     """level∈{op,alert,heartbeat}。主 PushPlus(微信)→备 SMTP(邮箱,可关闭)。
     smtp_fallback=False 时(如心跳)仅走微信,失败不回落邮箱——避免心跳刷邮箱。
     完全未配置通道时:仅打印(本地开发),返回 False。"""

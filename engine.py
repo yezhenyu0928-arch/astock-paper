@@ -174,6 +174,10 @@ class SqlContext:
         return cal.last_trade_day_of_week(date)
 
     def is_last_trade_day_of_month(self, date: str) -> bool:
+        import os
+        # 调试开关 FORCE_REBALANCE(默认关闭):验证日频选股/修复是否生效用,生产不置位。
+        if os.environ.get("FORCE_REBALANCE", "").lower() in ("1", "true", "yes"):
+            return True
         return cal.last_trade_day_of_month(date)
 
     # ---- 便利方法(策略/引擎用) ----

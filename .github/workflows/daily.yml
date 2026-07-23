@@ -3,7 +3,16 @@ on:
   schedule:
     - cron: '40 9 * * 1-5'    # UTC09:40 = 北京17:40 主触发
     - cron: '10 10 * * 1-5'   # 北京18:10 补跑(run_daily 幂等,重复安全)
-  workflow_dispatch: {}        # 手动触发按钮(部署验证用)
+  workflow_dispatch:
+    inputs:
+      force_rebalance:
+        description: '强制调仓日(绕过月频,用于验证选股/修复是否生效)'
+        type: boolean
+        default: false
+      no_push:
+        description: '不推送微信(仅验证日志,默认false)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -38,6 +47,8 @@ jobs:
           GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
           AGNES_LLM_KEY: ${{ secrets.AGNES_LLM_KEY }}
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          FORCE_REBALANCE: ${{ github.event.inputs.force_rebalance }}
+          NO_PUSH: ${{ github.event.inputs.no_push }}
         run: python run_daily.py
       - name: bundle Chart.js locally (no CDN dependency)
         # CI 有外网:把 Chart.js 抓到 docs/vendor/,使 Pages 自带该文件,不再依赖用户浏览器访问境外 CDN。
