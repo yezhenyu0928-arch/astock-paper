@@ -33,8 +33,8 @@
       "status": "healthy"
     },
     "akshare_sina": {
-      "total_calls": 1584,
-      "total_success": 1584,
+      "total_calls": 1585,
+      "total_success": 1585,
       "disabled": false,
       "disabled_until": 0,
       "health_score": 0.75,
@@ -105,5 +105,5 @@
       "status": "healthy"
     }
   },
-  "saved_at": 1784806170.2534037
+  "saved_at": 1784807911.6444397
 }
