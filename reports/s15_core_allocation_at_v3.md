@@ -1,8 +1,8 @@
-# s1_dividend@v3 五关验证报告
+# s15_core_allocation@v3 五关验证报告
 
 - 资金档:50,000 元(按用户 config 实跑,不用大资金美化)
 - 生成日:2026-07-23  基准:sh510300
-- 参数:{'pool_index': 'mainboard', 'cap_segment': 'large', 'rebalance': 'weekly', 'min_dividend_yield': 0.035, 'dividend_years': 3, 'roe_years': 3, 'roe_min': 0.08, 'hold_n': 12, 'max_per_industry': 3, 'low_vol_pct': 0.5, 'momentum_window': 252, 'momentum_skip': 21, 'momentum_min': 0.0, 'regime_downsize': True, 'regime_good': 1.0, 'regime_mid': 1.0, 'regime_bad': 0.75, 'stop_pct': 0.12, 'weights': {'dividend': 0.28, 'low_vol': 0.18, 'roe': 0.18, 'valuation': 0.12, 'news': 0.06, 'industry': 0.05, 'momentum': 0.18}}
+- 参数:{'pool_index': 'mainboard', 'cap_segment': 'large', 'rebalance': 'weekly', 'min_dividend_yield': 0.02, 'dividend_years': 2, 'roe_years': 3, 'roe_min': 0.08, 'hold_n': 12, 'max_per_industry': 2, 'low_vol_pct': 0.55, 'momentum_window': 252, 'momentum_skip': 21, 'momentum_min': 0.0, 'regime_downsize': True, 'regime_good': 1.0, 'regime_mid': 1.0, 'regime_bad': 0.75, 'stop_pct': 0.1, 'weights': {'dividend': 0.16, 'low_vol': 0.14, 'roe': 0.24, 'valuation': 0.1, 'news': 0.06, 'industry': 0.1, 'momentum': 0.24}}
 
 > 免责:模拟/历史表现不代表未来。成交按次日开盘价+真实费用滑点(SPEC_FILL)建模,故意保守。
 
