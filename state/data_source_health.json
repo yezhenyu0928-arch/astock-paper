@@ -33,12 +33,12 @@
       "status": "healthy"
     },
     "akshare_sina": {
-      "total_calls": 1909,
-      "total_success": 1909,
+      "total_calls": 1910,
+      "total_success": 1910,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.914,
-      "status": "healthy"
+      "health_score": 0.75,
+      "status": "degraded"
     },
     "sina_etf": {
       "total_calls": 24,
@@ -53,16 +53,16 @@
       "total_success": 680,
       "disabled": false,
       "disabled_until": 1784769202.9834046,
-      "health_score": 0.15,
-      "status": "unhealthy"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "akshare_em": {
       "total_calls": 185,
       "total_success": 138,
       "disabled": false,
       "disabled_until": 1784769200.211019,
-      "health_score": 0.75,
-      "status": "degraded"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "baostock_hfq": {
       "total_calls": 486,
@@ -77,33 +77,33 @@
       "total_success": 105,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.763,
-      "status": "degraded"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "tencent": {
       "total_calls": 657,
       "total_success": 647,
       "disabled": false,
       "disabled_until": 1784769235.498371,
-      "health_score": 0.15,
-      "status": "unhealthy"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "tushare": {
       "total_calls": 28,
       "total_success": 0,
       "disabled": false,
       "disabled_until": 1784769235.499256,
-      "health_score": 0.15,
-      "status": "unhealthy"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "tencent_hfq": {
       "total_calls": 770,
       "total_success": 714,
       "disabled": false,
       "disabled_until": 1784774253.208997,
-      "health_score": 0.0,
-      "status": "unhealthy"
+      "health_score": 0.875,
+      "status": "healthy"
     }
   },
-  "saved_at": 1784773954.1180918
+  "saved_at": 1784775396.2536151
 }
