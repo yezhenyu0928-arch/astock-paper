@@ -33,12 +33,12 @@
       "status": "healthy"
     },
     "akshare_sina": {
-      "total_calls": 1583,
-      "total_success": 1583,
+      "total_calls": 1584,
+      "total_success": 1584,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.875,
-      "status": "healthy"
+      "health_score": 0.75,
+      "status": "degraded"
     },
     "sina_etf": {
       "total_calls": 19,
@@ -53,16 +53,16 @@
       "total_success": 664,
       "disabled": false,
       "disabled_until": 1784800029.1852162,
-      "health_score": 0.0,
-      "status": "unhealthy"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "akshare_em": {
       "total_calls": 116,
       "total_success": 69,
       "disabled": false,
       "disabled_until": 1784800027.6306703,
-      "health_score": 0.0,
-      "status": "unhealthy"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "baostock_hfq": {
       "total_calls": 486,
@@ -85,16 +85,16 @@
       "total_success": 577,
       "disabled": false,
       "disabled_until": 1784800025.0893998,
-      "health_score": 0.0,
-      "status": "unhealthy"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "tushare": {
       "total_calls": 25,
       "total_success": 0,
       "disabled": false,
       "disabled_until": 1784800025.0920045,
-      "health_score": 0.0,
-      "status": "unhealthy"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "tencent_hfq": {
       "total_calls": 645,
@@ -105,5 +105,5 @@
       "status": "healthy"
     }
   },
-  "saved_at": 1784799729.1859462
+  "saved_at": 1784806170.2534037
 }

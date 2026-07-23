@@ -1,0 +1,78 @@
+{
+ "strategy_id": "s14_value_reversal_rotation@v3",
+ "init_capital": 50000.0,
+ "cash": 50000.0,
+ "positions": {},
+ "frozen": false,
+ "nav": 1.0,
+ "nav_history": [
+  [
+   "2026-07-23",
+   1.0
+  ]
+ ],
+ "pending": [
+  {
+   "strategy_id": "s14_value_reversal_rotation@v3",
+   "code": "sh600048",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s14_value_reversal_rotation@v3:买入保利发展(股息率4.0%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  },
+  {
+   "strategy_id": "s14_value_reversal_rotation@v3",
+   "code": "sh600015",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s14_value_reversal_rotation@v3:买入华夏银行(股息率1.4%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  },
+  {
+   "strategy_id": "s14_value_reversal_rotation@v3",
+   "code": "sh600016",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s14_value_reversal_rotation@v3:买入民生银行(股息率5.3%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  },
+  {
+   "strategy_id": "s14_value_reversal_rotation@v3",
+   "code": "sh600741",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s14_value_reversal_rotation@v3:买入华域汽车(股息率4.6%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  }
+ ],
+ "highest_nav": 1.0,
+ "settled_dates": [
+  "2026-07-23"
+ ],
+ "applied_div": [],
+ "aux": {}
+}

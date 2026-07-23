@@ -1,0 +1,78 @@
+{
+ "strategy_id": "s13_growth_quality_rotation@v3",
+ "init_capital": 50000.0,
+ "cash": 50000.0,
+ "positions": {},
+ "frozen": false,
+ "nav": 1.0,
+ "nav_history": [
+  [
+   "2026-07-23",
+   1.0
+  ]
+ ],
+ "pending": [
+  {
+   "strategy_id": "s13_growth_quality_rotation@v3",
+   "code": "sh600066",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s13_growth_quality_rotation@v3:买入宇通客车(股息率8.1%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  },
+  {
+   "strategy_id": "s13_growth_quality_rotation@v3",
+   "code": "sh601600",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s13_growth_quality_rotation@v3:买入中国铝业(股息率2.6%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  },
+  {
+   "strategy_id": "s13_growth_quality_rotation@v3",
+   "code": "sh600660",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s13_growth_quality_rotation@v3:买入福耀玻璃(股息率3.7%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  },
+  {
+   "strategy_id": "s13_growth_quality_rotation@v3",
+   "code": "sh600549",
+   "side": "buy",
+   "weight": 0.12,
+   "reason": "s13_growth_quality_rotation@v3:买入厦门钨业(股息率1.2%)[敞口×0.688705(消息0.6887052298941502/回撤1.0)][单票上限12%削仓]",
+   "signal_date": "2026-07-23",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  }
+ ],
+ "highest_nav": 1.0,
+ "settled_dates": [
+  "2026-07-23"
+ ],
+ "applied_div": [],
+ "aux": {}
+}
