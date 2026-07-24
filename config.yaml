@@ -3,7 +3,7 @@
 #   PUSHPLUS_TOKEN / SMTP_AUTH_CODE / DASHBOARD_PASSWORD / ANTHROPIC_API_KEY
 
 user:
-  capital: 50000            # 模拟建账规模(非真投额;5万档5策略均可交易赛马)。回测/持仓数按此
+  capital: 100000           # 模拟建账规模:各策略原始资金统一10万元(2026-07-23 由5万上调)。回测/持仓数按此(min_ticket 8000→约12只分散)
   smtp:
     host: smtp.qq.com
     port: 465
