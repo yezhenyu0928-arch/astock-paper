@@ -42,6 +42,7 @@ class S2EtfMomentum(BaseStrategy):
             scores[code] = mom_score / len(windows)
 
         best = max(scores, key=scores.get) if scores else None
+        hold_n = params.get("hold_n", 1)
         if best is None or scores[best] <= 0:
             # 全部动量<=0 → 空仓
             held = set(account.positions.keys())
@@ -52,10 +53,20 @@ class S2EtfMomentum(BaseStrategy):
                     f"ETF动量:全空({nm}动量负值)", date))
             return orders
 
-        # 持有最强1只
-        held = set(account.positions.keys())
-        target = {best}
+        # 排名选前 hold_n 只
+        ranked = sorted(scores, key=scores.get, reverse=True)
+        top = [c for c in ranked if scores[c] > 0][:hold_n]
+        if not top:
+            held = set(account.positions.keys())
+            orders = []
+            for code in held:
+                orders.append(Order(self.strategy_id, code, "sell", 0.0,
+                    f"ETF动量:全空(无正动量)", date))
+            return orders
+
+        target = set(top)
         orders = []
+        wgt = 0.98 / len(top) if top else 0
 
         for code in held:
             if code not in target:
@@ -64,7 +75,8 @@ class S2EtfMomentum(BaseStrategy):
 
         for code in target:
             if code not in held:
-                orders.append(Order(self.strategy_id, code, "buy", 0.98,
-                    f"ETF动量:买入{ctx.name(code)}(动量{scores[code]:+.2%})", date))
+                cname = ctx.name(code)
+                orders.append(Order(self.strategy_id, code, "buy", wgt,
+                    f"ETF动量:买入{cname}(动量{scores[code]:+.2%})", date))
 
         return orders

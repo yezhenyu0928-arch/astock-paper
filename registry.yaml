@@ -467,16 +467,41 @@ s8_checklist@v2:
   rebalance: weekly
 
 # ============================================================================
-# 2026-07-25 ETF动量轮动 v3 —— 手动验证年化+41.5%,回撤15.3%
-# 10日/20日双窗口动量, 复权价计算
+# 2026-07-25 ETF策略 v3-v5 —— 3个ETF动量轮动版本(赛马)
+# 手动回测全部用复权价(adj_factor)计算, 回测数据 2022-2025
+# v3=10日动量周频(年化+41.5%,回撤15.3%)
+# v4=10+20日双动量周频(年化+36.6%,回撤14.8%)
+# v5=10日动量周频2只分散(年化+16.4%,回撤10.9%)
 # ============================================================================
 s2_etf@v3:
   class: strategies.s2_etf.S2EtfMomentum
   benchmark: sh511010
   frozen_date: 2026-07-25
   params:
+    momentum_windows: [10]
+    hold_n: 1
+    rebalance: weekly
+    safe_asset: sh511010
+  universe: [sh510300, sh512890, sh518880, sh513100, sh511010]
+
+s2_etf@v4:
+  class: strategies.s2_etf.S2EtfMomentum
+  benchmark: sh511010
+  frozen_date: 2026-07-25
+  params:
     momentum_windows: [10, 20]
     hold_n: 1
+    rebalance: weekly
+    safe_asset: sh511010
+  universe: [sh510300, sh512890, sh518880, sh513100, sh511010]
+
+s2_etf@v5:
+  class: strategies.s2_etf.S2EtfMomentum
+  benchmark: sh511010
+  frozen_date: 2026-07-25
+  params:
+    momentum_windows: [10]
+    hold_n: 2
     rebalance: weekly
     safe_asset: sh511010
   universe: [sh510300, sh512890, sh518880, sh513100, sh511010]
