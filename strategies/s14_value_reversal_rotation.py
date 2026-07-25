@@ -1,0 +1,38 @@
+# -*- coding: utf-8 -*-
+"""S14 红利价值轮动(@v2 重建)。
+
+原 v1 逻辑(超跌+企稳+放量反转)在 42 只大蓝筹宇宙里几乎筛不出标的 -> 全程空仓。
+根因: 该数据集仅 42 只有基本面数据且全为大蓝筹, 反转因子风格错配。
+
+v2 重建在已验证的红利质量多因子底座(mf_core)之上, 叠加"深度价值"倾斜
+(偏低 PE/PB + 股息率优先), 行业中性 + 新闻守卫 + 跟踪止损控回撤。
+与 S13(成长质量) 的差异: S13 追成长质量, S14 捡便宜红利价值, 风格互补。
+"""
+import logging
+from models import Order
+from strategies.base import BaseStrategy
+from strategies import mf_core
+
+log = logging.getLogger("s14")
+
+
+class S14ValueReversalRotation(BaseStrategy):
+    """S14 v2 红利价值: 红利质量底座 + 深度价值(低PE/PB)倾斜。"""
+
+    def generate_orders(self, date, ctx, account):
+        if not mf_core.should_rebalance(date, self.params):
+            return mf_core.risk_orders(date, ctx, account, self.params, self.strategy_id, self.config)
+
+        # 调优参数统一收口到 registry(params 字段, 与 mf_core 对齐); 不再硬编码, 避免与 registry 双源漂移。
+        params = dict(self.params)
+        sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
+        if not sel["target"]:
+            # 无候选: 清仓所有持仓(避免裸多)
+            orders = []
+            for code in account.positions.keys():
+                orders.append(Order(self.strategy_id, code, "sell", 0.0,
+                    f"S14价值:{ctx.name(code)}无候选,清仓", date))
+            return orders
+        return mf_core.build_orders(ctx, date, account, sel, params,
+                                    self.strategy_id, self.config,
+                                    stop_pct=params.get("stop_pct", 0.12))

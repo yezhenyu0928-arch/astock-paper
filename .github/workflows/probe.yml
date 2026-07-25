@@ -1,0 +1,34 @@
+name: probe
+# 卡B:每月1日跑数据接口回归(tests/test_m1.py)。akshare/baostock 接口漂移会先在这里暴露,
+# 而不是等某天 daily 静默取错数据。失败即微信告警。
+on:
+  schedule:
+    - cron: '23 1 1 * *'     # 每月1日 UTC01:23(北京09:23)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt
+      - name: restore DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: db/market.sqlite
+          key: db-probe-${{ github.run_id }}
+          restore-keys: db-
+      - name: run data probe (test_m1)
+        run: python tests/test_m1.py
+      - name: alert on drift
+        if: failure()
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
+        run: python notify.py --alert "🔴 月度数据接口回归失败(test_m1),疑似 akshare/baostock 接口漂移,请检查 data_adapter.py" || true

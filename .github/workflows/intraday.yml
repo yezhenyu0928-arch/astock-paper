@@ -1,0 +1,49 @@
+name: intraday
+# 盘中任务:09:35 开盘校准(卡G,按实时价重算今日操作股数/金额) + 10:00/13:30/14:45 黑天鹅扫描(SPEC_NEWS N4)。
+on:
+  schedule:
+    - cron: '35 1 * * 1-5'    # 北京09:35 开盘校准(卡G)
+    - cron: '0 2 * * 1-5'     # 北京10:00 扫描
+    - cron: '30 5 * * 1-5'    # 北京13:30 扫描
+    - cron: '45 6 * * 1-5'    # 北京14:45 扫描
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: intraday
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt
+      - name: restore DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: db/market.sqlite
+          key: db-${{ github.run_id }}
+          restore-keys: db-
+      - name: intraday task (09:35→校准 / 其余→扫描)
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          AGNES_LLM_KEY: ${{ secrets.AGNES_LLM_KEY }}
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+        run: |
+          MODE=auto
+          if [ "${{ github.event.schedule }}" = "35 1 * * 1-5" ]; then
+            MODE=calibrate
+          elif [ -n "${{ github.event.schedule }}" ]; then
+            MODE=scan
+          fi
+          echo "intraday mode=$MODE"
+          python run_intraday.py --mode "$MODE"

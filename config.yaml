@@ -1,0 +1,132 @@
+# 工作配置(由 config.example.yaml 复制)。普通用户只需改 capital 和 smtp.user 两处。
+# 秘钥不写在这里!放 GitHub Secrets,运行时由环境变量注入:
+#   PUSHPLUS_TOKEN / SMTP_AUTH_CODE / DASHBOARD_PASSWORD / ANTHROPIC_API_KEY
+
+user:
+  capital: 100000           # 模拟建账规模:各策略原始资金统一10万元(2026-07-23 由5万上调)。回测/持仓数按此(min_ticket 8000→约12只分散)
+  smtp:
+    host: smtp.qq.com
+    port: 465
+    user: 1330262571@qq.com       # ←改成你的邮箱(推送失败时的备用通知)
+
+costs:
+  commission_rate: 0.00025  # 佣金万2.5
+  commission_min: 5         # 最低5元
+  stamp_tax_sell: 0.0005    # 卖出印花税(现行1‰?以现行税率核对;此处按0.5‰保守写,可调)
+  slippage:
+    etf: 0.0005
+    stock: 0.0015
+
+risk:                           # 手册v2.0纪律:年化>25% / 回撤<10% / 夏普>1.5
+  strategy_max_drawdown: 0.10   # 策略熔断线(手册总回撤红线10%,由0.15收紧)
+  stop_loss:
+    trend: 0.08                 # 趋势类个股硬止损(手册硬止损8%)
+    rotation: 0.08              # 轮动类硬止损(手册统一8%硬止损,由0.12收紧)
+  trailing_take_profit: 0.06    # 移动止盈:自持有期最高收盘回撤>6%即止盈(手册)
+  time_stop_days: 30            # 时间止损:持仓满30交易日且收益仍<time_stop_min_return→退出(手册)
+  time_stop_min_return: 0.0     # 时间止损收益门槛(0=持仓30日仍不盈利即退)
+  max_position_pct: 0.12        # 单票占账户上限(手册单票≤12%,由0.15收紧)
+  industry_max_pct: 0.25        # 单行业占账户上限(手册行业≤25%)
+  total_position_max: 0.90      # 总仓位上限(手册≤90%,现金≥10%)
+  cash_floor: 0.10              # 现金下限(手册现金≥10%)
+  min_market_cap: 8000000000    # 总市值下限80亿(手册排除微盘,单位:元)
+  min_list_days: 480            # 上市满2年(≈480交易日,手册排除次新)
+  drawdown_tiers:               # 回撤分层递进降险(手册风控体系):账户回撤≥dd时,新开仓敞口×mult
+    - {dd: 0.04, mult: 0.80}    # 4-6%:新开仓降至8成(<4%默认满仓)
+    - {dd: 0.06, mult: 0.60}    # 6-8%:降至6成
+    - {dd: 0.08, mult: 0.40}    # 8-10%:降至4成(>10%由熔断线清仓"冬眠")
+  market_freeze:
+    day_drop: 0.05              # 沪深300单日跌幅(由0.03放宽到0.05,A股单日-3%不罕见,减少误冻结)
+    m20_drop: 0.10              # 20日累计跌幅
+  min_avg_amount: 80000000      # 个股20日日均成交额下限(元,手册8000万,由5000万收紧)
+
+strategies:                     # 2026-07 重构:全面个股化——下线全部ETF策略,启用纯个股策略阵容
+  # ↓ ETF动量轮动(2026-07-25新增):5只ETF轮动,手动验证年化+41.5%/回撤15.3%
+  s2_etf@v3: true                # ETF动量轮动(沪深300/红利低波/黄金/纳指/国债)
+  # ↓ 个股策略(仅交易A股个股,无任何ETF);各策略模拟不同投资经理风格,综合宏观/行业/基本面/技术/资金面
+  s1_dividend@v2: false         # 红利价值经理[归档:被@v3主板差异化版取代]
+  s4_smallcap@v1: false          # 小市值经理:真小盘(全A市值升序)+反转+低PB+资金面(高弹性)
+  s8_checklist@v1: false
+  s8_checklist@v2: false        # 价值质量清单经理[归档:被@v3主板全市场低波版取代]
+  s13_growth_quality_rotation@v1: false
+  s13_growth_quality_rotation@v2: false  # 景气成长质量轮动[归档:被@v3主板mid成长版取代]
+  s14_value_reversal_rotation@v1: false
+  s14_value_reversal_rotation@v2: false   # 低估反转轮动[归档:被@v3主板midsmall反转版取代]
+  s15_core_allocation@v1: false
+  s15_core_allocation@v2: false           # 核心配置[归档:被@v3主板大盘核心版取代]
+  # ↓ 已下线:全部为ETF策略,按要求移除(仅交易个股,不再涉及任何ETF)
+  s2_etf@v1: false              # 删:ETF动量轮动(ETF)
+  s2_etf@v2: false              # 删:ETF动量V2(ETF)
+  s6_sector@v1: false           # 删:行业ETF动量(ETF)
+  s7_track@v1: false            # 删:赛道ETF旗舰(ETF)
+  s5_grid@v1: false             # 删:沪深300ETF网格(ETF)
+  # ↓ 归档(个股,但与启用版本重复或风格重叠)
+  s1_dividend@v1: false         # 归档:被 v2 取代
+  # ↓ 2026-07-23 扩池+差异化:主板全市场可投(除创/科/北),6策略各取不同市值段+分红门槛→操作真正岔开
+  s1_dividend@v3: true           # 红利价值(主板large+连续分红3年):防御/收入型,与v2差异化(主板池+市值段large)
+  s4_smallcap@v3: true           # 中小盘成长(主板small+不要分红):小盘弹性
+  s8_checklist@v3: true          # 全市场低波价值(主板all+不要分红):低回撤
+  s13_growth_quality_rotation@v3: true   # 景气成长(主板mid+不要分红):中盘成长
+  s14_value_reversal_rotation@v3: true    # 价值反转(主板midsmall+不要分红,逆动量):中小盘逆向
+  s15_core_allocation@v3: true            # 核心配置(主板large+分红2年):大盘核心
+  s4_smallcap@v2: false        # 归档:被 @v3 主板small成长版取代
+  s3_ma_trend@v1: false         # 归档:被 v2 纪律化趋势版取代(v1 全期-0.8%/回撤24% whipsaw)
+  s3_ma_trend@v2: false         # 归档:借鉴v1重构仍-5%/回撤18%,A股价格趋势弱,被 s3_trend_timing 择时版取代
+  s9_stage2@v1: false           # 归档:被 v2 取代(v1 沪深300宇宙 Stage2 全期-20%/回撤40%,蒙卡5%分位-52.7%)
+  s9_stage2@v2: false           # 归档:借鉴v1重构仍-16.7%/回撤38%,价格动量在A股失效,被 s9_growth_timing 择时版取代
+  s11_quality_growth@v1: false  # 归档:被 s9_growth_timing 取代(同为成长,但新版本带大盘择时+行业轮动+破MA60止损,更贴合"成长须跑赢且控回撤")
+  s12_reversal@v1: false        # 归档:被 s3_trend_timing 取代(同属偏逆向/技术,新版本带大盘择时+行业轮动+破MA50止损)
+  s10_lowvol@v1: false          # 归档:用户评估相对 s1/s4/s8 无收益/回撤优势,下线
+  s3_trend_timing@v1: false     # 归档:激进大盘择时 whipsaw 致-16.4%,被 s13/s14 重新设计替代
+  s9_growth_timing@v1: false    # 归档:接近0收益(择时拖累),被 s13/s14 重新设计替代
+
+schedule:
+  signal_push_time: "18:00"     # 北京时间,仅用于消息标题展示
+
+news_layer:                   # 消息面层:实时新闻研判 + 操作影响系数(确定性 L0 规则档为主)
+  enabled: true
+  # —— 研判引擎:L0 确定性规则档为主研判底座;L1 大模型档(agnes)做增强,但受 L0 与平滑双重约束 ——
+  #   安全性质:L1 永远无法单独制造 -2(全清)—— -2 要求 L0 自身已 ≤-1;且单日噪声须经平滑(persist)才生效。
+  #   即:无关新闻不会被 L1 误触发操作,重要新闻若 L0 已捕获则 L1 只能同向加固,不会反向掩盖风险。
+  llm: true                   # 启用 L1 大模型研判(agnes 备用通道)
+  llm_shadow: false           # 正式干预档;如需先观望 L1 与 L0 分歧,可临时改 true(只记录 news_shadow.csv 不干预)
+  llm_provider: agnes
+  llm_base_url: "https://apihub.agnes-ai.com/v1"   # agnes OpenAI 兼容端点(含版本前缀)
+  llm_api_key_env: AGNES_LLM_KEY      # 密钥存于仓库外 .workbuddy/llm_key.txt(已 gitignore),不落库
+  llm_model: agnes-2.0-flash
+  # —— 备通道(GLM-4.7-Flash):主通道 agnes 超时/空响应/鉴权失败时自动接管(主备容灾) ——
+  #   密钥 GLM_API_KEY 由 GitHub Secret 注入(云端);本地可放 .workbuddy/llm_keys.json。
+  llm_provider_backup: glm
+  llm_base_url_backup: "https://open.bigmodel.cn/api/paas/v4"
+  llm_api_key_env_backup: GLM_API_KEY
+  llm_model_backup: glm-4.7-flash
+  intraday_scan: true         # 盘中黑天鹅扫描(依赖运行环境可达)
+
+  # —— 市场分 → 新开仓敞口系数(只降不升,严守低回撤硬约束) ——
+  #   -2 系统性风险 : 新开仓敞口 0.0(持币观望;个股黑天鹅仍由 blackswan_sells 强卖,不追新仓)
+  #   -1 偏空       : 新开仓降至 0.6
+  #    0/+1/+2 利好 : 不放大(利好不额外加杠杆,避免回撤失控)
+  exposure_map: {-2: 0.0, -1: 0.6, 0: 1.0, 1: 1.0, 2: 1.0}
+
+  # —— 平滑/持续性:单日噪声不触发降仓,需连续偏空才生效(防"无关新闻误操作") ——
+  smoothing_days: 3           # 取近 N 个交易日市场分
+  smoothing_persist: 2        # 近 N 日中 ≥ 该天数偏空(≤-1)才降仓
+  # 注:若当日为 -2 且来自权威源(S0/S1:国务院/央行/证监会/新华社/央视),则即时全清,不等平滑
+
+  # —— 个股警示分级(防"无关新闻误操作" vs "不漏判重大风险") ——
+  warn_action: penalize       # warning(-1,如问询函/减持计划/业绩预亏):降权后排,不硬剔好票
+  blackswan_action: ban        # blackswan(-2,如立案/造假/债务违约/退市风险):硬剔除+强卖
+
+  industry_boost_weight: 0.0   # 主题正面加仓默认关闭(L0 无可靠行业加分,避免噪声;L1 启用后可调)
+
+custom:                        # 小资金适配与个性化(SPEC_FILL.md)
+  min_order_amount: 5000       # 单笔最低金额(最低佣金5元的成本保护)
+  min_ticket: 8000             # 单票最低配置额,决定持仓数随资金自适应
+  open_frac: {stock: 0.08, etf: 0.10}   # 开盘时段成交额占比(成交概率模型)
+  impact_k: {stock: 0.0020, etf: 0.0008} # 冲击成本系数
+  hold_n_override: {}          # 手动锁定某策略持仓数,如 {s1_dividend@v1: 5}
+  exclude_star_chinext: true   # true=不买科创板(688)/创业板(300/301)。未开通这些权限就设true
+  universe_exclude: []         # 你不想碰的代码黑名单(具体代码,如 [sz300750])
+  s2_universe_extra: []        # 追加ETF即注册s2@v2新赛道,旧曲线归档
+  push_times_intraday: ["10:00","13:30","14:45"]
+  risk_override: {}            # 只允许比默认更严,放松将被拒绝加载

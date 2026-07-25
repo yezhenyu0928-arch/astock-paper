@@ -1,0 +1,439 @@
+# -*- coding: utf-8 -*-
+"""统一红利质量多因子选股底座(mf = multi-factor)。
+
+s1_dividend@v2(S1DividendQuality) 在 42 只大蓝筹宇宙里跑出 +14.1%/5.2%DD,
+证明"高股息 + 连续分红 + ROE质量 + 低波 + 估值 + 新闻"排名法在此数据集唯一有效。
+本模块把该逻辑抽象为可参数化底座, 供 s4/s8/s14/s15 各自带风格倾斜复用,
+让 6 个策略都能达成"正收益 + 低回撤", 而非因子风格错配导致空仓/跑输。
+
+所有取数经 ctx(DataContext)走 <=信号日 防未来函数。
+"""
+import logging
+from statistics import pstdev
+from models import Order
+from strategies import common, news_guard
+import os
+import fundamental as F
+import factors as _fac
+import trade_calendar as cal
+
+log = logging.getLogger("mf_core")
+
+POOL_INDEX = "sh000300"  # 沪深300 大盘红利票池(与 s1 一致)
+
+
+def _roe_quality_ok(code, date, conn, roe_years=3, roe_min=0.08):
+    try:
+        ok, roe = F.roe_quality(code, date, years=roe_years, min_roe=roe_min, conn=conn)
+        if ok:
+            return ok, roe
+        # 区分"无 ROE 数据"与"数据不达标":海外 baostock 不可达 → stock_annual 空,
+        # 此时从宽通过(降级),避免全拒;仅当有数据但不达标才真正剔除。
+        cnt = conn.execute(
+            "SELECT count(*) FROM stock_annual WHERE code=?", (code,)).fetchone()[0] or 0
+        if cnt == 0:
+            return True, 0.0
+        return ok, roe
+    except Exception:
+        return True, 0.0
+
+
+def _news_score(date, code, conn):
+    try:
+        import news_engine as ne
+        return ne.get_stock_sentiment_score(date, code, conn=conn) or 0.0
+    except Exception:
+        return 0.0
+
+
+def _growth_score(date, codes, conn):
+    """盈利同比(earnings YoY)排名因子, 单条 SQL 批量取近两年净利润(防未来函数 pub_date<=date)。
+    返回 {code: 同比增幅}(None=数据不足, 给中性 0)。仅当 weights 含 'growth'>0 时才调用(不影响其他策略)。"""
+    try:
+        placeholders = ",".join("?" for _ in codes)
+        d = str(date)[:10]
+        rows = conn.execute(
+            f"SELECT code, net_profit FROM stock_annual "
+            f"WHERE code IN ({placeholders}) AND pub_date IS NOT NULL AND pub_date<>'' AND pub_date<=? "
+            f"ORDER BY code, stat_year DESC", (*codes, d)).fetchall()
+        by_code = {}
+        for code, np0 in rows:
+            by_code.setdefault(code, []).append(np0)
+        out = {}
+        for code, lst in by_code.items():
+            if len(lst) >= 2 and lst[1] is not None and lst[1] != 0 and lst[0] is not None:
+                out[code] = (lst[0] - lst[1]) / abs(lst[1])
+            else:
+                out[code] = None
+        return out
+    except Exception:
+        return {}
+
+
+def _cap_segment_pool(ctx, pool, segment):
+    """按总市值分位把可投池切成不同"市值段", 让各策略从不同子池选股 → 操作真正岔开。
+
+    segment 取值:
+      'large'    : 市值最大的前 33%(大盘核心/红利)
+      'mid'      : 市值 33%~70% 区间(中盘成长)
+      'small'    : 市值最小的后 45%(中小盘弹性)
+      'midsmall' : 市值后 70%(中小盘, 价值反转用)
+      'all'/None : 不切分(全池)
+    缺市值数据的票统一归入"未知", 从宽保留(避免因数据缺失把整段清空)。
+    """
+    if not segment or segment == "all":
+        return pool
+    caps = []
+    unknown = []
+    for code in pool:
+        try:
+            f = ctx.fundamental(code) or {}
+            mc = f.get("market_cap")
+        except Exception:
+            mc = None
+        if mc and mc > 0:
+            caps.append((code, float(mc)))
+        else:
+            unknown.append(code)
+    if len(caps) < 10:                       # 市值数据太少 → 不切分, 从宽返回全池
+        return pool
+    caps.sort(key=lambda x: x[1], reverse=True)   # 市值降序
+    n = len(caps)
+    if segment == "large":
+        seg = caps[:max(1, int(n * 0.33))]
+    elif segment == "mid":
+        seg = caps[int(n * 0.33):int(n * 0.70)]
+    elif segment == "small":
+        seg = caps[int(n * 0.55):]
+    elif segment == "midsmall":
+        seg = caps[int(n * 0.30):]
+    else:
+        return pool
+    keep = [c for c, _ in seg]
+    # 未知市值的票并入(从宽), 但大盘段不并入(大盘要求市值明确)
+    if segment != "large":
+        keep += unknown
+    return keep
+
+
+def _industry_leadership(cand, ind_map):
+    """个股行业地位因子(可回测的'新闻/行业地位'代理): 同一行业内按 ROE 质量排名,
+    业内质量龙头(高 ROE)得高分 —— 市值中性, 不与小盘倾斜(cap_tilt)打架。
+    返回 {code: 0..1}。实盘可由 news_engine 主题扫描(行业ETF信号)进一步增强。"""
+    from collections import defaultdict
+    groups = defaultdict(list)
+    for c in cand:
+        groups[ind_map.get(c[0]) or "未知"].append(c)
+    score = {}
+    for ind, members in groups.items():
+        if len(members) <= 1:
+            for c in members:
+                score[c[0]] = 1.0
+            continue
+        roes = {c[0]: (c[3] or 0.0) for c in members}   # c[3] = roe
+        maxro = max(roes.values()) or 1.0
+        for c in members:
+            score[c[0]] = roes[c[0]] / maxro             # 业内质量龙头(ROE 归一)
+    return score
+
+
+def select(ctx, date, account, params, strategy_id, config):
+    """红利质量多因子选股。返回 selection dict, 供 build_orders 使用。
+
+    params 关键项:
+      min_dividend_yield, dividend_years, roe_years, roe_min,
+      hold_n, max_per_industry, low_vol_pct,
+      weights = {dividend, low_vol, roe, valuation, news, cap, value}
+      cap_tilt(bool): 偏小市值排名加分
+      value_tilt(bool): 偏低 PE/PB 排名加分(深度价值)
+      regime_downsize(bool): 宏观 regime 自适应降仓(eff 缩减)
+    """
+    min_dy = params.get("min_dividend_yield", 0.04)
+    years = params.get("dividend_years", 3)
+    low_vol_pct = params.get("low_vol_pct", 0.30)
+    roe_years = params.get("roe_years", 3)
+    roe_min = params.get("roe_min", 0.08)
+    hold_n = params.get("hold_n", 10)
+    max_per_ind = params.get("max_per_industry", 3)
+    cap_tilt = params.get("cap_tilt", False)
+    value_tilt = params.get("value_tilt", False)
+    regime_downsize = params.get("regime_downsize", False)
+    # 动量(12-1月, 跳过最近1月避免短期反转): 趋势择时强收益来源
+    mom_win = params.get("momentum_window", 252)
+    mom_skip = params.get("momentum_skip", 21)
+    mom_min = params.get("momentum_min", None)   # 硬门槛: 仅保留 >= mom_min 的标的(趋势上行); None=不筛
+    w = dict(params.get("weights", {"dividend": 0.25, "low_vol": 0.15, "roe": 0.20,
+                                    "valuation": 0.10, "news": 0.12, "industry": 0.15,
+                                    "momentum": 0.20}))
+
+    eff = common.effective_hold_n(hold_n, account.init_capital, config, strategy_id)
+    # 【降仓职责单一化 — round-6 修复】敞口的宏观降仓由 risk 层 macro_exposure_mult 权威处理
+    # (mult=0.70+score*0.20, 中性压到 70% 仓)。此处 regime_downsize 仅做【集中度调节】:
+    # 坏行情减少持仓数 eff(持更少、更强的票)后, target_weight 仍归一化到 ~98% 仓 —— 这是
+    # s4(6.2%/4.5%)/s14(7.2%/4.9%) 已验证达标的原始配方。
+    # round-5 曾误改为 weight_per*=ratio(真降仓), 与 risk 层叠成双层降仓(0.70×0.72≈0.50 仓),
+    # 使 s4/s14 崩到 1.8-3.2% —— 已回退。控回撤靠【选股防御性】+ 集中度, 不靠二次砍总仓。
+    if regime_downsize:
+        try:
+            import macro
+            r = macro.compute_market_regime(date, conn=ctx.conn)
+            score = r.get("score", 60)
+            rgood = params.get("regime_good", 1.0)
+            rmid = params.get("regime_mid", 0.75)
+            rbad = params.get("regime_bad", 0.5)
+            ratio = rgood if score >= 60 else (rmid if score >= 40 else rbad)
+            eff = max(1, round(eff * ratio))
+        except Exception:
+            pass
+    weight_per = common.target_weight(eff)
+
+    # 可投池: 优先用 params.pool_index(扩池后为 'mainboard' 全主板流动性池),
+    # 缺失/为空时回退 sh000300(兼容旧行为)。再走主板硬约束过滤 + 市值分段(差异化关键)。
+    pool_index = params.get("pool_index", POOL_INDEX)
+    pool = ctx.members(pool_index, date)
+    if not pool and pool_index != POOL_INDEX:
+        pool = ctx.members(POOL_INDEX, date)          # mainboard 未回填时兜底
+    pool = common.main_board_universe(ctx, pool, config, date)
+    pool = _cap_segment_pool(ctx, pool, params.get("cap_segment"))
+
+    cand = []  # (code, dy, vol, roe, news, pe, mcap)
+    # 诊断计数(海外 baostock 不可达时定位"为何无候选")
+    n_pool = len(pool)
+    n_no_fund = n_dy = n_div = n_roe = n_bar = 0
+    for code in pool:
+        if not ctx.is_tradable(code, date):
+            continue
+        f = ctx.fundamental(code)
+        if not f:
+            n_no_fund += 1
+            continue
+        # 股息率门槛:腾讯快照海外不提供股息率(留 0/None)→ 视为无数据,从宽不据此剔除
+        dy = f.get("dividend_yield")
+        if min_dy > 0 and dy is not None and dy > 0 and dy < min_dy:
+            n_dy += 1
+            continue
+        # 连续分红年数门槛: 仅当 dividend_years>0 时启用。
+        # 【差异化关键】成长/小盘/反转策略设 dividend_years=0 → 跳过分红门槛, 不再被强制收敛到
+        # "分红大盘蓝筹", 从而与红利类策略(s1/s15)选出真正不同的标的。
+        if years > 0 and ctx.dividend_years(code, years) < years:
+            n_div += 1
+            continue
+        # ROE 质量门槛: 仅当 roe_min>0 时启用(设 0 可放开, 供深度价值/反转从宽)。
+        if roe_min > 0:
+            ok, roe = _roe_quality_ok(code, date, ctx.conn, roe_years, roe_min)
+            if not ok:
+                n_roe += 1
+                continue
+        else:
+            roe = 0.0
+            try:
+                _o, roe = _roe_quality_ok(code, date, ctx.conn, roe_years, 0.0)
+            except Exception:
+                pass
+        c = ctx.close(code, 251)
+        if len(c) < 200:
+            n_bar += 1
+            continue
+        rets = [c[i] / c[i - 1] - 1 for i in range(1, len(c))]
+        vol = pstdev(rets) if len(rets) > 1 else 9.9
+        pe = f.get("pe")
+        mcap = f.get("market_cap") or 0.0
+        ns = _news_score(date, code, ctx.conn)
+        # 动量: 12-1月收益(close[-1]/close[-(win+skip)]-1), 不足给 0(中性)
+        mom = 0.0
+        if mom_win:
+            mcs = ctx.close(code, mom_win + mom_skip + 1)
+            if len(mcs) >= mom_win + mom_skip + 1 and mcs[-(mom_win + mom_skip + 1)]:
+                mom = mcs[-1] / mcs[-(mom_win + mom_skip + 1)] - 1
+        cand.append((code, (dy or 0.0), vol, roe, ns, pe, mcap, mom))
+
+    log.info("%s 候选筛选: 池%d 无基本面%d 股息率%d 分红年数%d ROE%d 数据不足%d → 候选%d",
+             strategy_id, n_pool, n_no_fund, n_dy, n_div, n_roe, n_bar, len(cand))
+    if not cand:
+        return {"target": [], "weight_per": 0.0, "meta": {}, "cand_codes": set(),
+                "keep_codes": set(), "full_rank": {}, "ind_map": {},
+                "eff": eff, "empty_reason": "无满足股息率/分红/ROE门槛标的"}
+
+    # —— 新闻/公告/动态守卫 ——
+    _cc = [c[0] for c in cand]
+    _ind = {}
+    try:
+        _ind = _fac.get_industry(ctx.conn, _cc)
+    except Exception:
+        pass
+    # 个股行业地位因子(可回测的'新闻/行业地位'代理): 龙头加分
+    ind_lead_score = _industry_leadership(cand, _ind)
+    # 成长因子(盈利同比)排名: 仅当 weights 含 growth 时计算(默认权重不含, 不影响 s4/s8/s14/s15)
+    grow_score = _growth_score(date, _cc, ctx.conn) if w.get("growth") else {}
+    _ban_n, _ = news_guard.guard_candidates(date, _cc, ctx.conn, config)
+    _ban_i = news_guard.guard_industry(date, _cc, ctx.conn, config, _ind)
+    _ban_s = {c for c in _cc if news_guard.structural_ban(date, c, ctx)[0]}
+    _banned = _ban_n | _ban_i | _ban_s
+    if _banned:
+        cand = [c for c in cand if c[0] not in _banned]
+    if not cand:
+        return {"target": [], "weight_per": 0.0, "meta": {}, "cand_codes": set(),
+                "keep_codes": set(), "full_rank": {}, "ind_map": {},
+                "eff": eff, "empty_reason": "新闻/结构守卫清空候选"}
+
+    # 低波后 N% 优选(low_vol_pct 越大, 保留越多候选含较高收益/较高波动标的)
+    cand.sort(key=lambda x: x[2])
+    keep = cand[:max(eff, int(len(cand) * low_vol_pct))]
+
+    # 动量硬门槛(趋势择时): 仅保留近期上行标的, 剔除深跌趋势; 空仓等待下一月
+    # 防御: momentum_min 设为 None 表示不启用; 设为 -999 表示无限制(所有动量都通过)
+    if mom_min is not None and mom_min > -998:
+        keep = [c for c in keep if (c[7] or 0) >= mom_min]
+        if not keep:
+            return {"target": [], "weight_per": 0.0, "meta": {}, "cand_codes": set(),
+                    "keep_codes": set(), "full_rank": {}, "ind_map": {},
+                    "eff": eff, "empty_reason": "动量门槛剔除全部候选(空仓等待)"}
+
+    by_dy = sorted(keep, key=lambda x: x[1], reverse=True)
+    dy_rank = {c[0]: i for i, c in enumerate(by_dy)}
+    by_vol = sorted(keep, key=lambda x: x[2])
+    vol_rank = {c[0]: i for i, c in enumerate(by_vol)}
+    by_roe = sorted(keep, key=lambda x: x[3], reverse=True)
+    roe_rank = {c[0]: i for i, c in enumerate(by_roe)}
+    by_news = sorted(keep, key=lambda x: x[4], reverse=True)
+    news_rank = {c[0]: i for i, c in enumerate(by_news)}
+    by_pe = sorted(keep, key=lambda x: (x[5] is None, x[5] if x[5] is not None else 1e9))
+    pe_rank = {c[0]: i for i, c in enumerate(by_pe)}
+    # 动量排名(收益越高名次越前; 目标值 0.0 排末尾)
+    by_mom = sorted(keep, key=lambda x: (x[7] or 0.0), reverse=True)
+    mom_rank = {c[0]: i for i, c in enumerate(by_mom)}
+    # 偏小市值 / 偏低估值 倾斜排名
+    cap_rank = {c[0]: i for i, c in enumerate(sorted(keep, key=lambda x: x[6]))} if cap_tilt else {}
+    val_rank = {c[0]: i for i, c in enumerate(sorted(keep, key=lambda x: (x[5] is None, x[5] if x[5] is not None else 1e9)))} if value_tilt else {}
+    # 个股行业地位排名(龙头优先): 行业内市值/ROE 综合, 越高名次越前
+    ind_lead_rank = {code: i for i, code in enumerate(
+        sorted(ind_lead_score, key=lambda x: -ind_lead_score.get(x, 0)))}
+    # 成长(盈利同比)排名: 越高名次越前; 缺失者排末尾
+    grow_rank = {code: i for i, code in enumerate(
+        sorted(grow_score, key=lambda x: -(grow_score.get(x) or -9e9)))} if grow_score else {}
+
+    def _score(c):
+        """按各因子名次加权打分(名次越小越优); 修复原 _w(code) 闭包误用最后一只候选的 bug。
+        新增 industry 项: 个股行业地位(龙头)加分; news 项在实盘取真实舆情分, 回测取 0(由 industry 代理)。"""
+        code = c[0]
+        return (w.get("dividend", 0.0) * dy_rank.get(code, len(keep))
+                + w.get("low_vol", 0.0) * vol_rank.get(code, len(keep))
+                + w.get("roe", 0.0) * roe_rank.get(code, len(keep))
+                + w.get("valuation", 0.0) * pe_rank.get(code, len(keep))
+                + w.get("news", 0.0) * news_rank.get(code, len(keep))
+                + w.get("industry", 0.0) * ind_lead_rank.get(code, len(keep))
+                + w.get("growth", 0.0) * grow_rank.get(code, len(keep))
+                + w.get("cap", 0.0) * cap_rank.get(code, len(keep))
+                + w.get("value", 0.0) * val_rank.get(code, len(keep))
+                + w.get("momentum", 0.0) * mom_rank.get(code, len(keep)))
+
+    scored = sorted(keep, key=_score)
+
+    ind_map = _ind
+    ind_count, target = {}, []
+    for c in scored:
+        code = c[0]
+        ind = ind_map.get(code) or "未知"
+        if ind_count.get(ind, 0) >= max_per_ind:
+            continue
+        target.append(code)
+        ind_count[ind] = ind_count.get(ind, 0) + 1
+        if len(target) >= eff:
+            break
+
+    full_rank = {c[0]: i + 1 for i, c in enumerate(scored)}
+    cand_codes = {c[0] for c in cand}
+    keep_codes = {c[0] for c in keep}
+    meta = {c[0]: {"dy": c[1], "roe": c[3], "pe": c[5]} for c in keep}
+
+    return {"target": target, "weight_per": weight_per, "meta": meta,
+            "cand_codes": cand_codes, "keep_codes": keep_codes,
+            "full_rank": full_rank, "ind_map": ind_map,
+            "eff": eff, "empty_reason": None}
+
+
+def build_orders(ctx, date, account, sel, params, strategy_id, config, stop_pct=0.10, exposure=1.0):
+    """依据 selection 构建买卖单, 含持有期跟踪止损。
+
+    exposure: 单一次敞口标量(默认1.0=满仓归一化)。仅 s13 用 0.90 留现金垫压单日暴跌尖峰;
+    这是【一次性】降仓, 与 risk 层 macro_exposure_mult 不叠加成双层(round-5 双层降仓教训)。
+    """
+    target = sel["target"]
+    wgt = sel["weight_per"] * exposure
+    tset = set(target)
+    orders = []
+    held = set(account.positions.keys())
+    forced = news_guard.guard_holdings(date, list(held), ctx.conn, config)
+
+    for code in held:
+        nm = ctx.name(code)
+        pos = account.positions.get(code)
+        peak = getattr(pos, "highest_close", None) or getattr(pos, "avg_cost", None)
+        close = ctx.close(code, 1)[-1] if len(ctx.close(code, 1)) else None
+        breach = (close is not None and peak is not None and close < peak * (1 - stop_pct))
+        # 仍在目标、无黑天鹅、未破跟踪止损 → 继续持有; 其余情形一律卖出清仓(含"在目标内但已破止损")。
+        if code in target and code not in forced and not breach:
+            continue
+        if code in forced:
+            reason = f"{strategy_id}:{nm}新闻黑天鹅,同步清仓"
+        elif breach:
+            reason = f"{strategy_id}:{nm}自高点回撤>{stop_pct:.0%},跟踪止损"
+        elif code in sel["full_rank"]:
+            reason = f"{strategy_id}:{nm}综合排名掉出前{sel['eff']},卖出"
+        else:
+            reason = f"{strategy_id}:{nm}不再满足选股门槛,卖出"
+        orders.append(Order(strategy_id, code, "sell", 0.0, reason, date))
+
+    for code in target:
+        if code not in held:
+            nm = ctx.name(code)
+            m = sel["meta"].get(code, {})
+            dy = m.get("dy", 0.0)
+            orders.append(Order(strategy_id, code, "buy", wgt,
+                               f"{strategy_id}:买入{nm}(股息率{dy:.1%})", date))
+    return orders
+
+
+def should_rebalance(date, params):
+    """按策略 params['rebalance'] 频率判断今日是否完整再平衡(选股调仓)。
+    daily=每日都调仓; weekly=每周最后交易日; monthly(默认)=每月最后交易日。
+    调试: 环境变量 FORCE_REBALANCE=true 时强制视为再平衡日(验证用)。"""
+    if os.environ.get("FORCE_REBALANCE") == "true":
+        return True
+    freq = (params or {}).get("rebalance", "monthly")
+    if freq == "daily":
+        return True
+    if freq == "weekly":
+        return cal.last_trade_day_of_week(date)
+    return cal.last_trade_day_of_month(date)  # monthly
+
+
+def risk_orders(date, ctx, account, params, strategy_id, config):
+    """每日风控强卖(非再平衡日也调用): 持仓触发 跟踪止损/新闻黑天鹅/结构性排雷 即清仓; 不新开仓。
+    复用 build_orders 的卖出判定, 但不依赖选股排名(无需跑 select), 故可每日低成本运行。
+    日频策略因每日都再平衡, 此路径不会被命中(卖出由 build_orders 统一处理, 且已修复'在目标内也止损');
+    周/月频策略靠它实现'每日逃风险'。"""
+    held = list(account.positions.keys())
+    if not held:
+        return []
+    stop_pct = params.get("stop_pct", 0.10)
+    forced = news_guard.guard_holdings(date, held, ctx.conn, config)
+    orders = []
+    for code in held:
+        nm = ctx.name(code)
+        pos = account.positions.get(code)
+        peak = getattr(pos, "highest_close", None) or getattr(pos, "avg_cost", None)
+        close = ctx.close(code, 1)[-1] if len(ctx.close(code, 1)) else None
+        breach = (close is not None and peak is not None and close < peak * (1 - stop_pct))
+        banned, reason = news_guard.structural_ban(date, code, ctx)
+        if code in forced:
+            orders.append(Order(strategy_id, code, "sell", 0.0,
+                                f"{strategy_id}:{nm}新闻黑天鹅,同步清仓", date))
+        elif banned:
+            orders.append(Order(strategy_id, code, "sell", 0.0,
+                                f"{strategy_id}:{nm}{reason},清仓", date))
+        elif breach:
+            orders.append(Order(strategy_id, code, "sell", 0.0,
+                                f"{strategy_id}:{nm}自高点回撤>{stop_pct:.0%},跟踪止损", date))
+    log.info("%s 每日风控扫描: 持仓%d 触发强卖%d", strategy_id, len(held), len(orders))
+    return orders

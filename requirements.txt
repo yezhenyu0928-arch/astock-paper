@@ -1,0 +1,11 @@
+akshare>=1.14
+baostock
+pandas>=2.0
+numpy
+pyyaml
+requests
+streamlit>=1.35
+plotly
+anthropic        # 可选:Anthropic 消息面档(备用通道);默认走 GLM(requests HTTP,无需额外包)
+tushare          # 可选:个股数据增强源,需 TUSHARE_TOKEN+积分;无则自动跳过、回退腾讯/东财
+yfinance         # 海外Actions Runner兜底数据源(全球可达)

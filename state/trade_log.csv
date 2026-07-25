@@ -1,0 +1,2 @@
+signal_date,trade_date,strategy_id,code,side,shares,sim_price,fee,tax,status,reason,real_price
+2026-07-03,2026-07-06,s2_etf@v1,sh510500,buy,5400,8.93,12.06,0.0,filled,"动量轮动:买入最强 中证500ETF(r20=+5.3% r60=+17.1%,6只中第1,macro-0.4 M29%)",

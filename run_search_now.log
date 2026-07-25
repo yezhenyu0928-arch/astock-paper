@@ -1,0 +1,87 @@
+2026-07-24 04:15:01,464 INFO ===== run_search_now 启动 (quick=True no_push=True) =====
+2026-07-24 04:25:24,710 INFO ===== run_search_now 启动 (quick=True no_push=True) =====
+2026-07-24 04:25:25,547 WARNING 清理残留进程失败(可忽略): 'NoneType' object has no attribute 'splitlines'
+2026-07-24 04:25:28,549 INFO 获得锁 PID=69420
+2026-07-24 04:25:31,686 INFO DB 校验: daily_bar=2581518 mainboard=3044 sh510300=1833 ✅
+2026-07-24 04:25:31,692 INFO >>> C:\Users\zhenyu\AppData\Local\Programs\Python\Python313\python.exe search_arms.py --quick --no-final
+2026-07-24 04:52:57,082 INFO search_arms 退出码=3221225477
+2026-07-24 04:52:57,086 INFO search_arms 输出尾段:
+=== 多臂搜参开始 | 资金档 100,000 | 目标 年化>10% & 回撤<10% ===
+策略 6 个 × 臂 3 组 = 18 次主回测
+
+--- 臂 A_base: baseline=0.85 floor=0.15 weak=0.45 ma200=0.65 ---
+
+  0%|          | 0/18 [00:00<?, ?it/s]
+  6%|▌         | 1/18 [00:01<00:25,  1.52s/it]
+ 11%|█         | 2/18 [00:02<00:21,  1.33s/it]
+ 17%|█▋        | 3/18 [00:03<00:16,  1.12s/it]
+ 22%|██▏       | 4/18 [00:04<00:14,  1.06s/it]
+ 28%|██▊       | 5/18 [00:05<00:13,  1.07s/it]
+ 33%|███▎      | 6/18 [00:07<00:14,  1.24s/it]
+ 39%|███▉      | 7/18 [00:12<00:29,  2.66s/it]
+ 44%|████▍     | 8/18 [00:13<00:21,  2.12s/it]
+ 50%|█████     | 9/18 [00:14<00:15,  1.74s/it]
+ 56%|█████▌    | 10/18 [00:15<00:12,  1.50s/it]
+ 61%|██████    | 11/18 [00:16<00:09,  1.33s/it]
+ 67%|██████▋   | 12/18 [00:17<00:07,  1.32s/it]
+ 72%|███████▏  | 13/18 [00:18<00:06,  1.24s/it]
+ 78%|███████▊  | 14/18 [00:20<00:05,  1.28s/it]
+ 83%|████████▎ | 15/18 [00:21<00:03,  1.28s/it]
+ 89%|████████▉ | 16/18 [00:22<00:02,  1.14s/it]
+ 94%|█████████▍| 17/18 [00:23<00:01,  1.12s/it]
+100%|██████████| 18/18 [00:24<00:00,  1.05s/it]
+100%|██████████| 18/18 [00:24<00:00,  1.35s/it]
+
+2026-07-24 04:52:57,758 INFO ===== run_search_now 结束 =====
+2026-07-24 05:00:15,123 INFO ===== run_search_now 启动 (quick=False no_push=False) =====
+2026-07-24 05:00:15,553 WARNING 清理残留进程失败(可忽略): 'NoneType' object has no attribute 'splitlines'
+2026-07-24 05:00:18,555 INFO 获得锁 PID=43580
+2026-07-24 05:00:20,244 INFO DB 校验: daily_bar=2581518 mainboard=3044 sh510300=1833 ✅
+2026-07-24 05:00:20,248 INFO >>> C:\Users\zhenyu\.workbuddy\binaries\python\versions\3.13.12\python.exe search_arms.py
+2026-07-24 05:01:27,095 INFO search_arms 退出码=3221225477
+2026-07-24 05:01:27,096 INFO search_arms 输出尾段:
+=== 多臂搜参开始 | 资金档 100,000 | 目标 年化>10% & 回撤<10% ===
+策略 6 个 × 臂 5 组 = 30 次主回测
+
+--- 臂 A_base: baseline=0.85 floor=0.15 weak=0.45 ma200=0.65 ---
+
+  0%|          | 0/18 [00:00<?, ?it/s]
+  6%|▌         | 1/18 [00:00<00:05,  2.88it/s]
+ 11%|█         | 2/18 [00:00<00:05,  2.93it/s]
+ 17%|█▋        | 3/18 [00:01<00:05,  3.00it/s]
+ 22%|██▏       | 4/18 [00:01<00:04,  3.11it/s]
+ 28%|██▊       | 5/18 [00:01<00:04,  3.00it/s]
+ 33%|███▎      | 6/18 [00:02<00:04,  2.98it/s]
+ 39%|███▉      | 7/18 [00:02<00:03,  2.98it/s]
+ 44%|████▍     | 8/18 [00:02<00:03,  2.95it/s]
+ 50%|█████     | 9/18 [00:03<00:03,  2.89it/s]
+ 56%|█████▌    | 10/18 [00:03<00:02,  2.84it/s]
+ 61%|██████    | 11/18 [00:03<00:02,  2.74it/s]
+ 67%|██████▋   | 12/18 [00:04<00:02,  2.69it/s]
+ 72%|███████▏  | 13/18 [00:04<00:01,  2.78it/s]
+ 78%|███████▊  | 14/18 [00:04<00:01,  2.88it/s]
+ 83%|████████▎ | 15/18 [00:05<00:01,  2.87it/s]
+ 89%|████████▉ | 16/18 [00:05<00:00,  2.89it/s]
+ 94%|█████████▍| 17/18 [00:05<00:00,  2.86it/s]
+100%|██████████| 18/18 [00:06<00:00,  2.93it/s]
+100%|██████████| 18/18 [00:06<00:00,  2.89it/s]
+
+2026-07-24 05:01:27,101 INFO 准备推送 1 个报告: ['s1_dividend_at_v3.md']
+2026-07-24 05:01:27,102 INFO >>> C:\Users\zhenyu\.workbuddy\binaries\python\versions\3.13.12\python.exe _api_push.py multi-arm search (local DB, capital=100k, trend-gate refactor) config.yaml C:\Users\zhenyu\Desktop\测试\astock-paper\reports\s1_dividend_at_v3.md
+2026-07-24 05:01:45,952 INFO _api_push 退出码=0
+2026-07-24 05:01:45,952 INFO _api_push 输出:
+远端 HEAD: a75fd22ac6d80c8d92a1dacbb2be82d5613f60fc
+base tree: b21c0abf3904516913fed7c9359e316149f35de6
+  blob config.yaml -> 5dc86ee417
+  blob C:\Users\zhenyu\Desktop\测试\astock-paper\reports\s1_dividend_at_v3.md -> cd7837c482
+new tree: b44f7a4c8d8b78085d89ee81510bbddcdd90cf07
+new commit: 313474fd6affbc7353a6c01f80a9f8af5043a0d7
+OK 已推 main: 313474fd6affbc7353a6c01f80a9f8af5043a0d7
+URL: https://github.com/yezhenyu0928-arch/astock-paper/commit/313474fd6affbc7353a6c01f80a9f8af5043a0d7
+
+2026-07-24 05:01:46,475 INFO ===== run_search_now 结束 =====
+2026-07-24 05:28:19,099 INFO ===== run_search_now 启动 (quick=True no_push=True) =====
+2026-07-24 05:28:19,359 WARNING 清理残留进程失败(可忽略): 'NoneType' object has no attribute 'splitlines'
+2026-07-24 05:28:22,364 INFO 获得锁 PID=68416
+2026-07-24 05:28:22,987 INFO DB 校验: daily_bar=2581518 mainboard=3044 sh510300=1833 ✅
+2026-07-24 05:28:22,990 INFO >>> C:\Users\zhenyu\AppData\Local\Programs\Python\Python313\python.exe search_arms.py --quick --no-final

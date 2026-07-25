@@ -1,0 +1,186 @@
+[
+  {
+    "sid": "s4_smallcap@v2",
+    "tag": "V1_mom10_conc",
+    "override": {
+      "momentum_min": 0.1,
+      "stop_pct": 0.12,
+      "hold_n": 6,
+      "regime_bad": 1.0,
+      "weights": {
+        "dividend": 0.1,
+        "low_vol": 0.05,
+        "roe": 0.15,
+        "valuation": 0.09,
+        "news": 0.07,
+        "cap": 0.11,
+        "momentum": 0.45
+      }
+    },
+    "annual": 0.029983387816108875,
+    "total": 0.1367069999999999,
+    "max_dd": 0.0775260782220577,
+    "calmar": 0.38675228392474015,
+    "sharpe": 0.435249864817425,
+    "win": 0.4184981684981685,
+    "err": null,
+    "sec": 345.9
+  },
+  {
+    "sid": "s4_smallcap@v2",
+    "tag": "V2_mom06_mid",
+    "err": "[WinError 2] \u7cfb\u7edf\u627e\u4e0d\u5230\u6307\u5b9a\u7684\u6587\u4ef6\u3002: 'C:\\\\Users\\\\zhenyu\\\\AppData\\\\Local\\\\Temp\\\\tmp9wdu0xqh.json'",
+    "sec": 404.8
+  },
+  {
+    "sid": "s4_smallcap@v2",
+    "tag": "V3_mom12_aggr",
+    "override": {
+      "momentum_min": 0.12,
+      "stop_pct": 0.1,
+      "hold_n": 6,
+      "regime_bad": 0.9,
+      "weights": {
+        "dividend": 0.08,
+        "low_vol": 0.04,
+        "roe": 0.14,
+        "valuation": 0.08,
+        "news": 0.06,
+        "cap": 0.1,
+        "momentum": 0.5
+      }
+    },
+    "annual": 0.026641138632627737,
+    "total": 0.12079499999999999,
+    "max_dd": 0.07843497163571089,
+    "calmar": 0.3396589311762843,
+    "sharpe": 0.4028011210561577,
+    "win": 0.39285714285714285,
+    "err": null,
+    "sec": 735.2
+  },
+  {
+    "sid": "s13_growth_quality_rotation@v2",
+    "tag": "V1_mom10_growth",
+    "override": {
+      "momentum_min": 0.1,
+      "stop_pct": 0.12,
+      "hold_n": 6,
+      "regime_bad": 1.0,
+      "weights": {
+        "dividend": 0.1,
+        "low_vol": 0.05,
+        "roe": 0.15,
+        "valuation": 0.07,
+        "news": 0.06,
+        "value": 0.1,
+        "growth": 0.12,
+        "momentum": 0.45
+      }
+    },
+    "annual": 0.04831133080076322,
+    "total": 0.22707900000000003,
+    "max_dd": 0.07349055954449224,
+    "calmar": 0.6573814528043543,
+    "sharpe": 0.6983865303961276,
+    "win": 0.3992673992673993,
+    "err": null,
+    "sec": 659.0
+  },
+  {
+    "sid": "s13_growth_quality_rotation@v2",
+    "tag": "V2_mom06_growth",
+    "override": {
+      "momentum_min": 0.06,
+      "stop_pct": 0.12,
+      "hold_n": 8,
+      "regime_bad": 0.85,
+      "weights": {
+        "dividend": 0.12,
+        "low_vol": 0.07,
+        "roe": 0.15,
+        "valuation": 0.07,
+        "news": 0.06,
+        "value": 0.1,
+        "growth": 0.1,
+        "momentum": 0.4
+      }
+    },
+    "annual": 0.03843215992031679,
+    "total": 0.17770599999999992,
+    "max_dd": 0.08543659551684535,
+    "calmar": 0.4498325300513549,
+    "sharpe": 0.5708043167403819,
+    "win": 0.4706959706959707,
+    "err": null,
+    "sec": 602.8
+  },
+  {
+    "sid": "s13_growth_quality_rotation@v2",
+    "tag": "V3_mom12_growth",
+    "override": {
+      "momentum_min": 0.12,
+      "stop_pct": 0.1,
+      "hold_n": 6,
+      "regime_bad": 0.9,
+      "weights": {
+        "dividend": 0.08,
+        "low_vol": 0.04,
+        "roe": 0.14,
+        "valuation": 0.06,
+        "news": 0.05,
+        "value": 0.09,
+        "growth": 0.14,
+        "momentum": 0.48
+      }
+    },
+    "annual": 0.031269895841211204,
+    "total": 0.14287800000000006,
+    "max_dd": 0.07510707540442307,
+    "calmar": 0.4163375510607315,
+    "sharpe": 0.4869087959554056,
+    "win": 0.37545787545787546,
+    "err": null,
+    "sec": 421.2
+  },
+  {
+    "sid": "s14_value_reversal_rotation@v2",
+    "tag": "V1_mom10_value",
+    "override": {
+      "momentum_min": 0.1,
+      "stop_pct": 0.12,
+      "hold_n": 6,
+      "regime_bad": 1.0,
+      "weights": {
+        "dividend": 0.1,
+        "low_vol": 0.05,
+        "roe": 0.15,
+        "valuation": 0.1,
+        "news": 0.07,
+        "industry": 0.08,
+        "value": 0.1,
+        "momentum": 0.45
+      }
+    },
+    "annual": 0.04703751177324067,
+    "total": 0.22062500000000007,
+    "max_dd": 0.07627014758206174,
+    "calmar": 0.6167224433731605,
+    "sharpe": 0.6795636834241976,
+    "win": 0.4432234432234432,
+    "err": null,
+    "sec": 502.6
+  },
+  {
+    "sid": "s14_value_reversal_rotation@v2",
+    "tag": "V2_mom06_value",
+    "err": "Command '['C:\\\\Users\\\\zhenyu\\\\.workbuddy\\\\binaries\\\\python\\\\versions\\\\3.13.12\\\\python.exe', '_bt_one.py', 's14_value_reversal_rotation@v2', '2022-01-01', '2026-07-10', '200000', 'C:\\\\Users\\\\zhenyu\\\\Ap",
+    "sec": 0.0
+  },
+  {
+    "sid": "s14_value_reversal_rotation@v2",
+    "tag": "V3_mom12_value",
+    "err": "Command '['C:\\\\Users\\\\zhenyu\\\\.workbuddy\\\\binaries\\\\python\\\\versions\\\\3.13.12\\\\python.exe', '_bt_one.py', 's14_value_reversal_rotation@v2', '2022-01-01', '2026-07-10', '200000', 'C:\\\\Users\\\\zhenyu\\\\Ap",
+    "sec": 0.0
+  }
+]
