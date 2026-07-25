@@ -1,0 +1,56 @@
+<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>A股跟单系统—策略报告</title><style>
+:root{--bg:#f6f7f9;--fg:#1f2937;--mut:#6b7280;--card:#fff;--line:#e5e7eb;--up:#d92b2b;--down:#0a9e6b}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+background:var(--bg);color:var(--fg);font-size:15px;line-height:1.5}.wrap{max-width:800px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:8px 0}h2{font-size:18px;margin:20px 0 10px;border-bottom:2px solid var(--line);padding-bottom:6px}
+table{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px;overflow:hidden;font-size:13.5px;margin:10px 0}
+th,td{padding:8px 10px;text-align:center;border-bottom:1px solid var(--line)}th{background:#f0f2f5;color:var(--mut);font-weight:600}
+.highlight{font-weight:700;color:#1d4ed8}.up{color:var(--up)}.down{color:var(--down)}
+.card{background:var(--card);border-radius:12px;padding:14px;margin:12px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.note{color:var(--mut);font-size:12px;margin:4px 0}
+</style></head><body><div class='wrap'>
+<h1>📊 A股跟单系统 — 策略报告</h1>
+<p class='note'>生成日期: 2026-07-25 | 回测窗口: 2022-01-01~2025-12-31 | 数据源: 本机DB</p>
+
+<h2>🏆 最终策略组合</h2>
+<table><tr><th>策略</th><th>年化</th><th>最大回撤</th><th>Sharpe</th><th>调仓</th><th>持仓</th><th>换手</th></tr><tr><td class='highlight'>ETF动量10日·周频1只</td><td class='up'>+24.7%</td><td>17.0%</td><td>+1.30</td><td>周频</td><td>1只</td><td>99次</td></tr><tr><td class='highlight'>ETF动量10+20日·周频1只</td><td class='up'>+22.1%</td><td>14.4%</td><td>+1.17</td><td>周频</td><td>1只</td><td>79次</td></tr><tr><td class='highlight'>小市值动量·5只(月)</td><td class='up'>+31.2%</td><td>45.2%</td><td>+1.02</td><td>月频</td><td>5只</td><td>36次</td></tr></table>
+
+<h2>📐 策略逻辑详解</h2><div class='card'>
+<h3>ETF动量10日·周频1只</h3>
+<p>5只ETF(沪深300/红利低波/黄金/纳指/国债)</p>
+<p><b>频率</b>: 周频 · <b>持仓数</b>: 1只 · <b>年化</b>: <span class='highlight'>+24.7%</span> · <b>回撤</b>: 17.0% · <b>Sharpe</b>: +1.30</p>
+<p><b>交易逻辑</b>:</p>
+<pre style='background:#f8f9fa;padding:10px;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap'>用复权价计算动量, 每周选最近N日涨幅最强的ETF全仓持有; 全部动量为负时空仓(持有现金), 待下一周信号转正再入。不做选股、不做择时, 纯粹追趋势。
+
+优势: 只交易ETF无个股风险、换手可控、牛市能吃满涨幅
+风险: 横盘震荡市可能反复开关产生摩擦损耗</pre>
+</div><div class='card'>
+<h3>ETF动量10+20日·周频1只</h3>
+<p>同上,双窗口平滑信号</p>
+<p><b>频率</b>: 周频 · <b>持仓数</b>: 1只 · <b>年化</b>: <span class='highlight'>+22.1%</span> · <b>回撤</b>: 14.4% · <b>Sharpe</b>: +1.17</p>
+<p><b>交易逻辑</b>:</p>
+<pre style='background:#f8f9fa;padding:10px;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap'>用复权价计算动量, 每周选最近N日涨幅最强的ETF全仓持有; 全部动量为负时空仓(持有现金), 待下一周信号转正再入。不做选股、不做择时, 纯粹追趋势。
+
+优势: 只交易ETF无个股风险、换手可控、牛市能吃满涨幅
+风险: 横盘震荡市可能反复开关产生摩擦损耗</pre>
+</div><div class='card'>
+<h3>小市值动量·5只(月)</h3>
+<p>全主板选市值最小+60日动量>-30%的5只</p>
+<p><b>频率</b>: 月频 · <b>持仓数</b>: 5只 · <b>年化</b>: <span class='highlight'>+31.2%</span> · <b>回撤</b>: 45.2% · <b>Sharpe</b>: +1.02</p>
+<p><b>交易逻辑</b>:</p>
+<pre style='background:#f8f9fa;padding:10px;border-radius:8px;font-size:13px;line-height:1.6;white-space:pre-wrap'>每月末从主板全市场1300+只股票中, 选市值最小 + 60日动量>-30%的5只等权买入。
+
+核心逻辑: 小市值是A股长期最有效的因子(规模溢价); 动量过滤掉深跌的垃圾票; 5只集中持股最大限度释放小盘弹性
+
+优势: A股小盘股波动大但涨幅更大, 年化29%
+风险: 回撤大(45%), 需承受较大波动; 小市值股流动性风险</pre>
+</div><h2>⚠️ 风险提示</h2>
+<div class='card'>
+<p>1. 回测不代表未来表现, 过去4年(2022-2025) A股经历了完整的熊市-反弹周期<br>
+2. 小市值策略回撤45%, 实盘可能造成较大心理压力<br>
+3. ETF动量在横盘震荡市可能反复切换产生损耗<br>
+4. 建议按 60% ETF + 40% 个股 的资金配比跟单<br>
+5. 所有策略均只交易主板上市标的, 符合约束
+</p></div>
+<p class='note'>免责: 本报告仅用于回测验证, 不构成投资建议。模拟/历史表现不代表未来, 请仅用可承受损失的资金。</p>
+</div></body></html>
