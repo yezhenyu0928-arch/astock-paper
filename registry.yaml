@@ -1001,3 +1001,562 @@ s26_microcap@v4:
     weights: {dividend: 0.10, low_vol: 0.10, roe: 0.10, valuation: 0.10, cap: 0.45, value: 0.0, momentum: 0.15}
   universe: dynamic
   rebalance: monthly
+
+s26_microcap@v5:
+  class: strategies.ref_strategies.RefMicrocap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 冲20%/20%变体A:纯规模加码(cap0.70)+8只,弱化其他因子干扰
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 8
+    max_per_industry: 3
+    low_vol_pct: 0.50
+    cap_tilt: true
+    value_tilt: false
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -0.15
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.25
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.05, valuation: 0.10, cap: 0.70, value: 0.0, momentum: 0.15}
+  universe: dynamic
+  rebalance: monthly
+
+s26_microcap@v6:
+  class: strategies.ref_strategies.RefMicrocap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 冲20%/20%变体B:高集中5只+规模0.45×动量0.40共振,放宽止损0.30
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 5
+    max_per_industry: 2
+    low_vol_pct: 0.60
+    cap_tilt: true
+    value_tilt: false
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -0.05
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.30
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.05, valuation: 0.10, cap: 0.45, value: 0.0, momentum: 0.40}
+  universe: dynamic
+  rebalance: monthly
+
+s26_microcap@v7:
+  class: strategies.ref_strategies.RefMicrocap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 冲20%/20%变体C:规模0.55+低估值0.20+价值0.15深度反转(动量门槛全开-1.0)
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 8
+    max_per_industry: 3
+    low_vol_pct: 0.50
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.25
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.20, cap: 0.55, value: 0.15, momentum: 0.10}
+  universe: dynamic
+  rebalance: monthly
+
+s26_microcap@v8:
+  class: strategies.ref_strategies.RefMicrocap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 冲20%/20%变体D(关键):池子换 mainboard 全主板(3044只)——此前v1-v7全在沪深300里选"伪小盘"(百亿级),v8才是真微盘
+  params:
+    rebalance: monthly
+    pool_index: mainboard
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.50
+    cap_tilt: true
+    value_tilt: false
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -0.10
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.25
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.10, valuation: 0.10, cap: 0.50, value: 0.05, momentum: 0.20}
+  universe: dynamic
+  rebalance: monthly
+
+s26_microcap@v9:
+  class: strategies.ref_strategies.RefMicrocap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 冲20%/20%变体E:v7骨架+集中6只+规模0.60+止损0.30(v8真微盘池因基本面缺失失败)
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 6
+    max_per_industry: 2
+    low_vol_pct: 0.50
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.30
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.20, cap: 0.60, value: 0.10, momentum: 0.10}
+  universe: dynamic
+  rebalance: monthly
+
+s26_microcap@v10:
+  class: strategies.ref_strategies.RefMicrocap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 冲20%/20%变体F:v7骨架+反转加倍(估值0.30+价值0.20)+放宽低波预筛0.70
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 8
+    max_per_industry: 3
+    low_vol_pct: 0.70
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.25
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.30, cap: 0.40, value: 0.20, momentum: 0.10}
+  universe: dynamic
+  rebalance: monthly
+
+s26_microcap@v11:
+  class: strategies.ref_strategies.RefMicrocap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 冲20%/20%变体G:mainboard大池+cap_known_only(只留有市值数据的真中小盘,修复v8数据黑洞)+v7反转骨架
+  params:
+    rebalance: monthly
+    pool_index: mainboard
+    cap_segment: small
+    cap_known_only: true
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 8
+    max_per_industry: 3
+    low_vol_pct: 0.50
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.25
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.20, cap: 0.55, value: 0.15, momentum: 0.10}
+  universe: dynamic
+  rebalance: monthly
+
+s28_microcap_turbo@v1:
+  class: strategies.ref_strategies.RefMicrocapTurbo
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 第二档(30%/30%)变体A:v7骨架+集中4只+止损0.35
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 4
+    max_per_industry: 2
+    low_vol_pct: 0.50
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.35
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.20, cap: 0.55, value: 0.15, momentum: 0.10}
+  universe: dynamic
+  rebalance: monthly
+
+s28_microcap_turbo@v2:
+  class: strategies.ref_strategies.RefMicrocapTurbo
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 第二档(30%/30%)变体B:规模0.65+估值0.25极致双因子,5只,预筛放宽0.75
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 5
+    max_per_industry: 2
+    low_vol_pct: 0.75
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.35
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.25, cap: 0.65, value: 0.10, momentum: 0.0}
+  universe: dynamic
+  rebalance: monthly
+
+s28_microcap_turbo@v3:
+  class: strategies.ref_strategies.RefMicrocapTurbo
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 第二档(30%/30%)变体C:v7骨架+周频反转(反转因子衰减快,试更快轮动)
+  params:
+    rebalance: weekly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 6
+    max_per_industry: 2
+    low_vol_pct: 0.50
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.35
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.20, cap: 0.55, value: 0.15, momentum: 0.10}
+  universe: dynamic
+  rebalance: weekly
+
+s28_microcap_turbo@v4:
+  class: strategies.ref_strategies.RefMicrocapTurbo
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 第二档变体D:极致集中3只,cap0.80+valuation0.20,无低波预筛
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 3
+    max_per_industry: 2
+    low_vol_pct: 1.0
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.35
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.20, cap: 0.80, value: 0.0, momentum: 0.0}
+  universe: dynamic
+  rebalance: monthly
+
+s28_microcap_turbo@v5:
+  class: strategies.ref_strategies.RefMicrocapTurbo
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 第二档变体E:v2骨架(cap0.65+val0.25)改周频,提高换手
+  params:
+    rebalance: weekly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 5
+    max_per_industry: 2
+    low_vol_pct: 0.75
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.35
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.25, cap: 0.65, value: 0.10, momentum: 0.0}
+  universe: dynamic
+  rebalance: weekly
+
+s28_microcap_turbo@v6:
+  class: strategies.ref_strategies.RefMicrocapTurbo
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 第二档变体F:纯规模单因子cap1.0,5只,验证裸收益上限
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 5
+    max_per_industry: 3
+    low_vol_pct: 1.0
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.35
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.0, cap: 1.0, value: 0.0, momentum: 0.0}
+  universe: dynamic
+  rebalance: monthly
+
+s31_etf_rotation@v1:
+  class: strategies.s31_etf_rotation.S31EtfRotation
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 跨资产双动量:周频,持2只,国债兜底
+  params:
+    rebalance: weekly
+    momentum_windows: [20, 60]
+    hold_n: 2
+    safe_asset: sh511010
+  universe: [sh510300, sh512890, sh518880, sh513100, sh512660, sh512010, sh512800, sz159928, sh511010]
+  rebalance: weekly
+
+s31_etf_rotation@v2:
+  class: strategies.s31_etf_rotation.S31EtfRotation
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 跨资产双动量:月频,持2只,长窗动量(更抗噪)
+  params:
+    rebalance: monthly
+    momentum_windows: [60, 120]
+    hold_n: 2
+    safe_asset: sh511010
+  universe: [sh510300, sh512890, sh518880, sh513100, sh512660, sh512010, sh512800, sz159928, sh511010]
+  rebalance: monthly
+
+s29_smallcap_select@v1:
+  class: strategies.ref_strategies.RefSmallcapSelect
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 复现国信《聚焦小盘股》:小市值池+复合因子(规模主导+估值+反转),月频10只
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.75
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.0, valuation: 0.20, cap: 0.45, value: 0.15, momentum: 0.15}
+  universe: dynamic
+  rebalance: monthly
+
+s30_steady_select@v1:
+  class: strategies.ref_strategies.RefSteadySelect
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 复现国信《稳健型选股策略探析》:低估值+低波+高股息稳健池+动量增强,月频10只
+  params:
+    rebalance: monthly
+    cap_segment: all
+    min_dividend_yield: 0.02
+    dividend_years: 2
+    roe_years: 0
+    roe_min: 0.05
+    hold_n: 10
+    max_per_industry: 2
+    low_vol_pct: 0.60
+    cap_tilt: false
+    value_tilt: true
+    momentum_window: 126
+    momentum_skip: 10
+    momentum_min: -0.10
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.12
+    weights: {dividend: 0.25, low_vol: 0.20, roe: 0.05, valuation: 0.25, cap: 0.0, value: 0.05, momentum: 0.20}
+  universe: dynamic
+  rebalance: monthly
+
+s32_roe_quality@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 穿透国信《基于ROE高质量选股》:ROE主导质量因子,月频10只
+  params:
+    rebalance: monthly
+    cap_segment: all
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.08
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.75
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -0.10
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.50, valuation: 0.15, cap: 0.0, value: 0.15, momentum: 0.15}
+  universe: dynamic
+  rebalance: monthly
+
+s33_kyfactor_equal@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 穿透开源金工《KyFactor特色因子体系》:6因子等权合成(偏小市值),月频20只
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 20
+    max_per_industry: 3
+    low_vol_pct: 0.50
+    cap_tilt: false
+    value_tilt: false
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.10, low_vol: 0.15, roe: 0.15, valuation: 0.20, cap: 0.05, value: 0.15, momentum: 0.20}
+  universe: dynamic
+  rebalance: monthly
+
+s34_dividend_high@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 穿透国信《红利投资全攻略》+开源金工红利增强:股息主导+估值+价值,月频10只
+  params:
+    rebalance: monthly
+    cap_segment: all
+    min_dividend_yield: 0.03
+    dividend_years: 3
+    roe_years: 0
+    roe_min: 0.08
+    hold_n: 10
+    max_per_industry: 2
+    low_vol_pct: 0.60
+    cap_tilt: false
+    value_tilt: true
+    momentum_window: 126
+    momentum_skip: 10
+    momentum_min: -0.10
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.15
+    weights: {dividend: 0.50, low_vol: 0.05, roe: 0.0, valuation: 0.25, cap: 0.0, value: 0.20, momentum: 0.0}
+  universe: dynamic
+  rebalance: monthly
+
+s35_long_momentum@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 穿透开源金工《长端动量2.0》:长窗(160日)残差动量≈剔除高振幅日后累积极长收益,低波预筛近似,月频8只
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 8
+    max_per_industry: 2
+    low_vol_pct: 0.50
+    cap_tilt: false
+    value_tilt: false
+    momentum_window: 160
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.0, cap: 0.0, value: 0.0, momentum: 1.0}
+  universe: dynamic
+  rebalance: monthly

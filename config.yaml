@@ -75,12 +75,21 @@ strategies:                     # 2026-07 重构:全面个股化——下线全�
   # ↓ 归档(个股,但与启用版本重复或风格重叠)
   s1_dividend@v1: false         # 归档:被 v2 取代
   # ↓ 2026-07-23 扩池+差异化:主板全市场可投(除创/科/北),6策略各取不同市值段+分红门槛→操作真正岔开
-  s1_dividend@v3: true           # 红利价值(主板large+连续分红3年):防御/收入型,与v2差异化(主板池+市值段large)
-  s4_smallcap@v3: true           # 中小盘成长(主板small+不要分红):小盘弹性
-  s8_checklist@v3: true          # 全市场低波价值(主板all+不要分红):低回撤
-  s13_growth_quality_rotation@v3: true   # 景气成长(主板mid+不要分红):中盘成长
-  s14_value_reversal_rotation@v3: true    # 价值反转(主板midsmall+不要分红,逆动量):中小盘逆向
-  s15_core_allocation@v3: true            # 核心配置(主板large+分红2年):大盘核心
+  s1_dividend@v3: false          # 下线(2026-07-27 回测1.2%不达标,原"年化≥10%且夏普>1")
+  s4_smallcap@v3: false          # 下线(2026-07-27 回测-5.7%不达标+数据报错)
+  s8_checklist@v3: false          # 下线(2026-07-27 回测-4.2%不达标)
+  s13_growth_quality_rotation@v3: false  # 下线(2026-07-27 回测-0.3%不达标)
+  s14_value_reversal_rotation@v3: false   # 下线(2026-07-27 回测-1.9%不达标+数据报错)
+  s15_core_allocation@v3: false          # 下线(2026-07-27 回测不达标,原阵容)
+  # ↓ 2026-07-27 穿透5篇研报新建(国信金工/开源金工/中信建投):本地可落地因子复现
+  s29_smallcap_select@v1: true     # 国信小盘精选(规模+估值+反转):月频10只
+  s30_steady_select@v1: true      # 国信稳健精选(红利+低波+估值+动量):月频10只
+  s31_etf_rotation@v1: true       # ETF跨资产双动量轮动(周频):ETF名额①
+  s31_etf_rotation@v2: true       # ETF跨资产双动量轮动(月频长窗):ETF名额②
+  s32_roe_quality@v1: true       # 国信ROE质量选股(ROE主导):月频10只
+  s33_kyfactor_equal@v1: true     # 开源金工KyFactor六因子等权:月频20只
+  s34_dividend_high@v1: true      # 国信红利高股息精选:月频10只
+  s35_long_momentum@v1: true     # 开源金工长端动量2.0(长窗残差动量):月频8只
   s4_smallcap@v2: false        # 归档:被 @v3 主板small成长版取代
   s3_ma_trend@v1: false         # 归档:被 v2 纪律化趋势版取代(v1 全期-0.8%/回撤24% whipsaw)
   s3_ma_trend@v2: false         # 归档:借鉴v1重构仍-5%/回撤18%,A股价格趋势弱,被 s3_trend_timing 择时版取代

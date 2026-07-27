@@ -70,7 +70,7 @@ def _growth_score(date, codes, conn):
         return {}
 
 
-def _cap_segment_pool(ctx, pool, segment):
+def _cap_segment_pool(ctx, pool, segment, cap_known_only=False):
     """按总市值分位把可投池切成不同"市值段", 让各策略从不同子池选股 → 操作真正岔开。
 
     segment 取值:
@@ -79,7 +79,9 @@ def _cap_segment_pool(ctx, pool, segment):
       'small'    : 市值最小的后 45%(中小盘弹性)
       'midsmall' : 市值后 70%(中小盘, 价值反转用)
       'all'/None : 不切分(全池)
-    缺市值数据的票统一归入"未知", 从宽保留(避免因数据缺失把整段清空)。
+    缺市值数据的票统一归入"未知", 默认从宽保留(避免因数据缺失把整段清空)。
+    cap_known_only=True 时剔除未知市值票(2026-07-27: mainboard 大池中大量票无基本面,
+    从宽保留会让规模因子失效成噪音——s26@v8 年化-2.8%/回撤27%的教训)。
     """
     if not segment or segment == "all":
         return pool
@@ -110,8 +112,8 @@ def _cap_segment_pool(ctx, pool, segment):
     else:
         return pool
     keep = [c for c, _ in seg]
-    # 未知市值的票并入(从宽), 但大盘段不并入(大盘要求市值明确)
-    if segment != "large":
+    # 未知市值的票并入(从宽), 但大盘段不并入(大盘要求市值明确); cap_known_only 时一律剔除
+    if segment != "large" and not cap_known_only:
         keep += unknown
     return keep
 
@@ -194,7 +196,8 @@ def select(ctx, date, account, params, strategy_id, config):
     if not pool and pool_index != POOL_INDEX:
         pool = ctx.members(POOL_INDEX, date)          # mainboard 未回填时兜底
     pool = common.main_board_universe(ctx, pool, config, date)
-    pool = _cap_segment_pool(ctx, pool, params.get("cap_segment"))
+    pool = _cap_segment_pool(ctx, pool, params.get("cap_segment"),
+                             cap_known_only=bool(params.get("cap_known_only")))
 
     cand = []  # (code, dy, vol, roe, news, pe, mcap)
     # 诊断计数(海外 baostock 不可达时定位"为何无候选")

@@ -48,6 +48,24 @@ _RISK_RELAX = {
         "time_stop_exempt": True,
         "stop_override": 0.20,
     },
+    # s29 小盘精选(复现国信金工,2026-07-27): 同 s26 档,熔断20%,止损20%
+    "s29": {
+        "max_dd": 0.20,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.20,
+    },
+    # s28 微盘涡轮版(2026-07-27 用户"少数放宽回撤40%"组): 熔断40%,止损35%
+    "s28": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.35,
+    },
     # s27 红利低波(防守进攻线,靠低波动顶夏普): 冻结豁免,熔断15%,止损15%
     "s27": {
         "max_dd": 0.15,
@@ -56,6 +74,24 @@ _RISK_RELAX = {
         "trailing_tp_exempt": True,    # 红利股拿住吃息,不被6%移动止盈洗出
         "time_stop_exempt": True,
         "stop_override": 0.15,
+    },
+    # s32 ROE质量选股(2026-07-27 穿透国信《基于ROE高质量选股》新建): 列入"少数放宽回撤40%" aggressive 组
+    "s32": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.30,
+    },
+    # s35 长端动量(2026-07-27 穿透开源金工《长端动量2.0》新建): 少数放宽回撤40% aggressive 组
+    "s35": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.35,
     },
 }
 

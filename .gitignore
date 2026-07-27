@@ -32,3 +32,10 @@ _*.sh
 _cache/
 _ci_r2/
 reports_cloud/
+
+# 回测子进程日志(本地探索用)
+bt_*.err
+bt_*.json
+backfill_fund.log
+cdp_*.mjs
+extract_rules.py

@@ -1,0 +1,50 @@
+name: news
+
+# 新闻更新:每天 2 次,含周末(2026-07-27 按用户要求新增)。
+# 北京时间 09:00(UTC 01:00) + 20:00(UTC 12:00)。
+# 仅拉取快讯 + 市场/行业情绪扫描入库,不推送操作(操作仍由 daily 在交易日前一天生成)。
+on:
+  schedule:
+    - cron: '0 1 * * *'     # 北京 09:00
+    - cron: '0 12 * * *'    # 北京 20:00
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: news
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt
+      - name: restore DB cache
+        uses: actions/cache/restore@v4
+        with:
+          path: db/market.sqlite
+          key: db-${{ github.run_id }}
+          restore-keys: db-
+      - name: update news
+        env:
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+          SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          AGNES_LLM_KEY: ${{ secrets.AGNES_LLM_KEY }}
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+        run: python run_news.py
+      - name: commit snapshot
+        run: |
+          git config user.name "astock-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add state/ reports/ || true
+          git commit -m "news $(date -u +%F)" || { echo "nothing to commit"; exit 0; }
+          git pull --rebase --autostash || true
+          git push || true
