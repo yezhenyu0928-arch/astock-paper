@@ -777,3 +777,31 @@ s23_industry_momentum@v1:
     weights: {momentum: 0.40, industry: 0.22, roe: 0.12, low_vol: 0.10, valuation: 0.10, growth: 0.06}
   universe: dynamic
   rebalance: monthly
+
+s24_aggressive_smallcap@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 激进冲收益:小盘最小段+集中5只+动量0.48+放宽止损0.30
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 5
+    max_per_industry: 2
+    low_vol_pct: 0.30
+    cap_tilt: true
+    value_tilt: false
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -0.05
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.30
+    weights: {dividend: 0.08, low_vol: 0.04, roe: 0.10, valuation: 0.05, cap: 0.20, value: 0.05, momentum: 0.48}
+  universe: dynamic
+  rebalance: monthly
