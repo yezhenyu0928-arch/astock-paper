@@ -2,6 +2,10 @@ name: backfill
 # 手动触发:构建/刷新历史数据 DB(首次部署,或 cache 被淘汰后重建)。
 # 跑完把 DB 存入 cache,供 daily/intraday 复用。
 on:
+  schedule:
+    # 每 3 天跑一次,保持 DB cache 常热(避免 cache 被 7 天/10G 淘汰后 daily 自检 n_bar<50000 直接暂停)。
+    # UTC18:00 ≈ 北京次日 02:00,增量更新(backfill.py 幂等),很快。
+    - cron: '0 18 */3 * *'
   workflow_dispatch:
     inputs:
       reset_stock_bars:

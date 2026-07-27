@@ -23,7 +23,7 @@ import backtest as bt
 import trade_calendar as cal
 
 # ---------------- 常量 ----------------
-LIVE_START = "2026-07-06"          # 实盘模拟期起算日(此前 nav 作为归一基准)
+LIVE_START = "2026-07-26"          # 实盘赛马起算日(2026-07-26 重置:从今天起看前向收益,非回测;此前 nav 作为归一基准)
 BENCH = "sh000300"                 # 实盘曲线基准:沪深300(库内 daily_bar 或指数)
 BUY_BAND = (0.99, 1.02)            # 买入跟单价格带:参考价×[0.99, 1.02]
 
@@ -36,6 +36,61 @@ STRAT_META = {
                     ("绝对动量门槛", "最强者20日收益<0 → 全仓切国债ETF"),
                     ("宏观调节(macro_score)", "紧缩降仓60%/扩张满仓+M2数据附操作理由")],
         "rebalance": "每周最后交易日 · 持1只 · 池=沪深300/中证500/红利低波/黄金/纳指/国债 6只ETF"},
+    "s2_etf@v3": {
+        "name": "ETF动量轮动v3【10日动量·周频】", "risk": "★★★☆☆ 中", "fit": "≥1万",
+        "tagline": "每周买入近10日涨幅最强的1只ETF(宽基/商品/跨境池)，最强者10日收益<0则全仓切国债ETF避险。回测(2022→2026-07)真实年化仅+6.4%/回撤12.9%(此前声明41.5%为虚高，系不同代码路径所致)，未达用户'年化>25%保留'线，已于2026-07-27下线。",
+        "factors": [("10日收益率排名", "100%"),
+                    ("绝对动量门槛", "最强者10日收益<0 → 全仓国债ETF避险"),
+                    ("宏观调节(macro_score)", "紧缩降仓/扩张满仓")],
+        "rebalance": "每周最后交易日(周频) · 持1只 · 池=宽基/商品/跨境ETF"},
+    "s2_etf@v4": {
+        "name": "ETF动量轮动v4【10+20日双动量·周频】", "risk": "★★★☆☆ 中", "fit": "≥1万",
+        "tagline": "10日与20日动量各半加权选最强1只ETF，双周期确认降低单周期噪音；最强者动量<0切国债ETF。回测(2022→2026-07)真实年化仅+6.5%/回撤14.7%(此前声明36.6%为虚高)，未达用户'年化>25%保留'线，已于2026-07-27下线。",
+        "factors": [("10日收益率排名", "50%"), ("20日收益率排名", "50%"),
+                    ("绝对动量门槛", "最强者动量<0 → 全仓国债ETF避险"),
+                    ("宏观调节(macro_score)", "紧缩降仓/扩张满仓")],
+        "rebalance": "每周最后交易日(周频) · 持1只 · 池=宽基/商品/跨境ETF"},
+    # ==== 2026-07-26 参考文章因子重建 s20-s23(国信金工/开源金工/中信建投公众号因子) ====
+    "s20_steady_quality@v1": {
+        "name": "稳健质量精选·大盘【月频】", "risk": "★★☆☆☆ 中低", "fit": "≥10万",
+        "tagline": "复刻国信金工'稳健精选'思路：沪深300大盘段(市值前33%)用低波动+高股息+高ROE质量构建稳健票池，叠加动量增强，持8只高集中度，12-1月动量为正才买(趋势闸)。",
+        "factors": [("股息率排名", "20%"), ("低波动排名(250日)", "20%"), ("ROE质量排名", "16%"),
+                    ("动量(12-1月)", "30%"), ("估值分位", "8%"), ("深度价值倾斜", "6%"),
+                    ("入选门槛", "股息率≥3% + 连续3年分红 + 连续3年ROE>10% + 低波后45% + 动量≥0"),
+                    ("宏观自适应", "regime good/mid/bad=1.0/1.0/0.75集中度"),
+                    ("风险过滤", "跟踪止损12% + 单行业≤2只")],
+        "rebalance": "每月最后交易日(月频)调仓 · 风控每日 · 持8只 · 池=沪深300大盘段(市值前33%)",
+        "data_source": "因子来源:国信金工公众号《稳健精选组合》; 行情/估值/分红/ROE:baostock+腾讯快照"},
+    "s21_smallcap_compound@v1": {
+        "name": "小盘复合精选【月频】", "risk": "★★★★☆ 中高", "fit": "≥10万",
+        "tagline": "复刻国信金工'小盘精选'思路：沪深300内中小盘段(市值后45%)吃规模溢价，小市值倾斜+价值+动量复合打分，持8只，日频调仓捕捉轮动。",
+        "factors": [("小市值规模溢价(cap)", "22%"), ("动量(12-1月)", "35%"), ("股息率排名", "12%"),
+                    ("ROE质量排名", "12%"), ("估值分位", "8%"), ("低波动排名", "6%"), ("深度价值倾斜", "5%"),
+                    ("入选门槛", "股息率≥2.5% + 连续3年分红 + 连续3年ROE>8% + 动量≥-5%(不深跌)"),
+                    ("宏观自适应", "regime good/mid/bad=1.0/1.0/0.75集中度"),
+                    ("风险过滤", "跟踪止损14% + 单行业≤3只")],
+        "rebalance": "每月最后交易日(月频)调仓 · 持8只 · 池=沪深300中小盘段(市值后45%)",
+        "data_source": "因子来源:国信金工公众号《小盘精选组合》; 行情/估值/ROE:baostock+腾讯快照"},
+    "s22_earnings_surprise@v1": {
+        "name": "超预期精选【月频】", "risk": "★★★☆☆ 中", "fit": "≥10万",
+        "tagline": "复刻国信金工'超预期精选'思路：以盈利同比高增(成长因子)为核心代理'业绩超预期'，要求12-1月动量为正(趋势确认)，行业龙头加分；实盘另叠加研报/公告超预期扫描，回测降级为成长因子。",
+        "factors": [("成长(盈利同比,超预期代理)", "28%"), ("动量(12-1月)", "35%"), ("ROE质量排名", "14%"),
+                    ("低波动排名", "12%"), ("个股行业地位(龙头)", "6%"), ("估值分位", "5%"),
+                    ("入选门槛", "股息率≥2% + 连续2年分红 + 连续2年ROE>8% + 动量≥0"),
+                    ("宏观自适应", "regime good/mid/bad=1.0/1.0/0.75集中度"),
+                    ("风险过滤", "跟踪止损14% + 单行业≤2只")],
+        "rebalance": "每月最后交易日(月频)调仓 · 风控每日 · 持8只 · 池=沪深300",
+        "data_source": "因子来源:国信金工公众号《超预期精选组合》; 财报同比:profit表; 实盘叠加:news_engine超预期扫描"},
+    "s23_industry_momentum@v1": {
+        "name": "行业动量龙头【月频】", "risk": "★★★☆☆ 中", "fit": "≥10万",
+        "tagline": "复刻开源金工/中信建投'联合动量'思路：个股12-1月动量与行业地位(龙头)共振——只买强动量且在行业内市值/ROE靠前的票，行业分散(单行业≤2只)+个股集中(8只)，日频调仓。",
+        "factors": [("动量(12-1月)", "40%"), ("个股行业地位(龙头)", "22%"), ("ROE质量排名", "12%"),
+                    ("低波动排名", "10%"), ("估值分位", "10%"), ("成长(盈利同比)", "6%"),
+                    ("入选门槛", "股息率≥2% + 连续2年分红 + 连续3年ROE>8% + 动量≥0(上行趋势)"),
+                    ("宏观自适应", "regime good/mid/bad=1.0/1.0/0.75集中度"),
+                    ("风险过滤", "跟踪止损14% + 单行业≤2只")],
+        "rebalance": "每月最后交易日(月频)调仓 · 持8只 · 池=沪深300",
+        "data_source": "因子来源:开源金工《联合动量》/中信建投量化公众号; 行业:industry表; 行情/ROE:baostock+腾讯快照"},
     "s1_dividend@v1": {
         "name": "红利低波", "risk": "★☆☆☆☆ 低", "fit": "≥3万",
         "tagline": "买入高股息且股价波动小的大盘股并长期持有，靠分红+低回撤积累收益（同类指数近6年年化约13%）。",
@@ -277,9 +332,9 @@ def _load_accounts():
                 continue
             if sid not in out:
                 out[sid] = {
-                    "strategy_id": sid, "cash": 50000, "nav": 1.0, "nav_history": [],
+                    "strategy_id": sid, "cash": 100000, "nav": 1.0, "nav_history": [],
                     "positions": {}, "pending": [], "frozen": False,
-                    "init_capital": 50000, "_placeholder": True,
+                    "init_capital": 100000, "_placeholder": True,
                 }
     except Exception:
         pass
@@ -325,7 +380,7 @@ def _backtest_summary(sid):
         if rp.exists():
             text = rp.read_text(encoding="utf-8")
             # 主回测行: "- 累计25.7% 年化5.4% 回撤4.8% Calmar1.13 ..."
-            m = re.search(r"主回测\([^)]*\)[^\n]*\n\s*-\s*累计[^\n]*?年化\s*([\d.]+%)[^回]*回撤\s*([\d.]+%)", text)
+            m = re.search(r"主回测\([^)]*\)[^\n]*\n\s*-\s*累计[^\n]*?年化\s*([+-]?[\d.]+%)[^回]*回撤\s*([+-]?[\d.]+%)", text)
             if m:
                 ann, dd = m.group(1), m.group(2)
                 try:
@@ -1288,7 +1343,7 @@ def generate(out_path=None):
         _last = pcts[-1] if pcts else None
         up_color = "#6b7280" if (_last is None or abs(_last) < 1e-9) else ("#d92b2b" if _last > 0 else "#0a9e6b")
         bench_d2v, _ = _bench_series(conn, dates[0], dates[-1]) if (conn and dates) else ({}, [])
-        chart = _chart_svg(dates, pcts, bench_d2v, up_color) if dates else "<div class='pos-empty'>曲线将于 2026-07-06 起累积</div>"
+        chart = _chart_svg(dates, pcts, bench_d2v, up_color) if dates else f"<div class='pos-empty'>曲线将于 {LIVE_START} 起累积</div>"
         cur_txt = _pct(ls["total"]) if ls["started"] else "今日起步"
         bt_line, verdict = _backtest_summary(sid)
         bt_html = f"<div class='bt'>📈 回测(2022→今)：{html.escape(bt_line)}</div>" if bt_line else ""
@@ -1318,7 +1373,7 @@ def generate(out_path=None):
             f"{_verdict_badge(verdict)}"
             f"<span class='stat'>{st}</span></div>"
             f"{logic_block}"
-            f"<details><summary>📈 实盘收益率曲线（07-06 起）当前 "
+            f"<details><summary>📈 实盘收益率曲线（{LIVE_START[5:]} 起）当前 "
             f"<span style='color:{up_color};font-weight:700'>{cur_txt}</span></summary>{chart}{bt_html}</details>"
             f"<div class='sub2'>最新持仓</div>{_positions_table(conn, a, sid, log_rows)}"
             f"<div class='sub2'>操作计划</div>{ops}"
@@ -1338,14 +1393,14 @@ def generate(out_path=None):
     body = (
         f"{nav}<h1>📊 A股模拟跟单看板</h1>"
         f"{chart_fb_banner}"
-        f"<div class='sub'>生成 {today} · 数据最新 {last} · 实盘模拟期自 2026-07-06 起 · 模拟/历史不代表未来，非投资建议，人工跟单</div>"
+        f"<div class='sub'>生成 {today} · 数据最新 {last} · 实盘赛马自 {LIVE_START} 起（所有策略 10 万元起跑，看未来收益） · 模拟/历史不代表未来，非投资建议，人工跟单</div>"
         f"{banner}"
         f"{market_section}"
         f"{_market_regime_section(conn)}"
         f"{_news_flash_section(conn)}"
         f"{_news_industry_section(conn)}"
         f"<div class='sec'>{ops_title}</div>{ops_section}"
-        f"<div class='sec'>实盘赛马总览（2026-07-06 起算）</div>{overview}"
+        f"<div class='sec'>🏆 实盘赛马总览（{LIVE_START} 起算 · 前向真实模拟收益，非回测）</div>{overview}"
         f"<div class='sec'>各策略详情</div>{cards}"
         f"<div class='sec'><a href='trades.html'>📜 查看全部历史交易记录 →</a></div>"
         f"{_FOOTER}")

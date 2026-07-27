@@ -664,3 +664,116 @@ s14_value_reversal_rotation@v3:
     weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.30, news: 0.05, value: 0.35, momentum: 0.20, growth: 0.0}
   universe: dynamic
   rebalance: daily
+
+# ============================================================================
+# 2026-07-26 参考文章因子重建 s20-s23 (国信金工/开源金工/中信建投 公众号因子, 诚实冲报实数)
+# round-3: 调仓频率统一回月频(历史达标报告s4@v2实为monthly,registry被改daily致配方失效)
+# round-2: 首轮 mainboard 全主板池全部失败(年化-1.4%~+1.3%, 非300成分基本面覆盖差);
+# 改回已验证的 sh000300 池 + 红利/ROE数据质量门槛 + 动量主导, 4策略以因子权重/市值段/频率岔开
+
+s20_steady_quality@v1:
+  class: strategies.ref_strategies.RefSteadyQuality
+  benchmark: sh510300
+  frozen_date: 2026-07-26   # 国信"稳健精选": 大盘段低波+高股息+质量ROE, 动量增强, 周频
+  params:
+    rebalance: monthly            # 周频调仓, 风控每日
+    cap_segment: large           # 沪深300大盘段(市值前33%)
+    min_dividend_yield: 0.03
+    dividend_years: 3
+    roe_years: 3
+    roe_min: 0.10
+    hold_n: 8
+    max_per_industry: 2
+    low_vol_pct: 0.45
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0            # 趋势闸: 只买12-1月动量为正
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
+    stop_pct: 0.12
+    weights: {dividend: 0.20, low_vol: 0.20, roe: 0.16, valuation: 0.08, value: 0.06, momentum: 0.30}
+  universe: dynamic
+  rebalance: monthly
+
+s21_smallcap_compound@v1:
+  class: strategies.ref_strategies.RefSmallcapCompound
+  benchmark: sh510300
+  frozen_date: 2026-07-26   # 国信"小盘精选": 池内市值最小段+小市值倾斜+动量复合, 日频
+  params:
+    rebalance: monthly
+    cap_segment: small           # 沪深300内市值后45%(中小盘段)
+    min_dividend_yield: 0.025
+    dividend_years: 3
+    roe_years: 3
+    roe_min: 0.08
+    hold_n: 8
+    max_per_industry: 3
+    low_vol_pct: 0.55
+    cap_tilt: true               # 偏小市值倾斜(规模溢价)
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -0.05          # 与s4@v2一致:不深跌即可
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
+    stop_pct: 0.14
+    weights: {dividend: 0.12, low_vol: 0.06, roe: 0.12, valuation: 0.08, cap: 0.22, value: 0.05, momentum: 0.35}
+  universe: dynamic
+  rebalance: monthly
+
+s22_earnings_surprise@v1:
+  class: strategies.ref_strategies.RefEarningsSurprise
+  benchmark: sh510300
+  frozen_date: 2026-07-26   # 国信"超预期精选": 盈利同比高增(超预期代理)+强动量共振, 周频
+  params:
+    rebalance: monthly
+    cap_segment: all
+    min_dividend_yield: 0.02
+    dividend_years: 2
+    roe_years: 2
+    roe_min: 0.08
+    hold_n: 8
+    max_per_industry: 2
+    low_vol_pct: 0.60
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
+    stop_pct: 0.14
+    weights: {growth: 0.28, momentum: 0.35, roe: 0.14, valuation: 0.05, low_vol: 0.12, industry: 0.06}
+  universe: dynamic
+  rebalance: monthly
+
+s23_industry_momentum@v1:
+  class: strategies.ref_strategies.RefIndustryMomentum
+  benchmark: sh510300
+  frozen_date: 2026-07-26   # 开源金工/中信建投"联合动量": 行业龙头+个股动量共振, 日频
+  params:
+    rebalance: monthly
+    cap_segment: all
+    min_dividend_yield: 0.02
+    dividend_years: 2
+    roe_years: 3
+    roe_min: 0.08
+    hold_n: 8
+    max_per_industry: 2          # 行业分散, 靠龙头集中
+    low_vol_pct: 0.60
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: 0.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 0.75
+    stop_pct: 0.14
+    weights: {momentum: 0.40, industry: 0.22, roe: 0.12, low_vol: 0.10, valuation: 0.10, growth: 0.06}
+  universe: dynamic
+  rebalance: monthly

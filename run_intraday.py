@@ -142,9 +142,52 @@ def _scan(today, cfg, reg):
             act = "建议立即人工减仓(盘中不自动落单,系统次日按你回填对齐)" if sc == -2 else "请人工研判"
             t, c = notify.build_alert(f"{icon} 持仓 {util.bare(code)}:{'/'.join(evd[:2])},{act}")
             notify.push(t, c, "alert", cfg)
+        # 峰岭谷日内择时(新增):用分钟线对"持仓+今日待买候选"算买卖点,盘中自动推送
+        _minute_advice(today, cfg, reg, eng, holdings)
         log.info("盘中扫描完成 %s:市场分%s 持仓命中%d", today, score, len(flags))
     finally:
         conn.close()
+    return 0
+
+
+# ---------------- 峰岭谷日内择时(分钟因子) ----------------
+def _minute_advice(today, cfg, reg, eng, holdings):
+    """对'持仓 + 今日待买候选'用当日分钟线算峰岭谷买卖点,盘中自动推送。
+    依赖 minute_factor(多源兜底:Sina/腾讯/东财,全球CDN,美国Runner亦可取)。"""
+    try:
+        import minute_factor as mf
+        import data_adapter as da
+    except Exception as e:
+        log.warning("峰岭谷模块不可用:%s", e)
+        return 0
+    codes = set(holdings)
+    for sid in eng.enabled_strategies():
+        for o in eng.state[sid].get("pending", []):
+            if o.get("weight", 0) > 0:
+                codes.add(o["code"])
+    codes = [c for c in codes if c]
+    if not codes:
+        log.info("峰岭谷:无持仓/候选,静默退出")
+        return 0
+    try:
+        rt = da.fetch_realtime(codes)
+    except Exception:
+        rt = {}
+    adv = mf.intraday_advice(codes, {c: v.get("price") for c, v in rt.items() if v.get("price")})
+    if not adv:
+        log.info("峰岭谷:分钟数据整体不可得,跳过")
+        return 0
+    lines = [f"【⛰峰岭谷日内择时|{today}】按当日5分钟线(近谷买/近峰卖,防追高)"]
+    any_act = False
+    for a in adv:
+        tag = {"buy": "🔵买点", "sell": "🔴卖点", "hold": "⚪持有"}.get(a["signal"], "⚪")
+        if a["signal"] != "hold":
+            any_act = True
+        lines.append(f"{tag} {util.bare(a['code'])}: {a['reason']}")
+    if not any_act:
+        lines.append("(当前多数标的位置中性,无明确峰谷信号,按原计划持有/挂单)")
+    notify.push(lines[0], "\n".join(lines[1:]), "op", cfg)
+    log.info("峰岭谷日内择时完成 %s:%d 标的中 %d 有动作", today, len(adv), any_act)
     return 0
 
 

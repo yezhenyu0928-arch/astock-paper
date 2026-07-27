@@ -21,7 +21,9 @@ class S2EtfMomentum(BaseStrategy):
             return []
 
         params = dict(self.params)
-        universe = params.get("universe", [])
+        # BUG修复(2026-07-26): registry 的 universe 在条目顶层,引擎注入到 self.universe;
+        # 原 params.get("universe") 恒为空 → 策略从未成交(v3/v4/v5 回测全零)。
+        universe = params.get("universe") or list(self.universe or [])
         windows = params.get("momentum_windows", [10, 20])
         safe = params.get("safe_asset", "sh511010")
 
@@ -67,6 +69,7 @@ class S2EtfMomentum(BaseStrategy):
         target = set(top)
         orders = []
         wgt = 0.98 / len(top) if top else 0
+        held = set(account.positions.keys())   # BUG修复(2026-07-26): 原缺此行,正常持仓分支 UnboundLocalError
 
         for code in held:
             if code not in target:
