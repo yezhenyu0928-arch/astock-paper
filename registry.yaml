@@ -806,6 +806,34 @@ s24_aggressive_smallcap@v1:
   universe: dynamic
   rebalance: monthly
 
+s25_aggressive_relaxed@v2:
+  class: strategies.ref_strategies.RefAggressiveRelaxed
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # [归档]实验失败:周频+动量126 年化3.6%/回撤19.1%,全面差于v1(月频+252 年化5.0%/回撤13.0%),换手成本+噪音吞噬收益
+  params:
+    rebalance: weekly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 5
+    max_per_industry: 2
+    low_vol_pct: 0.30
+    cap_tilt: true
+    value_tilt: false
+    momentum_window: 126
+    momentum_skip: 10
+    momentum_min: -0.05
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.30
+    weights: {dividend: 0.08, low_vol: 0.04, roe: 0.10, valuation: 0.05, cap: 0.20, value: 0.05, momentum: 0.48}
+  universe: dynamic
+  rebalance: weekly
+
 s25_aggressive_relaxed@v1:
   class: strategies.ref_strategies.RefAggressiveRelaxed
   benchmark: sh510300
