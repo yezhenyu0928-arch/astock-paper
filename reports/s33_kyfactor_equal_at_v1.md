@@ -1,8 +1,8 @@
-# s26_microcap@v1 五关验证报告
+# s33_kyfactor_equal@v1 五关验证报告
 
 - 资金档:100,000 元(按用户 config 实跑,不用大资金美化)
 - 生成日:2026-07-27  基准:sh510300
-- 参数:{'rebalance': 'monthly', 'cap_segment': 'small', 'min_dividend_yield': 0.0, 'dividend_years': 0, 'roe_years': 0, 'roe_min': 0.0, 'hold_n': 10, 'max_per_industry': 3, 'low_vol_pct': 0.5, 'cap_tilt': True, 'value_tilt': False, 'momentum_window': 252, 'momentum_skip': 21, 'momentum_min': -0.1, 'regime_downsize': False, 'regime_good': 1.0, 'regime_mid': 1.0, 'regime_bad': 1.0, 'stop_pct': 0.25, 'weights': {'dividend': 0.0, 'low_vol': 0.05, 'roe': 0.1, 'valuation': 0.1, 'cap': 0.5, 'value': 0.05, 'momentum': 0.2}}
+- 参数:{'rebalance': 'monthly', 'cap_segment': 'small', 'min_dividend_yield': 0.0, 'dividend_years': 0, 'roe_years': 0, 'roe_min': 0.0, 'hold_n': 20, 'max_per_industry': 3, 'low_vol_pct': 0.5, 'cap_tilt': False, 'value_tilt': False, 'momentum_window': 252, 'momentum_skip': 21, 'momentum_min': -1.0, 'regime_downsize': False, 'regime_good': 1.0, 'regime_mid': 1.0, 'regime_bad': 1.0, 'stop_pct': 0.2, 'weights': {'dividend': 0.1, 'low_vol': 0.15, 'roe': 0.15, 'valuation': 0.2, 'cap': 0.05, 'value': 0.15, 'momentum': 0.2}}
 
 > 免责:模拟/历史表现不代表未来。成交按次日开盘价+真实费用滑点(SPEC_FILL)建模,故意保守。
 
