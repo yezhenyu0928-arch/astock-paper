@@ -39,6 +39,24 @@ _RISK_RELAX = {
         "time_stop_exempt": True,      # 豁免 30 日时间止损(小盘动量需要时间)
         "stop_override": 0.20,         # 个股硬止损 8% → 20%(小盘波动大,8% 必然频繁洗出)
     },
+    # s26 微盘规模因子(2026-07-27 冲"年化≥10%且夏普>1"目标): 冻结豁免+熔断20%
+    "s26": {
+        "max_dd": 0.20,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.20,
+    },
+    # s27 红利低波(防守进攻线,靠低波动顶夏普): 冻结豁免,熔断15%,止损15%
+    "s27": {
+        "max_dd": 0.15,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,    # 红利股拿住吃息,不被6%移动止盈洗出
+        "time_stop_exempt": True,
+        "stop_override": 0.15,
+    },
 }
 
 
