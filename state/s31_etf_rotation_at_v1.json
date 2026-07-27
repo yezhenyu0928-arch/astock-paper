@@ -1,0 +1,21 @@
+{
+ "strategy_id": "s31_etf_rotation@v1",
+ "init_capital": 100000.0,
+ "cash": 100000.0,
+ "positions": {},
+ "frozen": false,
+ "nav": 1.0,
+ "nav_history": [
+  [
+   "2026-07-27",
+   1.0
+  ]
+ ],
+ "pending": [],
+ "highest_nav": 1.0,
+ "settled_dates": [
+  "2026-07-27"
+ ],
+ "applied_div": [],
+ "aux": {}
+}
