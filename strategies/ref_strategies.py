@@ -163,3 +163,15 @@ class RefAggressiveSmallcap(BaseStrategy):
         return mf_core.build_orders(ctx, date, account, sel, params,
                                        self.strategy_id, self.config,
                                        stop_pct=params.get("stop_pct", 0.30))
+
+
+# ---------------------------------------------------------------------------
+# s25 激进小盘·放宽风控版(2026-07-27 用户明确选择"放宽风控冲收益")
+#   选股逻辑与 s24 完全一致(小盘最小段+集中5只+动量0.48);差异全在风控层:
+#   risk.py 的 _RISK_RELAX["s25"] 会对本策略生效——
+#     熔断 10%→30% / 豁免大盘冻结 / 豁免敞口降仓 / 豁免移动止盈与时间止损 / 硬止损 8%→20%。
+#   诚实声明: 回撤可能到 25-40%,与保守阵容 s20-s23(守<10%)并行跑、看板对比。
+# ---------------------------------------------------------------------------
+class RefAggressiveRelaxed(RefAggressiveSmallcap):
+    """s25 放宽风控冲收益版: 因子同 s24, 风控放宽由 risk._RISK_RELAX['s25'] 按前缀生效。"""
+    pass

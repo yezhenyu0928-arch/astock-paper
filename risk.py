@@ -25,6 +25,27 @@ _STRATEGY_MAX_DD = {
     "s4": 0.20, "s8": 0.20, "s13": 0.20, "s14": 0.20, "s15": 0.20,   # 2026-07-24 用户要求最大回撤≤20%,熔断线设20%
 }
 
+# ---------------------------------------------------------------------------
+# 激进阵容风控放宽层(2026-07-27 用户明确选择"放宽风控冲收益")。
+# 按 sid 前缀配置,只对白名单策略生效;保守阵容 s20-s23 仍守全局 0.10 熔断+大盘冻结。
+# 诚实声明: 放宽后回撤可能到 25-40%,这是冲高收益的代价,已获用户确认。
+# ---------------------------------------------------------------------------
+_RISK_RELAX = {
+    "s25": {
+        "max_dd": 0.30,                # 熔断线 10% → 30%
+        "market_freeze_exempt": True,  # 豁免大盘冻结(弱市仍可开仓,s24 回测证明冻结是收益≈0 的主因)
+        "exposure_exempt": True,       # 豁免 宏观敞口×回撤分层降险(不降仓,让仓位打满)
+        "trailing_tp_exempt": True,    # 豁免移动止盈 6%(让盈利奔跑)
+        "time_stop_exempt": True,      # 豁免 30 日时间止损(小盘动量需要时间)
+        "stop_override": 0.20,         # 个股硬止损 8% → 20%(小盘波动大,8% 必然频繁洗出)
+    },
+}
+
+
+def _relax(sid):
+    """返回该策略的风控放宽配置(无则空 dict = 走正常纪律)。"""
+    return _RISK_RELAX.get(sid.split("_")[0], {})
+
 
 def _stop_type(sid):
     return _STOP_TYPE.get(sid.split("_")[0], "rotation")
@@ -54,8 +75,9 @@ def pre_check(date, ctx, states, cfg):
             continue
         peak = max(st.get("highest_nav", 1.0), acct.nav)
         dd = 1 - acct.nav / peak if peak > 0 else 0
-        # 按策略前缀取熔断线: 全部策略锁 0.05(用户硬指标:回撤≤5%)
-        max_dd = _STRATEGY_MAX_DD.get(sid.split("_")[0], _global_mdd)
+        # 按策略前缀取熔断线;激进阵容(_RISK_RELAX)优先,其次 _STRATEGY_MAX_DD,最后全局
+        rlx = _relax(sid)
+        max_dd = rlx.get("max_dd") or _STRATEGY_MAX_DD.get(sid.split("_")[0], _global_mdd)
         if dd > max_dd:
             alerts.append(f"🔴 策略 {sid} 回撤 {dd:.1%} 触发熔断线 {max_dd:.0%},清仓降险并告警(次日重置参赛)")
             log.warning(alerts[-1])
@@ -137,6 +159,9 @@ def post_check(date, ctx, orders, states, cfg, market_frozen=False):
     for sid, acct in accounts.items():
         stype = _stop_type(sid)
         thr = None if stype == "none" else stop.get(stype, 0.12)
+        rlx = _relax(sid)
+        if rlx.get("stop_override"):
+            thr = rlx["stop_override"]          # 激进阵容: 个股硬止损放宽
         for code, pos in acct.positions.items():
             cur = ctx.raw_close(code)
             if not cur or not pos.avg_cost:
@@ -148,15 +173,16 @@ def post_check(date, ctx, orders, states, cfg, market_frozen=False):
                                          reason=f"止损(浮亏{pnl:.1%}>{thr:.0%})",
                                          signal_date=date))
                 continue
-            # 5b) 移动止盈:盈利状态下,自持有期最高收盘回撤超阈值即锁定
+            # 5b) 移动止盈:盈利状态下,自持有期最高收盘回撤超阈值即锁定(激进阵容豁免,让盈利奔跑)
             hc = getattr(pos, "highest_close", 0) or 0
-            if trail_tp and hc > 0 and cur > pos.avg_cost and (cur / hc - 1) < -trail_tp:
+            if trail_tp and hc > 0 and cur > pos.avg_cost and (cur / hc - 1) < -trail_tp \
+                    and not rlx.get("trailing_tp_exempt"):
                 stop_orders.append(Order(strategy_id=sid, code=code, side="sell", weight=0.0,
                                          reason=f"移动止盈(自峰值回撤{1-cur/hc:.1%}>{trail_tp:.0%},锁定{pnl:+.1%})",
                                          signal_date=date))
                 continue
-            # 5c) 时间止损:持仓≥time_stop_days 且 收益<time_stop_min_return → 退出(手册:不达预期时间的仓位清理)
-            if ts_days and ts_days > 0 and pos.buy_date:
+            # 5c) 时间止损:持仓≥time_stop_days 且 收益<time_stop_min_return → 退出(激进阵容豁免)
+            if ts_days and ts_days > 0 and pos.buy_date and not rlx.get("time_stop_exempt"):
                 hd = _held_days(ctx, pos.buy_date, date)
                 if hd is not None and hd >= ts_days and pnl < ts_min:
                     stop_orders.append(Order(strategy_id=sid, code=code, side="sell", weight=0.0,
@@ -182,9 +208,12 @@ def post_check(date, ctx, orders, states, cfg, market_frozen=False):
         # 规则2:冻结策略只保留清仓 sell
         if acct.frozen and not (o.side == "sell" and o.weight == 0):
             continue
+        o_rlx = _relax(o.strategy_id)
         if o.side == "buy":
             # 规则1:大盘冻结删所有"新开仓"buy;但保留同策略的"轮动置换"(已卖出持仓→换入新标的)
-            if market_frozen and o.strategy_id not in rotate_sids:
+            # 激进阵容豁免大盘冻结(s24 回测证明弱市全程冻结→空仓→收益≈0)
+            if market_frozen and o.strategy_id not in rotate_sids \
+                    and not o_rlx.get("market_freeze_exempt"):
                 log.info("大盘冻结删新开单 %s %s", o.strategy_id, o.code)
                 continue
             # 规则4:个股流动性(ETF 豁免)
@@ -192,9 +221,12 @@ def post_check(date, ctx, orders, states, cfg, market_frozen=False):
                 if ctx.avg_amount(o.code, 20) < min_amt:
                     log.info("流动性不足删单 %s %s", o.strategy_id, o.code)
                     continue
-            # 规则6:综合敞口 = 消息面 × 回撤分层降险(均只降不升,手册风控体系)
-            dd_mult = _drawdown_mult(acct, states.get(o.strategy_id, {}), tiers)
-            mult = round(news_mult * dd_mult, 6)
+            # 规则6:综合敞口 = 消息面 × 回撤分层降险(均只降不升;激进阵容豁免,不降仓)
+            if o_rlx.get("exposure_exempt"):
+                dd_mult, mult = 1.0, 1.0
+            else:
+                dd_mult = _drawdown_mult(acct, states.get(o.strategy_id, {}), tiers)
+                mult = round(news_mult * dd_mult, 6)
             if mult < 1.0:
                 new_w = round(o.weight * mult, 6)
                 tag = f"[敞口×{mult}(消息{news_mult}/回撤{dd_mult})]"
