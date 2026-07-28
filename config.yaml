@@ -90,6 +90,8 @@ strategies:                     # 2026-07 重构:全面个股化——下线全�
   s33_kyfactor_equal@v1: true     # 开源金工KyFactor六因子等权:月频20只
   s34_dividend_high@v1: true      # 国信红利高股息精选:月频10只
   s35_long_momentum@v1: true     # 开源金工长端动量2.0(长窗残差动量):月频8只
+  s36_growth_atlas@v1: true      # 国信成长股图谱近似(净利润同比gROWTH主导):月频8只
+  s37_earnings_accel@v1: true    # 国信超预期近似(同比加速度≈盈余惊喜):月频8只
   s4_smallcap@v2: false        # 归档:被 @v3 主板small成长版取代
   s3_ma_trend@v1: false         # 归档:被 v2 纪律化趋势版取代(v1 全期-0.8%/回撤24% whipsaw)
   s3_ma_trend@v2: false         # 归档:借鉴v1重构仍-5%/回撤18%,A股价格趋势弱,被 s3_trend_timing 择时版取代

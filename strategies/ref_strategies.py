@@ -226,3 +226,53 @@ class RefSmallcapSelect(RefAggressiveSmallcap):
 class RefSteadySelect(RefAggressiveSmallcap):
     """s30 稳健精选: 三低一高防御因子 + 动量增强。逻辑复用 mf_core。"""
     pass
+
+
+# ---------------------------------------------------------------------------
+# s36 成长股图谱近似(复现国信金工《超额图谱视角下的成长股投资策略》2026-07-27):
+#   净利润同比增速(GROWTH, YoY)主导 + 小盘弹性(cap) + 动量共振; 月频集中 8 只。
+#   研报进取版年化 52.14% / 稳健版 44.30%(依赖净利润增速因子);
+#   本引擎 growth 键即"净利润同比"(_growth_score, mode=yoy), 直接对应研报核心因子。
+#   风控: 走 _RISK_RELAX['s36'](待注册, 放宽组回撤≤40%)。
+# ---------------------------------------------------------------------------
+class RefGrowthAtlas(RefAggressiveSmallcap):
+    """s36 成长股图谱: growth(YoY)主导 + 小盘 + 动量。逻辑复用 mf_core。"""
+    pass
+
+
+# ---------------------------------------------------------------------------
+# s37 超预期近似(复现国信金工《超预期投资全攻略》2026-07-27):
+#   growth_mode=accel: 净利润同比增速"加速度"(YoY_t - YoY_{t-1}) 主导 ——
+#   增速在加快≈"盈余惊喜/超预期"(缺分析师一致预期, 用加速度近似 SUE)。
+#   实盘可叠 news_engine 超预期信号强筛(同 s22 逻辑); 回测无新闻→降级为加速度因子。
+#   研报超预期精选年化 44.9% / 回撤 9.48%; 本近似回撤可能更高, 走 _RISK_RELAX['s37']。
+# ---------------------------------------------------------------------------
+class RefGrowthAccel(BaseStrategy):
+    def generate_orders(self, date, ctx, account):
+        if not mf_core.should_rebalance(date, self.params):
+            return mf_core.risk_orders(date, ctx, account, self.params,
+                                      self.strategy_id, self.config)
+        params = dict(self.params)
+        sel = mf_core.select(ctx, date, account, params, self.strategy_id, self.config)
+        # —— 超预期实盘叠加层(news_engine 有数据时强筛; 回测恒空 → 跳过, 降级) ——
+        if sel["target"]:
+            try:
+                import news_engine as ne
+                surp = ne.get_earnings_surprise_codes(date, ctx.conn)
+                if surp:   # 仅当当日真有超预期信号时才收窄到信号池
+                    tgt = [c for c in sel["target"] if c in surp]
+                    if tgt:
+                        sel = dict(sel)
+                        sel["target"] = tgt
+            except Exception:
+                pass
+        if not sel["target"]:
+            from strategies import news_guard
+            forced = news_guard.guard_holdings(date, list(account.positions.keys()),
+                                                ctx.conn, self.config)
+            return [Order(self.strategy_id, c, "sell", 0.0,
+                          f"超预期:{ctx.name(c)}无候选/黑天鹅,清仓", date)
+                    for c in account.positions.keys() if c not in forced]
+        return mf_core.build_orders(ctx, date, account, sel, params,
+                                   self.strategy_id, self.config,
+                                   stop_pct=params.get("stop_pct", 0.20))

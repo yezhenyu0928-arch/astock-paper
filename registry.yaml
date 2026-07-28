@@ -1560,3 +1560,61 @@ s35_long_momentum@v1:
     weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.0, cap: 0.0, value: 0.0, momentum: 1.0}
   universe: dynamic
   rebalance: monthly
+
+s36_growth_atlas@v1:
+  class: strategies.ref_strategies.RefGrowthAtlas
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 复现国信《超额图谱视角下的成长股投资策略》:净利润同比(growth/YoY)主导+小盘+动量,月频8只
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 8
+    max_per_industry: 2
+    low_vol_pct: 0.50
+    cap_tilt: True
+    value_tilt: False
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    growth_mode: yoy
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.0, cap: 0.15, value: 0.10, momentum: 0.20, growth: 0.45}
+  universe: dynamic
+  rebalance: monthly
+
+s37_earnings_accel@v1:
+  class: strategies.ref_strategies.RefGrowthAccel
+  benchmark: sh510300
+  frozen_date: 2026-07-27   # 复现国信《超预期投资全攻略》:净利润同比加速度(growth/accel≈盈余惊喜)主导+质量,月频8只
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 3
+    roe_min: 0.08
+    hold_n: 8
+    max_per_industry: 2
+    low_vol_pct: 0.50
+    cap_tilt: False
+    value_tilt: True
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    growth_mode: accel
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.15, valuation: 0.15, cap: 0.10, value: 0.10, momentum: 0.15, growth: 0.30}
+  universe: dynamic
+  rebalance: monthly

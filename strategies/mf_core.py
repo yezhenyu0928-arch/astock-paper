@@ -46,9 +46,15 @@ def _news_score(date, code, conn):
         return 0.0
 
 
-def _growth_score(date, codes, conn):
-    """盈利同比(earnings YoY)排名因子, 单条 SQL 批量取近两年净利润(防未来函数 pub_date<=date)。
-    返回 {code: 同比增幅}(None=数据不足, 给中性 0)。仅当 weights 含 'growth'>0 时才调用(不影响其他策略)。"""
+def _growth_score(date, codes, conn, mode="yoy"):
+    """盈利同比排名因子, 单条 SQL 批量取近年净利润(防未来函数 pub_date<=date)。
+    返回 {code: 增幅}(None=数据不足)。仅当 weights 含 'growth'>0 时才调用(不影响其他策略)。
+
+    mode:
+      'yoy'  : 净利润同比增速 = (本年-上年)/|上年|  —— 对应研报《成长股投资》"净利润同比增速"主导
+      'accel': 同比增速加速度 = YoY_t - YoY_{t-1}  —— 增速在加快≈"盈余惊喜/超预期"代理
+                (缺分析师一致预期, 用增速加速度近似 SUE; 需 >=3 期年报)
+    """
     try:
         placeholders = ",".join("?" for _ in codes)
         d = str(date)[:10]
@@ -61,10 +67,19 @@ def _growth_score(date, codes, conn):
             by_code.setdefault(code, []).append(np0)
         out = {}
         for code, lst in by_code.items():
-            if len(lst) >= 2 and lst[1] is not None and lst[1] != 0 and lst[0] is not None:
-                out[code] = (lst[0] - lst[1]) / abs(lst[1])
-            else:
-                out[code] = None
+            if mode == "accel":
+                if (len(lst) >= 3 and lst[0] is not None and lst[1] is not None
+                        and lst[2] is not None and lst[1] != 0 and lst[2] != 0):
+                    yoy_t = (lst[0] - lst[1]) / abs(lst[1])
+                    yoy_prev = (lst[1] - lst[2]) / abs(lst[2])
+                    out[code] = yoy_t - yoy_prev
+                else:
+                    out[code] = None
+            else:  # yoy
+                if len(lst) >= 2 and lst[1] is not None and lst[1] != 0 and lst[0] is not None:
+                    out[code] = (lst[0] - lst[1]) / abs(lst[1])
+                else:
+                    out[code] = None
         return out
     except Exception:
         return {}
@@ -266,8 +281,10 @@ def select(ctx, date, account, params, strategy_id, config):
         pass
     # 个股行业地位因子(可回测的'新闻/行业地位'代理): 龙头加分
     ind_lead_score = _industry_leadership(cand, _ind)
-    # 成长因子(盈利同比)排名: 仅当 weights 含 growth 时计算(默认权重不含, 不影响 s4/s8/s14/s15)
-    grow_score = _growth_score(date, _cc, ctx.conn) if w.get("growth") else {}
+    # 成长因子(盈利同比 / 同比加速度)排名: 仅当 weights 含 growth 时计算
+    # (默认权重不含, 不影响 s4/s8/s14/s15 等旧策略)。growth_mode 决定 yoy/accel。
+    grow_score = _growth_score(date, _cc, ctx.conn,
+                                mode=params.get("growth_mode", "yoy")) if w.get("growth") else {}
     _ban_n, _ = news_guard.guard_candidates(date, _cc, ctx.conn, config)
     _ban_i = news_guard.guard_industry(date, _cc, ctx.conn, config, _ind)
     _ban_s = {c for c in _cc if news_guard.structural_ban(date, c, ctx)[0]}

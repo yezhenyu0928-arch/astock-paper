@@ -93,6 +93,24 @@ _RISK_RELAX = {
         "time_stop_exempt": True,
         "stop_override": 0.35,
     },
+    # s36 成长股图谱(2026-07-27 穿透国信《成长股投资》新建): 少数放宽回撤40% aggressive 组
+    "s36": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.30,
+    },
+    # s37 超预期近似(2026-07-27 穿透国信《超预期投资》新建): 少数放宽回撤40% aggressive 组
+    "s37": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.30,
+    },
 }
 
 
