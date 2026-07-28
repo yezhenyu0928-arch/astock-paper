@@ -25,36 +25,62 @@ def q(sql, args=()):
     try:
         return conn.execute(sql, args).fetchall()
     except Exception as e:
-        return [("ERR", str(e))]
+        return [("ERR", str(e), "")]
 
-out.append("## 表规模")
-for t in ("daily_bar", "fundamental", "index_members", "security", "annual_roe", "dividend"):
-    r = q(f"SELECT COUNT(*) FROM {t}")
+
+def sect(fn):
+    """段落容错:单段失败不影响整份报告。"""
+    try:
+        fn()
+    except Exception as e:
+        out.append(f"- [段落异常] {type(e).__name__}: {e}")
+
+out.append("## 库内全部表")
+tables = [r[0] for r in q("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+          if r[0] != "ERR"]
+out.append("- " + ", ".join(map(str, tables)))
+
+out.append("\n## 表规模")
+for t in tables:
+    r = q(f"SELECT COUNT(*) FROM [{t}]")
     out.append(f"- {t}: {r[0][0]} 行")
 
+
+def _cover(t):
+    r = q(f"SELECT MIN(trade_date), MAX(trade_date), COUNT(DISTINCT code) FROM [{t}]")
+    row = r[0]
+    if row[0] == "ERR":
+        out.append(f"- 查询失败: {row[1]}")
+        return
+    out.append(f"- 日期 {row[0]} ~ {row[1]},distinct code {row[2]}")
+
+
 out.append("\n## daily_bar 覆盖")
-r = q("SELECT MIN(date), MAX(date), COUNT(DISTINCT code) FROM daily_bar")
-out.append(f"- 日期 {r[0][0]} ~ {r[0][1]},distinct code {r[0][2]}")
+sect(lambda: _cover("daily_bar"))
 
 out.append("\n## fundamental 覆盖(关键!)")
-r = q("SELECT MIN(date), MAX(date), COUNT(DISTINCT code) FROM fundamental")
-out.append(f"- 日期 {r[0][0]} ~ {r[0][1]},distinct code {r[0][2]}")
-out.append("- 按年 distinct code:")
-for row in q("SELECT substr(date,1,4) y, COUNT(DISTINCT code) FROM fundamental GROUP BY y ORDER BY y"):
-    out.append(f"  - {row[0]}: {row[1]} 只")
-out.append("- 各字段非空率(最近 30 天内快照):")
-r = q("""SELECT COUNT(*),
-        SUM(CASE WHEN pe IS NOT NULL THEN 1 ELSE 0 END),
-        SUM(CASE WHEN market_cap IS NOT NULL AND market_cap>0 THEN 1 ELSE 0 END),
-        SUM(CASE WHEN dividend_yield IS NOT NULL AND dividend_yield>0 THEN 1 ELSE 0 END)
-        FROM fundamental WHERE date >= (SELECT MAX(date) FROM fundamental)""")
-if r and r[0][0]:
-    n, pe, mc, dy = r[0]
-    out.append(f"  - 最新快照 {n} 行: pe {pe}, market_cap {mc}, dividend_yield {dy}")
+sect(lambda: _cover("fundamental"))
+
+
+def _fund_years():
+    out.append("- 按年 distinct code:")
+    for row in q("SELECT substr(trade_date,1,4) y, COUNT(DISTINCT code) FROM fundamental GROUP BY y ORDER BY y"):
+        out.append(f"  - {row[0]}: {row[1]} 只")
+    r = q("""SELECT COUNT(*),
+            SUM(CASE WHEN pe IS NOT NULL THEN 1 ELSE 0 END),
+            SUM(CASE WHEN market_cap IS NOT NULL AND market_cap>0 THEN 1 ELSE 0 END),
+            SUM(CASE WHEN dividend_yield IS NOT NULL AND dividend_yield>0 THEN 1 ELSE 0 END)
+            FROM fundamental WHERE trade_date >= (SELECT MAX(trade_date) FROM fundamental)""")
+    if r and r[0][0] and r[0][0] != "ERR":
+        n, pe, mc, dy = r[0]
+        out.append(f"- 最新快照 {n} 行: pe非空 {pe}, market_cap>0 {mc}, dividend_yield>0 {dy}")
+
+
+sect(_fund_years)
 
 out.append("\n## index_members 池")
-for row in q("SELECT index_code, COUNT(*) FROM index_members GROUP BY index_code"):
-    out.append(f"- {row[0]}: {row[1]} 条")
+sect(lambda: [out.append(f"- {row[0]}: {row[1]} 条")
+              for row in q("SELECT index_code, COUNT(*) FROM index_members GROUP BY index_code")])
 
 out.append("\n## 模拟选股(s26_microcap@v1 @ 2023-01-04 与 2025-06-04)")
 buf = io.StringIO()
@@ -70,7 +96,8 @@ try:
     for d in ("2023-01-04", "2025-06-04"):
         ctx = eng.ctx(d)
         try:
-            sel = mf_core.select(stg.strategy_id, stg.params, cfg, ctx, d)
+            acct = eng.load_account(stg.strategy_id)
+            sel = mf_core.select(ctx, d, acct, stg.params, stg.strategy_id, cfg)
             tgt = sel.get("target", [])
             out.append(f"- {d}: target {len(tgt)} 只; empty_reason={sel.get('empty_reason','')}")
         except Exception as e:
