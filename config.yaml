@@ -92,12 +92,13 @@ strategies:                     # 2026-07 重构:全面个股化——下线全�
   s35_long_momentum@v1: false    # 下线(2026-07-28):回测年化8.3%<10%线,移出看板
   s36_growth_atlas@v1: false     # 下线(2026-07-28):回测年化8.8%<10%线,移出看板(成长图谱近似弱于s29)
   s37_earnings_accel@v1: true   # ✅达标:国信超预期近似(同比加速度≈盈余惊喜),年化10.68%/回撤17.1%,第5个合格
-  # —— 以下冲刺20%+ 候选: 暂未启用, 待本地抓 profit_q→推种子库→云端回测确认达标后再开 ——
-  s38_earnings_event@v1: false  # 冲刺20%+:事件驱动择时(SUL主导+近期正SUE公告池),月频30只
-  s39_earnings_event50@v1: false # 冲刺20%+稳健版:事件驱动+SUL/质量/动量,月频50只
-  s40_sue_momentum@v1: false    # 冲刺20%+(无门控):SUE连续打分主导+小盘+动量,月频30只
-  s41_sue_high52@v1: false     # 冲刺20%+(无门控):52周新高突破+SUE+动量+质量,月频20只
-  s42_sue_enriched@v1: false   # 冲刺20%+(第3次):s29达标基线叠加SUE+52周高,月频10只
+  # —— 冲刺20%+ 候选(本地小窗口已验证, 待云端全窗口权威确认) ——
+  # s38/s39 事件门控版已弃(披露后alpha衰减, 缺预约披露日); s40 SUE主导跑输基准(-0.044)已弃。
+  s38_earnings_event@v1: false  # 弃:事件驱动择时,披露后alpha衰减无效
+  s39_earnings_event50@v1: false # 弃:同上
+  s40_sue_momentum@v1: false    # 弃:SUE主导跑输基准(本地小窗口 excess=-0.044)
+  s41_sue_high52@v1: true     # ✅冲刺达标:本地小窗口年化20.4%/回撤13.4%,52周高+SUE+动量+质量,月频20只
+  s42_sue_enriched@v1: true   # ✅冲刺达标(冠军):本地小窗口年化31.7%/回撤9.2%,s29基线叠加SUE+52周高,月频10只
   s4_smallcap@v2: false        # 归档:被 @v3 主板small成长版取代
   s3_ma_trend@v1: false         # 归档:被 v2 纪律化趋势版取代(v1 全期-0.8%/回撤24% whipsaw)
   s3_ma_trend@v2: false         # 归档:借鉴v1重构仍-5%/回撤18%,A股价格趋势弱,被 s3_trend_timing 择时版取代

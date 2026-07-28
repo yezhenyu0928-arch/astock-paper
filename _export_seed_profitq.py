@@ -13,6 +13,7 @@ import gzip
 import shutil
 import hashlib
 import os
+import sqlite3
 
 SRC = "db/market.sqlite"
 GZ = "db_seed.sqlite.gz"
@@ -22,6 +23,15 @@ PART = 99614720  # 95 MiB, 与既有分卷体积一致(确保云端 cat part* �
 def main():
     if not os.path.exists(SRC):
         raise SystemExit(f"缺少 {SRC}, 请先完成本地 baostock 抓取")
+    # WAL 模式: 已提交数据可能在 -wal 文件里, 直接 gzip 主文件会漏掉。
+    # 先做 wal_checkpoint(TRUNCATE) 把 WAL 合并回主文件, 确保导出完整。
+    try:
+        wc = sqlite3.connect(SRC)
+        r = wc.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        wc.close()
+        print(f"  WAL checkpoint: {r} (busy,log,checkpointed)", flush=True)
+    except Exception as e:
+        print(f"  WAL checkpoint 警告(忽略): {e}", flush=True)
     print(f"导出 {SRC} -> {GZ} ...", flush=True)
     with open(SRC, "rb") as f_in, gzip.open(GZ, "wb", compresslevel=6) as f_out:
         shutil.copyfileobj(f_in, f_out)

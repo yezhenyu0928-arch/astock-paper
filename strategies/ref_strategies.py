@@ -276,3 +276,21 @@ class RefGrowthAccel(BaseStrategy):
         return mf_core.build_orders(ctx, date, account, sel, params,
                                    self.strategy_id, self.config,
                                    stop_pct=params.get("stop_pct", 0.20))
+
+
+# ---------------------------------------------------------------------------
+# s38 / s39 事件驱动择时(复现国信《超预期》44.9% / 《成长图谱》44.3% 的量化近似):
+#   核心不是因子, 而是"财报黄金期择时" —— 仅持"近期有盈余公告且 SUE>0"的票
+#   (量化代理分析师全部调升/业绩大增事件池, 我们无分析师文本数据)。
+#   因子用 mf_core 新增的 SUE(标准化预期外盈利) 主导 + 小市值弹性 + 动量共振。
+#   s38 进取(持30只, 近似成长进取52%); s39 稳健(持50只, 近似成长稳健44%)。
+#   风控: _RISK_RELAX 放宽组(回撤≤40%)。
+# ---------------------------------------------------------------------------
+class RefEarningsEvent(RefAggressiveSmallcap):
+    """s38 事件驱动超预期近似: SUE主导+小盘+动量, 月频30只, 仅持近期正SUE公告票。"""
+    pass
+
+
+class RefEarningsEvent50(RefAggressiveSmallcap):
+    """s39 事件驱动稳健版: SUE主导+质量+动量, 月频50只, 回撤更稳。"""
+    pass
