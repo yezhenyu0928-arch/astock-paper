@@ -1,3 +1,3 @@
-公众号穿透研报落地回合(2026-07-27): 默认策略集切到 10 个新阵容 —— s26_microcap@v1(微盘)、s27_dividend_lowvol@v1(红利低波)、s29_smallcap_select@v1(国信小盘精选)、s30_steady_select@v1(稳健精选)、s31_etf_rotation@v1/v2(跨资产双动量ETF轮动)、s32_roe_quality@v1(ROE质量)、s33_kyfactor_equal@v1(KyFactor等权)、s34_dividend_high@v1(高股息)、s35_long_momentum@v1(长动量)。
-风控:s28/s32/s35 放宽组 max_dd=0.40;其余个股策略目标年化≥20%;ETF 策略收益>20% 保留。
-触发 backtest.yml -> 云端全量库并行回测 10 策略,核验补全数据后能否达标(本地库回测上限约15%)。
+种子库修复回合(2026-07-27晚): 根因=海外Runner连不上baostock,云端fundamental仅1只票(vs本地1465只/117万行) → 8个股策略"无基本面"全滤空,全程0成交。
+修复: 本地完整库gzip分卷传db-seed孤儿分支(185MB),backtest.yml prep + daily.yml 检测基本面覆盖<600只即整库还原。
+重跑10策略: s26/s27/s29/s30/s31v1v2/s32/s33/s34/s35,核验能否达标(个股年化≥20%,放宽组回撤≤40%,ETF>20%保留)。

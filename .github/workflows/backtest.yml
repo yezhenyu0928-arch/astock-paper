@@ -48,6 +48,49 @@ jobs:
           restore-keys: |
             db-
 
+      # 2026-07-27 根因修复: 海外 Runner 连不上 baostock,历史基本面(fundamental)云端永远抓不到,
+      # 导致个股策略"无基本面"全滤空 → 全程空仓(run 30257841571 的 8 策略 0 成交形态)。
+      # 解法: 本地完整库以 gzip 分卷存 db-seed 孤儿分支,prep 检测基本面覆盖不足即整库还原。
+      - name: checkout db-seed branch (本地种子库分卷)
+        uses: actions/checkout@v4
+        with:
+          ref: db-seed
+          path: seed
+
+      - name: restore DB from seed (基本面覆盖不足则整库还原)
+        run: |
+          NEED=$(python - <<'PY'
+          import sqlite3, os
+          need = 1
+          if os.path.exists("db/market.sqlite"):
+              try:
+                  c = sqlite3.connect("db/market.sqlite")
+                  fund = c.execute("SELECT COUNT(DISTINCT code) FROM fundamental").fetchone()[0]
+                  mb = c.execute("SELECT COUNT(*) FROM index_members WHERE index_code='mainboard'").fetchone()[0]
+                  if fund >= 600 and mb >= 800:
+                      need = 0
+                  c.close()
+              except Exception:
+                  pass
+          print(need)
+          PY
+          )
+          if [ "$NEED" = "1" ]; then
+            echo "云端库基本面覆盖不足,从 db-seed 分支还原完整种子库..."
+            mkdir -p db
+            cat seed/db_seed.sqlite.gz.part* | gunzip > db/market.sqlite
+            python - <<'PY'
+          import sqlite3
+          c = sqlite3.connect("db/market.sqlite")
+          print("还原后 fundamental distinct code:",
+                c.execute("SELECT COUNT(DISTINCT code) FROM fundamental").fetchone()[0])
+          print("还原后 mainboard 池:",
+                c.execute("SELECT COUNT(*) FROM index_members WHERE index_code='mainboard'").fetchone()[0])
+          PY
+          else
+            echo "库基本面覆盖充分,跳过种子还原"
+          fi
+
       - name: ensure full DB (主板池/沪深300/年报库不足则重建)
         run: |
           read covered annual_codes mb_cov <<< $(python - <<'PY'
