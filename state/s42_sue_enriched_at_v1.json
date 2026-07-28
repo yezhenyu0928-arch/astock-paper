@@ -1,15 +1,11 @@
 {
- "strategy_id": "s29_smallcap_select@v1",
+ "strategy_id": "s42_sue_enriched@v1",
  "init_capital": 100000.0,
  "cash": 100000.0,
  "positions": {},
  "frozen": false,
  "nav": 1.0,
  "nav_history": [
-  [
-   "2026-07-27",
-   1.0
-  ],
   [
    "2026-07-28",
    1.0
@@ -18,7 +14,6 @@
  "pending": [],
  "highest_nav": 1.0,
  "settled_dates": [
-  "2026-07-27",
   "2026-07-28"
  ],
  "applied_div": [],
