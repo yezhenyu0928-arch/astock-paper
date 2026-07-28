@@ -39,3 +39,9 @@ bt_*.json
 backfill_fund.log
 cdp_*.mjs
 extract_rules.py
+
+# 本地种子库构建/抓取产物(不入库; 种子库走 db-seed 分支, 云端 prep 整库还原)
+db_seed*
+seed.db
+db_seed_tmp.sqlite
+fetch_profit_q.log

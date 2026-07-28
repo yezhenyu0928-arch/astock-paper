@@ -27,6 +27,12 @@ on:
 permissions:
   contents: write
 
+# 串行化:避免快速连推/重叠触发时多个 run 的 collect 阶段抢推 main 导致非快进失败
+# (此前 run#50 即因此类竞态而整 run 无 job 即失败)。false=排队等待而非取消。
+concurrency:
+  group: backtest
+  cancel-in-progress: false
+
 jobs:
   # ---------- ① 建库/缓存 + 解析策略集(单次,供并行 matrix 复用) ----------
   prep:
@@ -171,12 +177,12 @@ jobs:
         id: set
         run: |
             SIDS="${{ github.event.inputs.sids }}"
-          if [ -z "$SIDS" ]; then
-            SIDS="s26_microcap@v1,s27_dividend_lowvol@v1,s29_smallcap_select@v1,s32_roe_quality@v1,s37_earnings_accel@v1,s42_sue_enriched@v1"
-          fi
-          JSON=$(python -c "import json,sys; print(json.dumps([s.strip() for s in sys.argv[1].split(',') if s.strip()]))" "$SIDS")
-          echo "策略矩阵: $JSON"
-          echo "matrix=$JSON" >> "$GITHUB_OUTPUT"
+            if [ -z "$SIDS" ]; then
+              SIDS="s26_microcap@v1,s27_dividend_lowvol@v1,s29_smallcap_select@v1,s32_roe_quality@v1,s37_earnings_accel@v1,s42_sue_enriched@v1"
+            fi
+            JSON=$(python -c "import json,sys; print(json.dumps([s.strip() for s in sys.argv[1].split(',') if s.strip()]))" "$SIDS")
+            echo "策略矩阵: $JSON"
+            echo "matrix=$JSON" >> "$GITHUB_OUTPUT"
 
   # ---------- ② 并行回测:每个策略一个独立 runner ----------
   backtest:
