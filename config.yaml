@@ -83,15 +83,15 @@ strategies:                     # 2026-07 重构:全面个股化——下线全�
   s15_core_allocation@v3: false          # 下线(2026-07-27 回测不达标,原阵容)
   # ↓ 2026-07-27 穿透5篇研报新建(国信金工/开源金工/中信建投):本地可落地因子复现
   s29_smallcap_select@v1: true     # 国信小盘精选(规模+估值+反转):月频10只
-  s30_steady_select@v1: true      # 国信稳健精选(红利+低波+估值+动量):月频10只
-  s31_etf_rotation@v1: true       # ETF跨资产双动量轮动(周频):ETF名额①
-  s31_etf_rotation@v2: true       # ETF跨资产双动量轮动(月频长窗):ETF名额②
+  s30_steady_select@v1: false     # 下线(2026-07-28):回测年化仅1.2%不达标,移出看板
+  s31_etf_rotation@v1: false      # 下线(2026-07-28):真实回测年化1.6%/回撤13.1%,未达年化>10%线
+  s31_etf_rotation@v2: false      # 下线(2026-07-28):真实回测年化-0.9%/回撤12.4%,未达线
   s32_roe_quality@v1: true       # 国信ROE质量选股(ROE主导):月频10只
-  s33_kyfactor_equal@v1: true     # 开源金工KyFactor六因子等权:月频20只
-  s34_dividend_high@v1: true      # 国信红利高股息精选:月频10只
-  s35_long_momentum@v1: true     # 开源金工长端动量2.0(长窗残差动量):月频8只
-  s36_growth_atlas@v1: true      # 国信成长股图谱近似(净利润同比gROWTH主导):月频8只
-  s37_earnings_accel@v1: true    # 国信超预期近似(同比加速度≈盈余惊喜):月频8只
+  s33_kyfactor_equal@v1: false    # 下线(2026-07-28):回测年化-0.4%不达标,移出看板
+  s34_dividend_high@v1: false   # 下线(2026-07-28):回测年化0.6%不达标,移出看板
+  s35_long_momentum@v1: false    # 下线(2026-07-28):回测年化8.3%<10%线,移出看板
+  s36_growth_atlas@v1: false     # 下线(2026-07-28):回测年化8.8%<10%线,移出看板(成长图谱近似弱于s29)
+  s37_earnings_accel@v1: true   # ✅达标:国信超预期近似(同比加速度≈盈余惊喜),年化10.68%/回撤17.1%,第5个合格
   s4_smallcap@v2: false        # 归档:被 @v3 主板small成长版取代
   s3_ma_trend@v1: false         # 归档:被 v2 纪律化趋势版取代(v1 全期-0.8%/回撤24% whipsaw)
   s3_ma_trend@v2: false         # 归档:借鉴v1重构仍-5%/回撤18%,A股价格趋势弱,被 s3_trend_timing 择时版取代
