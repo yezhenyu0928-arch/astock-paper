@@ -111,6 +111,48 @@ _RISK_RELAX = {
         "time_stop_exempt": True,
         "stop_override": 0.30,
     },
+    # s38/s39 事件驱动择时(复现国信超预期44.9%/成长44.3% 近似): 放宽组回撤≤40%
+    "s38": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.30,
+    },
+    "s39": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.30,
+    },
+    # s40/s41 冲刺20%+ 的 SUE/52周高 复合策略(放宽组, 回撤≤40%)
+    "s40": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.30,
+    },
+    "s41": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.30,
+    },
+    "s42": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.30,
+    },
 }
 
 

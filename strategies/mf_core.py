@@ -85,6 +85,96 @@ def _growth_score(date, codes, conn, mode="yoy"):
         return {}
 
 
+def _sue_score(date, codes, conn):
+    """标准化预期外盈利(SUE)排名因子 —— 复现国信《超预期投资全攻略》核心因子。
+    SU E_t = (NP_t - NP_{t-4}) / std(|NP_τ - NP_{τ-4}| for τ in [t-8, t-1])
+    NP = 单季度归母净利润(net_profit from profit_q, stat_date<=date)。
+    需 profit_q 表(本地 baostock 季报抓取, 云端靠种子库还原)。
+    仅当 weights 含 'sue'>0 或 event_pool 启用时调用。返回 {code: sue}(None=数据不足)。"""
+    try:
+        d = str(date)[:10]
+        ph = ",".join("?" for _ in codes)
+        rows = conn.execute(
+            f"SELECT code, stat_date, net_profit FROM profit_q "
+            f"WHERE code IN ({ph}) AND stat_date <= ? ORDER BY code, stat_date",
+            (*codes, d)).fetchall()
+        by = {}
+        for code, sd, np0 in rows:
+            by.setdefault(code, []).append(np0)
+        out = {}
+        for code, seq in by.items():
+            seq = [x for x in seq if x is not None]
+            if len(seq) < 9:        # 需 t + t-4 + 8 个历史意外
+                out[code] = None
+                continue
+            t, t4 = seq[-1], seq[-5]
+            if t4 in (None, 0, 0.0):
+                out[code] = None
+                continue
+            surprise = (t - t4)
+            hist = []
+            for i in range(len(seq) - 9, len(seq) - 1):
+                if i - 4 >= 0 and seq[i - 4] not in (None, 0, 0.0):
+                    hist.append(abs(seq[i] - seq[i - 4]))
+            sigma = pstdev(hist) if len(hist) > 1 else 0.0
+            out[code] = (surprise / sigma) if sigma > 0 else None
+        return out
+    except Exception:
+        return {}
+
+
+def _recent_announce(date, codes, conn, window=60):
+    """近期有盈余公告的股票集合(量化代理"超预期/业绩大增"事件池)。
+    取 code 在 date 前最新 pub_date, 距今 window 自然日内即视为"近期披露"(财报黄金期)。
+    返回 set(code)。"""
+    import datetime as _dt
+    try:
+        d = str(date)[:10]
+        ph = ",".join("?" for _ in codes)
+        rows = conn.execute(
+            f"SELECT code, MAX(pub_date) FROM profit_q "
+            f"WHERE code IN ({ph}) AND pub_date IS NOT NULL AND pub_date<>'' AND pub_date <= ? "
+            f"GROUP BY code",
+            (*codes, d)).fetchall()
+        recent = set()
+        for code, pd in rows:
+            if not pd:
+                continue
+            try:
+                days = (_dt.date.fromisoformat(d) - _dt.date.fromisoformat(pd[:10])).days
+                if 0 <= days <= window:
+                    recent.add(code)
+            except Exception:
+                pass
+        return recent
+    except Exception:
+        return set()
+
+
+def _high52_score(ctx, date, codes, window=252):
+    """52周新高距离因子(突破动量) —— 复现国信两篇研报共用的"靠近/突破52周最高价"alpha。
+    对每只候选取 [date 前 window 日收盘价序列], 计算 (今收 - window内最高收)/最高收:
+      值越大→越接近/突破52周高位(强势突破动量); 值域约 [-1, +ε]; None=数据不足。
+    仅当 weights 含 'high52'>0 时调用。返回 {code: score}。
+    注意: 这是"突破强度"代理, 非文章核心的"披露前黄金期"择时(缺预约披露日, 无法复现)。"""
+    out = {}
+    for code in codes:
+        try:
+            closes = ctx.close(code, window)
+            if not closes or len(closes) < max(60, window // 3):
+                out[code] = None
+                continue
+            hi = max(closes[:-1]) if len(closes) > 1 else closes[0]
+            cur = closes[-1]
+            if hi and hi > 0 and cur is not None:
+                out[code] = (cur - hi) / hi
+            else:
+                out[code] = None
+        except Exception:
+            out[code] = None
+    return out
+
+
 def _cap_segment_pool(ctx, pool, segment, cap_known_only=False):
     """按总市值分位把可投池切成不同"市值段", 让各策略从不同子池选股 → 操作真正岔开。
 
@@ -281,6 +371,20 @@ def select(ctx, date, account, params, strategy_id, config):
         pass
     # 个股行业地位因子(可回测的'新闻/行业地位'代理): 龙头加分
     ind_lead_score = _industry_leadership(cand, _ind)
+    # 【事件驱动择时门控 — 超预期/成长近似】仅当 params.event_pool 启用:
+    # 候选限为"近期有盈余公告(pub_date<=date 且距今<=event_window 自然日) 且 SUE>0" 的票,
+    # 量化代理国信"分析师全部调升/研报标题超预期/业绩大增" 事件池(我们无分析师文本数据)。
+    # 同时预计算 sue_sc 供下方打分(若 weights 含 'sue')。
+    sue_sc = _sue_score(date, _cc, ctx.conn) if (w.get("sue") or params.get("event_pool")) else {}
+    if params.get("event_pool"):
+        _win = int(params.get("event_window", 60))
+        _rec = _recent_announce(date, _cc, ctx.conn, _win)
+        _gate = {c for c in _cc if c in _rec and (sue_sc.get(c) or 0) > 0}
+        if _gate:
+            _cc = [c for c in _cc if c in _gate]
+            cand = [c for c in cand if c[0] in _gate]
+    # 52周新高距离因子(突破动量)排名: 仅当 weights 含 high52 时计算
+    high52_sc = _high52_score(ctx, date, _cc) if w.get("high52") else {}
     # 成长因子(盈利同比 / 同比加速度)排名: 仅当 weights 含 growth 时计算
     # (默认权重不含, 不影响 s4/s8/s14/s15 等旧策略)。growth_mode 决定 yoy/accel。
     grow_score = _growth_score(date, _cc, ctx.conn,
@@ -331,6 +435,12 @@ def select(ctx, date, account, params, strategy_id, config):
     # 成长(盈利同比)排名: 越高名次越前; 缺失者排末尾
     grow_rank = {code: i for i, code in enumerate(
         sorted(grow_score, key=lambda x: -(grow_score.get(x) or -9e9)))} if grow_score else {}
+    # SUE(标准化预期外盈利)排名: 越高名次越前; 缺失者排末尾
+    sue_rank = {code: i for i, code in enumerate(
+        sorted(_cc, key=lambda x: -(sue_sc.get(x) or -9e9)))} if sue_sc else {}
+    # 52周新高距离排名: 越接近/突破高位名次越前; 缺失者排末尾
+    high52_rank = {code: i for i, code in enumerate(
+        sorted(_cc, key=lambda x: -(high52_sc.get(x) or -9e9)))} if high52_sc else {}
 
     def _score(c):
         """按各因子名次加权打分(名次越小越优); 修复原 _w(code) 闭包误用最后一只候选的 bug。
@@ -343,6 +453,8 @@ def select(ctx, date, account, params, strategy_id, config):
                 + w.get("news", 0.0) * news_rank.get(code, len(keep))
                 + w.get("industry", 0.0) * ind_lead_rank.get(code, len(keep))
                 + w.get("growth", 0.0) * grow_rank.get(code, len(keep))
+                + w.get("sue", 0.0) * sue_rank.get(code, len(keep))
+                + w.get("high52", 0.0) * high52_rank.get(code, len(keep))
                 + w.get("cap", 0.0) * cap_rank.get(code, len(keep))
                 + w.get("value", 0.0) * val_rank.get(code, len(keep))
                 + w.get("momentum", 0.0) * mom_rank.get(code, len(keep)))

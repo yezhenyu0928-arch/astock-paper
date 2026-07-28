@@ -67,7 +67,13 @@ jobs:
                   c = sqlite3.connect("db/market.sqlite")
                   fund = c.execute("SELECT COUNT(DISTINCT code) FROM fundamental").fetchone()[0]
                   mb = c.execute("SELECT COUNT(*) FROM index_members WHERE index_code='mainboard'").fetchone()[0]
-                  if fund >= 600 and mb >= 800:
+                  try:
+                      pq = c.execute("SELECT COUNT(*) FROM profit_q").fetchone()[0]
+                  except Exception:
+                      pq = 0
+                  # 2026-07-28: 新增 profit_q 覆盖度校验——云端必须拥有 SUE 因子数据(profit_q 来自本地 baostock 抓取后入种子库,
+                  # 海外 Runner 连不上 baostock, 故只能靠 db-seed 种子库还原)。旧缓存库无 profit_q 时强制整库还原。
+                  if fund >= 600 and mb >= 800 and pq >= 1000:
                       need = 0
                   c.close()
               except Exception:

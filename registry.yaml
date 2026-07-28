@@ -1618,3 +1618,148 @@ s37_earnings_accel@v1:
     weights: {dividend: 0.0, low_vol: 0.05, roe: 0.15, valuation: 0.15, cap: 0.10, value: 0.10, momentum: 0.15, growth: 0.30}
   universe: dynamic
   rebalance: monthly
+
+s38_earnings_event@v1:
+  class: strategies.ref_strategies.RefEarningsEvent
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 复现国信《超预期投资全攻略》44.9%:事件驱动择时(近期正SUE公告池)+SUE因子主导,月频30只
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 30
+    max_per_industry: 3
+    low_vol_pct: 0.50
+    cap_tilt: True
+    value_tilt: False
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    event_pool: true
+    event_window: 60
+    stop_pct: 0.15
+    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.10, valuation: 0.0, cap: 0.15, value: 0.0, momentum: 0.20, growth: 0.0, sue: 0.45}
+  universe: dynamic
+  rebalance: monthly
+
+s39_earnings_event50@v1:
+  class: strategies.ref_strategies.RefEarningsEvent50
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 复现国信《成长图谱》44.3%稳健版:事件驱动择时+SUL/质量/动量,月频50只(更稳)
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 3
+    roe_min: 0.08
+    hold_n: 50
+    max_per_industry: 3
+    low_vol_pct: 0.50
+    cap_tilt: False
+    value_tilt: True
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    event_pool: true
+    event_window: 60
+    stop_pct: 0.15
+    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.15, valuation: 0.10, cap: 0.10, value: 0.10, momentum: 0.20, growth: 0.0, sue: 0.35}
+  universe: dynamic
+  rebalance: monthly
+
+s40_sue_momentum@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 冲刺20%+: SUE连续打分(无事件门控,避免披露后alpha衰减)主导+小盘+动量,月频30只
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 30
+    max_per_industry: 3
+    low_vol_pct: 0.50
+    cap_tilt: True
+    value_tilt: False
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.15
+    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.10, valuation: 0.0, cap: 0.15, value: 0.0, momentum: 0.20, growth: 0.0, sue: 0.45}
+  universe: dynamic
+  rebalance: monthly
+
+s41_sue_high52@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 冲刺20%+: 52周新高突破(high52)+SUE+动量+质量 复合(近似研报"靠近高位"alpha),月频20只
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 3
+    roe_min: 0.08
+    hold_n: 20
+    max_per_industry: 3
+    low_vol_pct: 0.50
+    cap_tilt: True
+    value_tilt: True
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -0.10
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.15
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.10, valuation: 0.05, cap: 0.10, value: 0.05, momentum: 0.20, growth: 0.0, sue: 0.20, high52: 0.25}
+  universe: dynamic
+  rebalance: monthly
+
+s42_sue_enriched@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 冲刺20%+(第3次尝试): 在达标基线 s29(小盘+估值+价值+动量,15.9%)上叠加 SUE+52周高,月频10只
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.75
+    cap_tilt: True
+    value_tilt: True
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.15, cap: 0.30, value: 0.15, momentum: 0.20, growth: 0.0, sue: 0.10, high52: 0.10}
+  universe: dynamic
+  rebalance: monthly
+
