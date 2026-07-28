@@ -1,0 +1,46 @@
+name: diag
+# 一次性云端 DB 体检: 定位"新策略云端回测全空仓"根因(疑似 fundamental 历史覆盖为空/极薄)。
+# 复用 backtest prep 存的 db-<run_id> 缓存(restore-keys: db- 前缀取最新), 跑 diag_cloud.py 并把报告 commit 回 main。
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'diag_cloud.py'
+      - '.github/workflows/diag.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: diag
+  cancel-in-progress: true
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install -r requirements.txt
+
+      - name: restore DB cache (最新)
+        uses: actions/cache/restore@v4
+        with:
+          path: db/market.sqlite
+          key: db-nonexistent-force-restore-keys
+          restore-keys: |
+            db-
+
+      - name: run diagnosis
+        run: python diag_cloud.py
+
+      - name: commit report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add reports/diag_cloud_db.md
+          git diff --cached --quiet || git commit -m "diag: cloud DB 体检报告 [ci]"
+          git pull --rebase origin main || true
+          git push origin main
