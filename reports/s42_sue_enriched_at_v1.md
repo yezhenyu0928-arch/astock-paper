@@ -1,18 +1,18 @@
 # s42_sue_enriched@v1 五关验证报告
 
 - 资金档:100,000 元(按用户 config 实跑,不用大资金美化)
-- 生成日:2026-07-28  基准:sh510300
+- 生成日:2026-07-29  基准:sh510300
 - 参数:{'rebalance': 'monthly', 'cap_segment': 'small', 'min_dividend_yield': 0.0, 'dividend_years': 0, 'roe_years': 0, 'roe_min': 0.0, 'hold_n': 10, 'max_per_industry': 3, 'low_vol_pct': 0.75, 'cap_tilt': True, 'value_tilt': True, 'momentum_window': 252, 'momentum_skip': 21, 'momentum_min': -1.0, 'regime_downsize': False, 'regime_good': 1.0, 'regime_mid': 1.0, 'regime_bad': 1.0, 'stop_pct': 0.2, 'weights': {'dividend': 0.0, 'low_vol': 0.05, 'roe': 0.05, 'valuation': 0.15, 'cap': 0.3, 'value': 0.15, 'momentum': 0.2, 'growth': 0.0, 'sue': 0.1, 'high52': 0.1}}
 
 > 免责:模拟/历史表现不代表未来。成交按次日开盘价+真实费用滑点(SPEC_FILL)建模,故意保守。
 
 ## 主回测(2022-01-01 ~ 今)
-- 累计96.5% 年化16.6% 回撤14.6% Calmar1.14 Sharpe1.07 胜率52.2% 超额+101.2% (1105日)
+- 累计97.9% 年化16.8% 回撤14.6% Calmar1.15 Sharpe1.09 胜率52.2% 超额+105.2% (1106日)
 
 ## ①样本内(2019-2023)/样本外(2024-今) Calmar 对比
 - 样本内:累计87.8% 年化14.0% 回撤18.1% Calmar0.77 Sharpe0.93 胜率41.5% 超额+71.8% (1214日)
-- 样本外:累计67.4% 年化23.2% 回撤14.2% Calmar1.64 Sharpe1.37 胜率53.5% 超额+29.7% (621日)
-- Calmar 保持率:212%
+- 样本外:累计68.6% 年化23.6% 回撤14.2% Calmar1.66 Sharpe1.39 胜率53.6% 超额+34.6% (622日)
+- Calmar 保持率:215%
 
 ## ②滚动前推(逐年分段,考察稳定性)
 - 2019: 累计0.0% 年化0.0% 回撤0.0% Calmar0.00 Sharpe0.00 胜率0.0% 超额-35.8% (244日)
@@ -25,7 +25,7 @@
 ## ③参数±20%扰动
 
 ## ④成本双重加压(滑点×2 冲击×2 参与量×0.5)
-- 加压后:累计91.5% 年化16.0% 回撤14.8% Calmar1.08 Sharpe1.03 胜率51.9% 超额+96.3% (1105日)
+- 加压后:累计93.0% 年化16.2% 回撤14.8% Calmar1.09 Sharpe1.04 胜率51.9% 超额+100.3% (1106日)
 - 收益衰减:+4.9%
 
 ## ⑤牛熊震荡分段
