@@ -133,6 +133,24 @@ class SqlContext:
                     return False
         return True
 
+    def is_tradable_permissive(self, code: str, date: str) -> bool:
+        """全 A 可交易判定: 仅排除停牌/退市/ST/上市<60日, 不卡主板/科创/创业/北交板块。
+        供 all_a_universe 使用(默认 is_tradable 会按 config.exclude_star_chinext 排除科创/创业,
+        不符合'全 A 含科创/创业/北交'诉求)。"""
+        date = util.to_date_str(date)
+        b = self.bar(code, date)
+        if b is None or b.get("is_suspended"):
+            return False
+        s = self._sec_info(code)
+        if s:
+            if s.get("status") in ("D", "ST"):
+                return False
+            ld = s.get("list_date")
+            if ld:
+                if (util.to_date_str(date) < ld) or _days_between(ld, date) < 60:
+                    return False
+        return True
+
     def avg_amount(self, code: str, n: int) -> float:
         return self._avg_col(code, n, 6, "amount")
 

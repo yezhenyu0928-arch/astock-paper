@@ -1978,6 +1978,102 @@ s49_sue_enriched@v7:
   rebalance: monthly
 
 # ============================================================================
+# 2026-07-28 全 A 股策略冲刺(含科创688/创业300·301/北交8xx·4xx·920)
+# 因 profit_q(SUE) 仅覆盖主板600, 全A改用 52周新高(high52)+动量+小盘(cap) 为主因子
+# (与国信两篇研报"靠近/突破52周高位"alpha 一致), 不依赖缺失的 SUE。
+# 池 pool_index: all_a(由 backfill_all_a.py 构建 index_members['all_a']),
+#   经 common.all_a_universe(板块无关 tradability + 流动性门槛)过滤, 不卡主板前缀。
+# 全部守"单策略最大回撤≤年化收益率"铁律; 年化>10% 进赛马(仅看板展示, 云端回测)。
+# ============================================================================
+
+s53_all_a_momentum_smallcap@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 全A①52周新高+动量+小盘: high52 0.25 + 动量 0.35 + 规模 0.20, 月频12只(小盘段)
+  params:
+    rebalance: monthly
+    pool_index: all_a
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 12
+    max_per_industry: 2
+    low_vol_pct: 0.55
+    cap_tilt: true
+    value_tilt: false
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 0.90
+    regime_bad: 0.80
+    stop_pct: 0.18
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.05, cap: 0.20, value: 0.05, momentum: 0.35, growth: 0.0, sue: 0.0, high52: 0.25}
+  universe: dynamic
+  rebalance: monthly
+
+s54_all_a_industry_mom@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 全A②行业动量+动量+小盘: 行业动量(ind_mom)0.30 + 动量 0.25 + 规模 0.10, 月频12只
+  params:
+    rebalance: monthly
+    pool_index: all_a
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 12
+    max_per_industry: 3
+    low_vol_pct: 0.55
+    cap_tilt: true
+    value_tilt: false
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 0.90
+    regime_bad: 0.80
+    stop_pct: 0.18
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.05, cap: 0.10, value: 0.05, momentum: 0.25, growth: 0.0, sue: 0.0, high52: 0.10, ind_mom: 0.30}
+  universe: dynamic
+  rebalance: monthly
+
+s55_all_a_value_quality@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 全A③价值质量+动量+小盘(更防御): 价值0.20+ROE0.15+动量0.30+低波0.10, 月频15只
+  params:
+    rebalance: monthly
+    pool_index: all_a
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 3
+    roe_min: 0.0
+    hold_n: 15
+    max_per_industry: 2
+    low_vol_pct: 0.55
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 0.90
+    regime_bad: 0.80
+    stop_pct: 0.18
+    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.15, valuation: 0.15, cap: 0.10, value: 0.15, momentum: 0.30, growth: 0.0, sue: 0.0, high52: 0.05}
+  universe: dynamic
+  rebalance: monthly
+
+# ============================================================================
 # 2026-07-28 冲刺20% 第7轮(B路线: 根本性新alpha引擎, 不再在s42骨架上调参)
 # 用户拍板选B: 行业动量轮动 / 分析师盈利修正 / 其它价值质量 三条都试, 不行再选A(s42入赛马)。
 # 机制确认: 回测中 news 恒为0(实盘才接news_engine) → 分析师盈利修正路线回测不可验,

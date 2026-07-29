@@ -140,6 +140,63 @@ def main_board_universe(ctx, codes, cfg, date=None):
     return out
 
 
+def all_a_universe(ctx, codes, cfg, date=None):
+    """全 A 宇宙(主板+科创+创业+北交): 仅按 tradability(非停牌/ST/退市/上市≥60日)
+    + 上市≥2年(日线长度代理) + 市值下限 + 流动性 过滤; 不卡主板前缀、不卡板块。
+    与 main_board_universe 互为替代, 供 pool_index='all_a' 的新策略使用。
+
+    设计要点:
+      - 经板块无关的 is_tradable_permissive(允许 688/300/301/北交), 规避 config.exclude_star_chinext。
+      - 上市≥2年用日线长度代理(security.list_date 仅 ETF 有数据)。
+      - 市值下限默认 0(全A要保留小盘规模溢价), 仅在 risk.min_market_cap_all_a>0 时启用。
+      - 流动性硬门槛(默认 3000万)剔除仙股/壳股/北交微盘, 防回测虚高成交。
+    """
+    if date is None:
+        date = getattr(ctx, "date", None)
+    risk = (cfg.get("risk") or {})
+    custom = (cfg.get("custom") or {})
+    min_list_days = int(custom.get("min_list_days", 480))
+    min_market_cap = float(risk.get("min_market_cap_all_a", 0))   # 默认0=不卡小盘
+    min_avg_amount = float(risk.get("min_avg_amount_all_a", 30_000_000))
+    out = []
+    for code in codes:
+        # 1) 可交易(板块无关)
+        try:
+            fn = getattr(ctx, "is_tradable_permissive", None)
+            if fn is not None:
+                if not fn(code, date):
+                    continue
+            else:
+                b = ctx.bar(code, date)
+                if b is None or b.get("is_suspended"):
+                    continue
+        except Exception:
+            continue
+        # 2) 上市≥2年(security.list_date 缺 → 用日线长度代理)
+        try:
+            if len(ctx.close(code, min_list_days)) < min_list_days:
+                continue
+        except Exception:
+            pass
+        # 3) 总市值下限(全A默认0, 不误杀小盘; 仅 risk.min_market_cap_all_a>0 时启用)
+        if min_market_cap > 0:
+            try:
+                f = ctx.fundamental(code) or {}
+                mc = f.get("market_cap")
+                if mc and mc > 0 and mc < min_market_cap:
+                    continue
+            except Exception:
+                pass
+        # 4) 日均成交额≥阈值(硬, 流动性)
+        try:
+            if date and ctx.avg_amount(code, 20) < min_avg_amount:
+                continue
+        except Exception:
+            pass
+        out.append(code)
+    return out
+
+
 def returns_over(ctx, code, windows):
     """各窗口收益率 {w: r};数据不足的窗口返回 None。r_w = close[-1]/close[-(w+1)]-1(后复权)。"""
     maxw = max(windows)

@@ -300,7 +300,10 @@ def select(ctx, date, account, params, strategy_id, config):
     pool = ctx.members(pool_index, date)
     if not pool and pool_index != POOL_INDEX:
         pool = ctx.members(POOL_INDEX, date)          # mainboard 未回填时兜底
-    pool = common.main_board_universe(ctx, pool, config, date)
+    if pool_index == "all_a":
+        pool = common.all_a_universe(ctx, pool, config, date)   # 全A宇宙(含科创/创业/北交)
+    else:
+        pool = common.main_board_universe(ctx, pool, config, date)
     pool = _cap_segment_pool(ctx, pool, params.get("cap_segment"),
                              cap_known_only=bool(params.get("cap_known_only")))
 
@@ -309,7 +312,9 @@ def select(ctx, date, account, params, strategy_id, config):
     n_pool = len(pool)
     n_no_fund = n_dy = n_div = n_roe = n_bar = 0
     for code in pool:
-        if not ctx.is_tradable(code, date):
+        # 全A池已在 all_a_universe 内做板块无关的 tradability 过滤, 此处跳过默认 is_tradable
+        # (默认 is_tradable 会按 config.exclude_star_chinext 排除科创/创业, 与全A诉求冲突)
+        if pool_index != "all_a" and not ctx.is_tradable(code, date):
             continue
         f = ctx.fundamental(code)
         if not f:

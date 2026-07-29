@@ -39,6 +39,8 @@ risk:                           # 手册v2.0纪律:年化>25% / 回撤<10% / 夏
     day_drop: 0.05              # 沪深300单日跌幅(由0.03放宽到0.05,A股单日-3%不罕见,减少误冻结)
     m20_drop: 0.10              # 20日累计跌幅
   min_avg_amount: 80000000      # 个股20日日均成交额下限(元,手册8000万,由5000万收紧)
+  min_avg_amount_all_a: 30000000  # 全A策略流动性门槛(低于主板8000万:科创/创业/北交整体成交偏小,但仍剔除微盘仙股)
+  min_market_cap_all_a: 0         # 全A策略市值门槛(0=不卡小盘,保留规模溢价;与主板80亿硬约束区分)
 
 strategies:                     # 2026-07 重构:全面个股化——下线全部ETF策略,启用纯个股策略阵容
   # ↓ ETF动量轮动(2026-07-25新增):5只ETF轮动
@@ -100,6 +102,10 @@ strategies:                     # 2026-07 重构:全面个股化——下线全�
   s40_sue_momentum@v1: false    # 弃
   s41_sue_high52@v1: false     # 弃:全窗口3.1%<10%, 实盘不用(云端回测矩阵仍强制跑以验证失败)
   s42_sue_enriched@v1: true   # ✅第6个达标:全窗口年化16.6%/回撤14.6%/超额+1.017,s29基线叠加SUE+52周高,月频10只
+  # ↓ 2026-07-28 全A冲刺(含科创/创业/北交): 待回测达标(年化>10%且回撤≤年化)后翻 true 进看板
+  s53_all_a_momentum_smallcap@v1: false   # 待定:全A动量小盘(52周新高+动量+规模)
+  s54_all_a_industry_mom@v1: false        # 待定:全A行业动量轮动
+  s55_all_a_value_quality@v1: false       # 待定:全A价值质量防御
   s4_smallcap@v2: false        # 归档:被 @v3 主板small成长版取代
   s3_ma_trend@v1: false         # 归档:被 v2 纪律化趋势版取代(v1 全期-0.8%/回撤24% whipsaw)
   s3_ma_trend@v2: false         # 归档:借鉴v1重构仍-5%/回撤18%,A股价格趋势弱,被 s3_trend_timing 择时版取代

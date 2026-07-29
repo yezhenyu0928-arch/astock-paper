@@ -25,8 +25,11 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.11' }
       - run: pip install -r requirements.txt
+      # 2026-07-29 修复: 原用 cache/restore(只还原不保存), run_news 把新闻写进 DB 后
+      # 整个更新被丢弃(job 结束不回存) → 云端新闻每天跑 2 次全是无用功, 新闻停在 07-28。
+      # 改为 daily.yml 同款 actions/cache@v4: key 唯一强制保存新版, restore-keys 前缀取回最近。
       - name: restore DB cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache@v4
         with:
           path: db/market.sqlite
           key: db-${{ github.run_id }}
