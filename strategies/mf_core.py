@@ -389,6 +389,19 @@ def select(ctx, date, account, params, strategy_id, config):
     # (默认权重不含, 不影响 s4/s8/s14/s15 等旧策略)。growth_mode 决定 yoy/accel。
     grow_score = _growth_score(date, _cc, ctx.conn,
                                 mode=params.get("growth_mode", "yoy")) if w.get("growth") else {}
+    # 行业动量(轮动)因子: 行业内候选个股动量中位数=行业相对强度, 与个股自身动量解耦
+    # (个股动量一般、但行业整体强势仍得分高)。仅当 weights 含 ind_mom 时计算, 避免无谓开销。
+    ind_mom_sc = {}
+    if w.get("ind_mom"):
+        try:
+            from collections import defaultdict as _dd
+            _im = _dd(list)
+            for c in cand:
+                _im[_ind.get(c[0]) or "未知"].append(c[7] or 0.0)
+            _med = {k: (statistics.median(v) if v else 0.0) for k, v in _im.items()}
+            ind_mom_sc = {c[0]: _med.get(_ind.get(c[0]) or "未知", 0.0) for c in cand}
+        except Exception:
+            ind_mom_sc = {}
     _ban_n, _ = news_guard.guard_candidates(date, _cc, ctx.conn, config)
     _ban_i = news_guard.guard_industry(date, _cc, ctx.conn, config, _ind)
     _ban_s = {c for c in _cc if news_guard.structural_ban(date, c, ctx)[0]}
@@ -441,6 +454,9 @@ def select(ctx, date, account, params, strategy_id, config):
     # 52周新高距离排名: 越接近/突破高位名次越前; 缺失者排末尾
     high52_rank = {code: i for i, code in enumerate(
         sorted(_cc, key=lambda x: -(high52_sc.get(x) or -9e9)))} if high52_sc else {}
+    # 行业动量(轮动)排名: 行业内候选个股动量均值=行业相对强度; 越高名次越前
+    ind_mom_rank = {code: i for i, code in enumerate(
+        sorted(_cc, key=lambda x: -(ind_mom_sc.get(x) or -9e9)))} if ind_mom_sc else {}
 
     def _score(c):
         """按各因子名次加权打分(名次越小越优); 修复原 _w(code) 闭包误用最后一只候选的 bug。
@@ -455,6 +471,7 @@ def select(ctx, date, account, params, strategy_id, config):
                 + w.get("growth", 0.0) * grow_rank.get(code, len(keep))
                 + w.get("sue", 0.0) * sue_rank.get(code, len(keep))
                 + w.get("high52", 0.0) * high52_rank.get(code, len(keep))
+                + w.get("ind_mom", 0.0) * ind_mom_rank.get(code, len(keep))
                 + w.get("cap", 0.0) * cap_rank.get(code, len(keep))
                 + w.get("value", 0.0) * val_rank.get(code, len(keep))
                 + w.get("momentum", 0.0) * mom_rank.get(code, len(keep)))

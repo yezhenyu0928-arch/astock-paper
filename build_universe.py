@@ -19,13 +19,56 @@
 """
 import sys
 import io
+import time
 import argparse
 import logging
 
+
+def _log(msg):
+    """安全日志: 写 stderr, 绝不因 I/O 失败而崩(规避 CI 下 stdout 已关闭抛 ValueError)。"""
+    try:
+        sys.stderr.write(str(msg) + "\n")
+        sys.stderr.flush()
+    except Exception:
+        pass
+
+
+def _safe(e):
+    return repr(e)[:60]
+
+
+def _ak_retry(fn, tries=3, base=2.0):
+    """akshare 在 GitHub Actions 海外 IP 常遇 ConnectionReset, 加重试退避。"""
+    last = None
+    for i in range(tries):
+        try:
+            return fn()
+        except Exception as e:
+            last = e
+            if i < tries - 1:
+                time.sleep(base * (2 ** i))
+    raise last
+
+
+def _static_mainboard():
+    """不依赖网络的绝对兜底: 所有合法主板 6 位码(沪 600/601/603/605, 深 000/001/002/003)。"""
+    out = []
+    for p in ("600", "601", "603", "605"):
+        for i in range(1000):
+            out.append((f"{p}{i:03d}", ""))
+    for p in ("000", "001", "002", "003"):
+        for i in range(1000):
+            out.append((f"{p}{i:03d}", ""))
+    return out
+
+
 try:
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
-    pass
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 logging.basicConfig(level=logging.ERROR)
 
@@ -48,38 +91,18 @@ def _with_prefix(code6: str) -> str:
 
 def _base_mainboard(conn=None):
     """全A代码+名称 → 主板基础池 [(code6, name)]。
-    多源兜底(海外 Runner 对国内端点常不可达, 曾致 backtest prep 崩溃):
-      主源 akshare 代码表 → 东财实时快照(与 _snapshot 同源) → 本地库已有日线/成分推导。
-    任一成功即返回; 全失败返回空列表(**不抛异常**, 避免 prep 的 ensure-full-DB 步骤整体失败)。"""
-    # 1) 主源: akshare 代码表(国内端点)
-    try:
-        import akshare as ak
-        df = ak.stock_info_a_code_name()
-        out = [(str(r.code).zfill(6), str(r.name))
-               for r in df.itertuples(index=False)
-               if str(r.code).zfill(6)[:3] in MAIN_PREFIX
-               and not any(b in str(r.name) for b in _BAD_NAME)]
-        if out:
-            print(f"== 主板基础池(主源 akshare): {len(out)} 只 ==", flush=True)
-            return out
-    except Exception as e:
-        print(f"  [降级] stock_info_a_code_name 不可达({repr(e)[:60]}), 试东财快照", flush=True)
-    # 2) 兜底: 东财实时快照(含全市场代码; 与 _snapshot 同源, 海外多可达)
-    try:
-        snap = _snapshot()
-        if snap:
-            out = [(c, "") for c in snap.keys() if c[:3] in MAIN_PREFIX]
-            if out:
-                print(f"== 主板基础池(东财快照兜底): {len(out)} 只 ==", flush=True)
-                return out
-    except Exception as e:
-        print(f"  [降级] 东财快照兜底不可达({repr(e)[:60]}), 试本地库", flush=True)
-    # 3) 最后兜底: 本地库已有日线/成分中挑主板前缀
+    多源兜底(海外 GitHub Actions Runner 对国内端点常 ConnectionReset, 曾致 backfill 崩溃):
+      主源: 本地库已有 daily_bar 主板代码(CI cache 命中时最快最稳, 零网络依赖)
+      → akshare 代码表(国内端点, 加重试, 仅作刷新/补充, 失败不致命)
+      → 东财实时快照(与 _snapshot 同源)
+      → 内置静态主板前缀列表(完全离线兜底)
+    任一成功即返回; 全失败返回空列表(**不抛异常**, 避免 backfill 步骤整体 exit 1)。"""
+    # 1) 主源: 本地库已有 daily_bar 主板代码(CI 常态有 cache, 最稳)
     try:
         c = conn if conn is not None else get_conn()
         rows = c.execute(
             "SELECT DISTINCT code FROM daily_bar "
-            "WHERE code LIKE 'sh6%' OR code LIKE 'sz0%' OR code LIKE 'sz00%'").fetchall()
+            "WHERE code LIKE 'sh6%' OR code LIKE 'sz0%'").fetchall()
         out = []
         for (code,) in rows:
             c6 = code[2:] if code[:2] in ("sh", "sz") else code
@@ -88,11 +111,39 @@ def _base_mainboard(conn=None):
         if conn is None:
             c.close()
         if out:
-            print(f"== 主板基础池(本地库兜底): {len(out)} 只 ==", flush=True)
+            _log(f"== 主板基础池(本地库兜底): {len(out)} 只 ==")
             return out
     except Exception as e:
-        print(f"  [降级] 本地库兜底失败({repr(e)[:60]})", flush=True)
-    print("  [警告] 所有源均不可达, 主板基础池为空(本回合无主板成分)", flush=True)
+        _log(f"  [降级] 本地库主板池失败({_safe(e)}), 试 akshare")
+    # 2) 次选: akshare 代码表(国内端点, CI 常 reset → 加重试, 失败不致命)
+    try:
+        import akshare as ak
+        df = _ak_retry(lambda: ak.stock_info_a_code_name())
+        out = [(str(r.code).zfill(6), str(r.name))
+               for r in df.itertuples(index=False)
+               if str(r.code).zfill(6)[:3] in MAIN_PREFIX
+               and not any(b in str(r.name) for b in _BAD_NAME)]
+        if out:
+            _log(f"== 主板基础池(akshare): {len(out)} 只 ==")
+            return out
+    except Exception as e:
+        _log(f"  [降级] akshare 不可达({_safe(e)}), 试东财快照")
+    # 3) 兜底: 东财实时快照(含全市场代码; 与 _snapshot 同源)
+    try:
+        snap = _snapshot()
+        if snap:
+            out = [(c, "") for c in snap.keys() if c[:3] in MAIN_PREFIX]
+            if out:
+                _log(f"== 主板基础池(东财快照兜底): {len(out)} 只 ==")
+                return out
+    except Exception as e:
+        _log(f"  [降级] 东财快照兜底不可达({_safe(e)})")
+    # 4) 绝对兜底: 内置静态主板前缀列表(完全离线)
+    out = _static_mainboard()
+    if out:
+        _log(f"== 主板基础池(静态兜底): {len(out)} 只 ==")
+        return out
+    _log("  [警告] 所有源均不可达, 主板基础池为空(本回合无主板成分)")
     return []
 
 
@@ -102,7 +153,7 @@ def _snapshot():
         import akshare as ak
         df = ak.stock_zh_a_spot_em()
     except Exception as e:
-        print(f"  [降级] 实时快照不可达({repr(e)[:60]}) → 本次不做流动性筛选", flush=True)
+        _log(f"  [降级] 实时快照不可达({repr(e)[:60]}) → 本次不做流动性筛选")
         return None
     m = {}
     for r in df.itertuples(index=False):
@@ -123,7 +174,7 @@ def build(min_amount=1.0e8, min_mcap=5.0e9, target=1300, conn=None):
     init_db(conn)
 
     base = _base_mainboard(conn=conn)
-    print(f"== 主板基础池(前缀+去ST): {len(base)} 只 ==", flush=True)
+    _log(f"== 主板基础池(前缀+去ST): {len(base)} 只 ==")
 
     snap = _snapshot()
     chosen = []  # [(code6, name)]
@@ -141,12 +192,12 @@ def build(min_amount=1.0e8, min_mcap=5.0e9, target=1300, conn=None):
         if target and len(scored) > target:
             scored = scored[:target]
         chosen = [(c, n) for c, n, _, _ in scored]
-        print(f"== 流动性筛选(成交额≥{min_amount/1e8:.1f}亿 & 市值≥{min_mcap/1e8:.0f}亿): "
-              f"{len(chosen)} 只入选 ==", flush=True)
+        _log(f"== 流动性筛选(成交额≥{min_amount/1e8:.1f}亿 & 市值≥{min_mcap/1e8:.0f}亿): "
+              f"{len(chosen)} 只入选 ==")
     else:
         chosen = base
-        print(f"== [降级] 未做流动性筛选, 主板基础池全量入选: {len(chosen)} 只 "
-              f"(云端回填时会以快照重筛) ==", flush=True)
+        _log(f"== [降级] 未做流动性筛选, 主板基础池全量入选: {len(chosen)} 只 "
+              f"(云端回填时会以快照重筛) ==")
 
     # 写入 index_members(先删后插, 幂等)。in_date 统一置早期日(免费源无历史剔除日,
     # 存在幸存者偏差, 与 fetch_index_members 既有口径一致); out_date=NULL 表示仍在成分。
@@ -157,7 +208,7 @@ def build(min_amount=1.0e8, min_mcap=5.0e9, target=1300, conn=None):
         "VALUES (?, ?, '2018-01-01', NULL)",
         [(MAINBOARD_INDEX, c) for c in codes])
     conn.commit()
-    print(f"== 写入 index_members['{MAINBOARD_INDEX}']: {len(codes)} 只 ==", flush=True)
+    _log(f"== 写入 index_members['{MAINBOARD_INDEX}']: {len(codes)} 只 ==")
 
     if own:
         conn.close()

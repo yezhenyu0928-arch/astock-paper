@@ -153,6 +153,14 @@ _RISK_RELAX = {
         "time_stop_exempt": True,
         "stop_override": 0.30,
     },
+    "s43": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.30,
+    },
 }
 
 

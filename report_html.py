@@ -29,6 +29,59 @@ BUY_BAND = (0.99, 1.02)            # 买入跟单价格带:参考价×[0.99, 1.0
 
 # 策略介绍字典(卡A A5;S4 如实更名;新策略在此追加,未登记 sid 用兜底文案)
 STRAT_META = {
+    # ===== 2026-07-28 当前参赛阵容(6只, config.yaml strategies 均置 true) =====
+    "s26_microcap@v1": {
+        "name": "微盘规模因子", "risk": "★★★★☆ 中高", "fit": "≥10万",
+        "tagline": "复现规模因子（微盘溢价）：以市值规模(cap)为主导(0.50)+动量增强(0.20)+低波(0.05)+ROE(0.10)，月频10只，小盘段分散持仓吃规模溢价。主板硬约束。",
+        "factors": [("规模因子(市值, cap)", "50%"), ("动量(12-1月)", "20%"), ("ROE质量排名", "10%"),
+                    ("低波动排名(250日)", "5%"), ("估值分位(valuation)", "10%"), ("深度价值倾斜(value)", "5%"),
+                    ("持仓控制", "月频10只·单行业≤3·低波后50%·regime防御关闭"),
+                    ("风险过滤", "跟踪止损25%")],
+        "rebalance": "每月最后交易日(月频)调仓 · 持10只 · 池=主板小盘段"},
+    "s27_dividend_lowvol@v1": {
+        "name": "红利低波", "risk": "★☆☆☆☆ 低", "fit": "≥3万",
+        "tagline": "复现红利低波：股息率(0.40)+低波动(0.25)主导+ROE质量(0.15)+估值(0.10)+深度价值(0.10)，大盘段10只，纯防御型。主板硬约束。",
+        "factors": [("股息率排名", "40%"), ("低波动排名(250日)", "25%"), ("ROE质量排名", "15%"),
+                    ("估值分位(valuation)", "10%"), ("深度价值倾斜(value)", "10%"),
+                    ("入选门槛", "股息率≥3% + 连续3年分红 + 连续3年ROE>8%"),
+                    ("持仓控制", "月频10只·单行业≤3·低波后40%"),
+                    ("风险过滤", "跟踪止损15%")],
+        "rebalance": "每月最后交易日(月频)调仓 · 持10只 · 池=主板大盘段"},
+    "s29_smallcap_select@v1": {
+        "name": "国信小盘精选", "risk": "★★★★☆ 中高", "fit": "≥10万",
+        "tagline": "复现国信《聚焦小盘股》：小市值池+复合因子(规模cap 0.45主导+估值0.20+反转/价值0.15+动量0.15+低波0.05)，月频10只。主板硬约束。",
+        "factors": [("规模因子(市值, cap)", "45%"), ("估值分位(valuation)", "20%"), ("深度价值倾斜(value)", "15%"),
+                    ("动量(12-1月)", "15%"), ("低波动排名(250日)", "5%"),
+                    ("持仓控制", "月频10只·单行业≤3·低波后75%·regime防御关闭"),
+                    ("风险过滤", "跟踪止损20%")],
+        "rebalance": "每月最后交易日(月频)调仓 · 持10只 · 池=主板小盘段"},
+    "s32_roe_quality@v1": {
+        "name": "国信ROE质量", "risk": "★★★★☆ 中高", "fit": "≥10万",
+        "tagline": "复现国信《基于ROE高质量选股》：ROE质量(0.50)主导+估值(0.15)+深度价值(0.15)+动量(0.15)+低波(0.05)，全市场段10只，质量因子溢价。主板硬约束。",
+        "factors": [("ROE质量排名", "50%"), ("估值分位(valuation)", "15%"), ("深度价值倾斜(value)", "15%"),
+                    ("动量(12-1月)", "15%"), ("低波动排名(250日)", "5%"),
+                    ("入选门槛", "ROE≥8%"),
+                    ("持仓控制", "月频10只·单行业≤3·低波后75%·regime防御关闭"),
+                    ("风险过滤", "跟踪止损20%")],
+        "rebalance": "每月最后交易日(月频)调仓 · 持10只 · 池=主板全段"},
+    "s37_earnings_accel@v1": {
+        "name": "国信盈利加速", "risk": "★★★★☆ 中高", "fit": "≥10万",
+        "tagline": "复现国信《超预期投资全攻略》：净利润同比加速度(growth/accel≈盈余惊喜,0.30)主导+动量(0.15)+ROE质量(0.15)+估值(0.15)+规模(0.10)+价值(0.10)+低波(0.05)，小盘段8只。主板硬约束。",
+        "factors": [("盈利加速度(growth accel)", "30%"), ("动量(12-1月)", "15%"), ("ROE质量排名", "15%"),
+                    ("估值分位(valuation)", "15%"), ("规模因子(cap)", "10%"), ("深度价值倾斜(value)", "10%"),
+                    ("低波动排名(250日)", "5%"), ("入选门槛", "连续3年ROE>8%"),
+                    ("持仓控制", "月频8只·单行业≤2·regime防御关闭"),
+                    ("风险过滤", "跟踪止损20%")],
+        "rebalance": "每月最后交易日(月频)调仓 · 持8只 · 池=主板小盘段"},
+    "s42_sue_enriched@v1": {
+        "name": "国信SUE+52周新高强化", "risk": "★★★★☆ 中高", "fit": "≥10万",
+        "tagline": "冲刺20%达标骨架：在国信小盘精选(s29)上叠加 SUE标准化预期外盈利(0.10)+52周新高距离(high52,0.10)，保留规模cap(0.30)主导+估值(0.15)+价值(0.15)+动量(0.20)+低波(0.05)。月频10只。主板硬约束。全窗口年化16.6%（2024+样本外23.2%）。",
+        "factors": [("规模因子(cap)", "30%"), ("动量(12-1月)", "20%"), ("估值分位(valuation)", "15%"),
+                    ("深度价值倾斜(value)", "15%"), ("SUE标准化预期外盈利(sue)", "10%"), ("52周新高距离(high52)", "10%"),
+                    ("低波动排名(250日)", "5%"), ("ROE质量排名", "5%"),
+                    ("持仓控制", "月频10只·单行业≤3·低波后75%·regime防御关闭"),
+                    ("风险过滤", "跟踪止损20%")],
+        "rebalance": "每月最后交易日(月频)调仓 · 持10只 · 池=主板小盘段"},
     "s2_etf@v1": {
         "name": "ETF动量轮动", "risk": "★★☆☆☆ 中低", "fit": "≥1万",
         "tagline": "每周持有近期最强的一只宽基/商品ETF，市场整体走弱时自动切入国债ETF避险。macro_score调节仓位：紧缩期60%、扩张期满仓。",
@@ -1470,17 +1523,13 @@ def _enabled_strategy_ids():
 
 
 def _methodology_toc():
-    """目录锚点导航：当前参赛策略在前，已下线/归档策略标注后置。"""
+    """目录锚点导航：仅展示当前 config.yaml 启用（参赛）策略，已下线/归档策略不展示。"""
     enabled = _enabled_strategy_ids()
-    live_items, retired_items = "", ""
+    items = ""
     for sid, meta in sorted(STRAT_META.items()):
-        tag = "" if (enabled is None or sid in enabled) else "（已下线）"
-        line = f'<a href="#{sid}">{meta["name"]}{tag}</a>\n'
         if enabled is not None and sid not in enabled:
-            retired_items += line
-        else:
-            live_items += line
-    items = live_items + retired_items
+            continue  # 已下线/归档策略不在看板展示
+        items += f'<a href="#{sid}">{meta["name"]}</a>\n'
     items += '<a href="#risk-model">因子与风险模型</a>\n'
     return f'<div class="toc"><b>📑 目录</b>\n{items}</div>'
 
@@ -1525,6 +1574,24 @@ def _methodology_strat_block(sid):
                         "<b>风险提示</b>：集中持仓1-2只，赛道错误时回撤大；"
                         "GLM政策信号只在实盘可得，回测退化为动量骨架；"
                         "建议作为观察级策略，实盘验证后再给真金白银。"),
+        "s26_microcap@v1": ("<b>适用环境</b>：规模因子溢价周期（小盘整体占优、流动性充裕的震荡/慢牛市）。"
+                            "<br><b>风险提示</b>：小市值天然波动大、流动性风险高；微盘在极端行情可能连续跌停无法按价成交；"
+                            "免费数据池为沪深300内中小盘段，非真正微盘精选，因子暴露偏向'大盘内选中小'。"),
+        "s27_dividend_lowvol@v1": ("<b>适用环境</b>：利率下行期或防御市（市场偏弱、资金避险），高股息+低波动提供下行保护。"
+                                   "<br><b>风险提示</b>：高股息陷阱——股价暴跌导致股息率虚高；利率上行期高股息股相对吸引力下降；"
+                                   "大盘段弹性较低，牛市跑输成长策略。"),
+        "s29_smallcap_select@v1": ("<b>适用环境</b>：风险偏好回升、小市值因子溢价的结构性行情。"
+                                   "<br><b>风险提示</b>：小盘天然波动大、流动性风险；规模因子在风格切换（如2021核心资产行情）时回撤显著；"
+                                   "需配合止损与行业分散。"),
+        "s32_roe_quality@v1": ("<b>适用环境</b>：盈利质量被市场定价的慢牛/价值回归行情，高ROE公司溢价持续。"
+                               "<br><b>风险提示</b>：质量因子在题材炒作市（偏好高弹性差公司）时跑输；ROE高企可能处周期顶点，反转风险；"
+                               "全市场段含小盘，需关注个股流动性。"),
+        "s37_earnings_accel@v1": ("<b>适用环境</b>：业绩披露季前后、盈利上修预期升温的行情，成长加速度因子有效。"
+                                  "<br><b>风险提示</b>：盈利加速度为同比代理'盈余惊喜'，非真实超预期事件；"
+                                  "若基期异常（去年低基数）会失真；成长股估值消化期回撤大。"),
+        "s42_sue_enriched@v1": ("<b>适用环境</b>：小盘+动量+52周新高因子共振的强势市场（如2024下半年起的行情），当前样本外表现最佳。"
+                               "<br><b>风险提示</b>：SUE因profit_q仅覆盖约376只主板，对实际选股贡献有限；"
+                               "52周新高因子在趋势反转初期易追高；全窗口16.6%含2022-23弱势段拖累，近期样本外23%+不保证延续。"),
     }
     er = env_risk.get(sid, "")
     v3_diff = ""
@@ -1560,20 +1627,22 @@ def _methodology_risk_model():
 <h3>因子体系总览</h3>
 <p>本项目参考 MSCI Barra 中国A股模型（CNE5/CNE6）与 Axioma Robust Risk Model，
 按免费数据现实裁剪，实现 10 个风格因子。每个因子由 1-3 个描述符加权复合。
-当前 S1 v3（红利7因子）和 S4 v2（多因子7因子）各使用其中 7 个因子。</p>
+当前赛马阵容共 6 只纯个股策略（s26/s27/s29/s32/s37/s42），全部在<b>主板硬约束</b>下运行
+（引擎层 main_board_universe 强制过滤：主板前缀+非ST/停牌/北交所/科创创业+上市≥2年+市值≥80亿+日均成交≥8000万），
+回测与实盘同源、口径一致。各策略因子权重见下方"各策略详解"。</p>
 <table>
-<thead><tr><th>因子</th><th>描述符</th><th>S1 v3</th><th>S4 v2</th><th>说明</th></tr></thead>
+<thead><tr><th>因子</th><th>描述符</th><th>主要使用策略 / 方向</th><th>说明</th></tr></thead>
 <tbody>
-<tr><td>Size（市值）</td><td>ln(总市值)</td><td>✅ 正向</td><td>✅ 负向</td><td>S1偏大盘防御，S4偏小盘弹性</td></tr>
-<tr><td>Beta（贝塔）</td><td>60日滚动超额收益对市场回归斜率</td><td>✅ 负向</td><td>✅ 正向</td><td>S1偏好低Beta防御，S4牛市好高弹性</td></tr>
-<tr><td>Momentum（动量）</td><td>RSTR+6月+3月</td><td>—</td><td>✅ 正向</td><td>12-1月动量+多窗口复合</td></tr>
-<tr><td>Value（价值）</td><td>1/PE+1/PB+DY</td><td>✅ 正向</td><td>✅ 正向</td><td>三描述符合成，红利策略核心因子</td></tr>
-<tr><td>Volatility（波动）</td><td>DASTD+ATR</td><td>✅ 负向</td><td>✅ 过滤</td><td>S1低波加分，S4剔除高残差波动股</td></tr>
-<tr><td>Quality（质量）</td><td>ROE-杠杆代理</td><td>✅ 正向</td><td>✅ 正向</td><td>高ROE+低杠杆=盈利可持续</td></tr>
-<tr><td>Growth（成长）</td><td>净利润5年趋势</td><td>—</td><td>—</td><td>待计入策略（数据覆盖不足）</td></tr>
-<tr><td>Liquidity（流动性）</td><td>STOM(月换手率对数)</td><td>—</td><td>✅ 正向</td><td>偏好高流动性股票</td></tr>
-<tr><td>Leverage（杠杆）</td><td>1-1/PB近似</td><td>✅ 负向</td><td>—</td><td>红利策略偏好低负债公司</td></tr>
-<tr><td>Earnings Yield（盈利收益）</td><td>1/PE(TTM)</td><td>✅ 正向</td><td>✅ 正向</td><td>与VALUE互补衡量估值</td></tr>
+<tr><td>Size（市值 / cap）</td><td>ln(总市值)</td><td>s26/s29/s42 正向主导</td><td>规模因子溢价，小盘段选股核心（s26权重0.50、s29 0.45、s42 0.30）</td></tr>
+<tr><td>Momentum（动量）</td><td>12-1月剔除近21日</td><td>全部策略正向</td><td>动量延续，s42权重最高0.20</td></tr>
+<tr><td>Value（价值 / value）</td><td>深度价值倾斜</td><td>s27/s29/s32/s42 正向</td><td>低估值加分，红利与小盘策略共有</td></tr>
+<tr><td>Valuation（估值分位）</td><td>PE/PB 历史分位</td><td>全部策略正向</td><td>绝对估值廉价度</td></tr>
+<tr><td>Low Vol（低波动）</td><td>250日波动率倒序</td><td>全部策略正向过滤</td><td>降波动，s27权重0.25最高</td></tr>
+<tr><td>ROE Quality（质量）</td><td>ROE 排名</td><td>s27/s32/s37 正向</td><td>盈利质量，s32权重0.50主导</td></tr>
+<tr><td>Dividend（股息）</td><td>股息率排名</td><td>s27 正向0.40</td><td>红利防御，仅大盘段</td></tr>
+<tr><td>Growth / Accel（成长加速度）</td><td>净利润同比加速度</td><td>s37 正向0.30</td><td>盈余惊喜代理（国信《超预期投资全攻略》）</td></tr>
+<tr><td>SUE（标准化预期外盈利）</td><td>(实际EPS-预期)/标准差</td><td>s42 正向0.10</td><td>国信《基于PEAD效应的超预期因子》；受profit_q仅覆盖~376只主板限制，对实际选股贡献有限</td></tr>
+<tr><td>High52（52周新高距离）</td><td>今收/前252日最高-1</td><td>s42 正向0.10</td><td>国信《由创新高个股看市场投资热点》；衡量突破强度</td></tr>
 </tbody></table>
 
 <h3>数据处理管线</h3>
@@ -1604,6 +1673,14 @@ def _methodology_risk_model():
 暴露值在[-0.5, 0.5] → 基本中性，无明显偏离。<br>
 暴露值>|1| → 显著偏离，需要注意该维度的集中风险。</p>
 
+<h3>投资纪律：单策略回撤 ≤ 年化（铁律）</h3>
+<p>用户设定：单策略最大回撤不得超过其年化收益率。风控层 <code>risk.py</code> 对每只策略设 <code>max_dd</code> 上限，并配合跟踪止损（stop_pct）与大盘冻结硬熔断（market_freeze）实现。
+当前 6 只策略均满足该约束，例如 s42（回撤14.6% ≤ 年化16.6%）、s27（回撤8.9% ≤ 11.1%）。任何回测违反此律的变体（如 s44/45/46 集中度变体、回撤&gt;年化）一律淘汰、不在看板展示。</p>
+
+<h3>仅主板硬约束</h3>
+<p>引擎层 <code>common.main_board_universe()</code> 对所有策略候选池<b>强制过滤</b>：主板前缀（60/000/001/002/003）+ 非ST/停牌/退市/北交所/科创创业 + 上市≥2年 + 市值≥80亿 + 日均成交≥8000万。
+用户仅交易A股主板，该约束在回测与实盘<b>结构性一致</b>满足，无需逐策略重复声明。</p>
+
 <h3>与 Barra CNE6 / Axioma 的差异声明</h3>
 <ul>
 <li><b>Beta</b>：使用60日窗口(vs CNE6的504日/252日)，因本项目数据覆盖较短(2018年起)，声明短窗差异。</li>
@@ -1617,7 +1694,8 @@ def _methodology_risk_model():
 
 <h3>免费数据局限</h3>
 <ul>
-<li><b>无分析师预期数据</b>：无法构建Analyst Sentiment、预期EP、预期股息因子。</li>
+<li><b>无分析师预期数据</b>：无法构建Analyst Sentiment、预期EP、预期股息因子；国信《超预期精选组合》"研报标题超预期+分析师上调净利润"事件池在回测中由 event_pool（近期盈余公告且SUE&gt;0）代理，真实文本信号待实盘接 news_engine 验证（故 s52 仅作观察级）。</li>
+<li><b>SUE 覆盖受限</b>：标准化预期外盈利依赖 profit_q 表，当前仅覆盖约376只主板，对纯小盘策略实际选股贡献有限（s42 已计入但权重仅0.10）。</li>
 <li><b>无季频资产负债表与现金流</b>：无法严格构建Leverage、Investment Quality、Earnings Quality因子。</li>
 <li><b>无真实流通股本</b>：换手率为amount x 100 / market_cap反推近似，市值加权也只能用总市值而非流通市值。</li>
 <li><b>市场代理为sh510300 ETF</b>：库内无sh000300指数日线，用沪深300ETF后复权收益替代。</li>
@@ -1625,15 +1703,16 @@ def _methodology_risk_model():
 </ul>
 
 <h3>宏观 Regime 检测</h3>
-<p><b>macro.py detect_regime()</b>：基于沪深300 PE十年分位 + MA20/MA60均线方向判断市场状态。</p>
+<p><b>macro.py detect_regime()</b>：基于沪深300 PE十年分位 + MA20/MA60均线方向判断市场状态，用于风控层的<b>大盘冻结硬熔断</b>（market_freeze）——大跌日全策略统一触发、暂停开仓，属安全网而非选股信号。</p>
 <ul>
-<li><b>扩张(expansion)</b>：PE分位≤50% 且 MA20>MA60（估值合理+趋势向上）→ S4提MOMENTUM/BETA弹性权重, S1提QUALITY/EARNINGS_YIELD</li>
-<li><b>收缩(contraction)</b>：PE分位>70% 或 MA20<MA60且PE>50%（高估或下行）→ S1提LOW_VOL/BETA/LEVERAGE负向权重增强防御; S4降MOMENTUM/BETA提VALUE/QUALITY</li>
-<li><b>中性(neutral)</b>：其余情况 → 使用默认因子权重</li>
+<li><b>扩张(expansion)</b>：PE分位≤50% 且 MA20>MA60（估值合理+趋势向上）→ 正常开仓。</li>
+<li><b>收缩(contraction)</b>：PE分位>70% 或 MA20<MA60且PE>50%（高估或下行）→ 触发大盘冻结防御，降低新开仓。</li>
+<li><b>中性(neutral)</b>：其余情况 → 使用默认因子权重。</li>
 </ul>
+<p>注：当前 6 只参赛策略均设 <code>regime_downsize: false</code>（不启用"弱势减仓"软防御），避免重蹈 s43 因防御过度被压到11%的覆辙；集中防御仅保留 risk 层大盘冻结硬熔断。</p>
 
 <h3>行业动量倾斜</h3>
-<p><b>macro.py industry_momentum()</b>：计算申万31行业近60日等权涨幅排名。S4 v2 对属于涨幅前30%行业的个股给予评分加分(+0.15)，实现基本面层面的行业景气度倾斜——不依赖政策文本，利用市场数据体现行业轮动规律。</p>
+<p><b>macro.py industry_momentum()</b>：计算申万31行业近60日等权涨幅排名。该信号曾用于早期策略的行业景气度倾斜；当前 6 只策略以个股多因子排名为主，行业动量作为 mf_core 的 ind_mom 候选因子接入（s50 行业动量轮动实测未达阈值，作观察级）。</p>
 '''
 
 
@@ -1646,8 +1725,7 @@ def generate_methodology(out_path=None):
     toc = _methodology_toc()
     enabled = _enabled_strategy_ids()
     all_sids = sorted(STRAT_META.keys())
-    ordered_sids = ([s for s in all_sids if enabled is None or s in enabled]
-                    + [s for s in all_sids if enabled is not None and s not in enabled])
+    ordered_sids = [s for s in all_sids if enabled is None or s in enabled]  # 仅展示启用策略,已下线不展示
     strat_blocks = ""
     for sid in ordered_sids:
         strat_blocks += _methodology_strat_block(sid)
@@ -1675,7 +1753,8 @@ def generate_methodology(out_path=None):
 
 def generate_trades(conn, out_path=None, cap=800):
     """历史交易页:实盘成交(2026-07-06 起)置顶展开 + 各策略回测成交折叠靠后。买红卖绿。"""
-    sids = ["s2_etf@v1", "s1_dividend@v2", "s4_smallcap@v1", "s6_sector@v1", "s7_track@v1"]
+    sids = ["s26_microcap@v1", "s27_dividend_lowvol@v1", "s29_smallcap_select@v1",
+            "s32_roe_quality@v1", "s37_earnings_accel@v1", "s42_sue_enriched@v1"]
     live_rows = []
     live_csv = conf.STATE_DIR / "trade_log.csv"
     if live_csv.exists():

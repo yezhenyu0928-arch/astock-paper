@@ -1763,3 +1763,311 @@ s42_sue_enriched@v1:
   universe: dynamic
   rebalance: monthly
 
+s43_sue_mainboard@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 冲刺20%(第4次): 主板硬约束下, 强化 high52+动量 alpha + regime 集中度防御 + 收紧止损
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 15
+    max_per_industry: 3
+    low_vol_pct: 0.75
+    cap_tilt: True
+    value_tilt: True
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -0.5
+    regime_downsize: True
+    regime_good: 1.0
+    regime_mid: 0.85
+    regime_bad: 0.6
+    stop_pct: 0.15
+    weights: {dividend: 0.0, low_vol: 0.08, roe: 0.10, valuation: 0.10, cap: 0.08, value: 0.08, momentum: 0.22, growth: 0.0, sue: 0.12, high52: 0.22}
+  universe: dynamic
+  rebalance: monthly
+
+# ============================================================================
+# 2026-07-28 冲刺20% 第5轮: 在达标骨架 s42(cap主导0.30+多因子均衡,全窗16.6%)上
+# 仅调【集中度】杠杆(hold_n 10→8/6/5 + cap 权重 0.30→0.35/0.40/0.38)。
+# 经验: s40(SUE0.45)/s41(high52 0.25)堆极致 alpha 反而失败; 真正赚钱的是 cap主导+均衡,
+# 故本轮回测"少持仓=高信号票权重更大"能否把年化从16.6%顶过20%。
+# 全部保留 regime_downsize:false(前车 s43 因防御过度被压到11%)。
+# ============================================================================
+
+s44_sue_enriched@v2:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 冲刺20% 第5轮A: s42集中化 hold_n8 + cap0.35(温和提集中度)
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 8
+    max_per_industry: 3
+    low_vol_pct: 0.75
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.13, cap: 0.35, value: 0.12, momentum: 0.20, growth: 0.0, sue: 0.10, high52: 0.10}
+  universe: dynamic
+  rebalance: monthly
+
+s45_sue_enriched@v3:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 冲刺20% 第5轮B: 更集中 hold_n6 + cap0.40(强集中度)
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 6
+    max_per_industry: 2
+    low_vol_pct: 0.75
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.09, cap: 0.40, value: 0.09, momentum: 0.22, growth: 0.0, sue: 0.10, high52: 0.10}
+  universe: dynamic
+  rebalance: monthly
+
+s46_sue_enriched@v4:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 冲刺20% 第5轮C: 最集中 hold_n5 + cap0.38 + 动量0.25 + sue/high52 略增
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 5
+    max_per_industry: 2
+    low_vol_pct: 0.75
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.0, roe: 0.0, valuation: 0.05, cap: 0.38, value: 0.05, momentum: 0.25, growth: 0.0, sue: 0.12, high52: 0.15}
+  universe: dynamic
+  rebalance: monthly
+
+# ============================================================================
+# 2026-07-28 冲刺20% 第6轮(用户拍板: 继续迭代 / 回撤≤年化 / >10%全上 / 仅云端)
+# 第5轮"集中度杠杆"(s44/45/46, hold_n 8/6/5)全失败且违反回撤≤年化铁律 → 证伪。
+# 本轮换三杠杆, 全部基于达标骨架 s42(cap0.30主导+多因子均衡=16.6%, 回撤14.6%<年化✅):
+#   s47 = 周频再平衡(更快兑现52周新高+动量alpha, 不触发熔断)
+#   s48 = 温和降仓(regime_downsize但bad=0.85, 不似s43的0.6踏空)
+#   s49 = 紧止损(stop 0.15<0.20, 早砍亏损降2022拖累)
+# 注: regime_downsize 只减持仓数不砍总仓(risk层管总仓); "大盘冻结"是risk硬熔断与regime无关。
+# ============================================================================
+
+s47_sue_enriched@v5:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 冲刺20% 第6轮A: s42改周频再平衡
+  params:
+    rebalance: weekly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.75
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.13, cap: 0.30, value: 0.12, momentum: 0.20, growth: 0.0, sue: 0.10, high52: 0.10}
+  universe: dynamic
+  rebalance: weekly
+
+s48_sue_enriched@v6:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 冲刺20% 第6轮B: s42+温和降仓(regime_downsize, bad=0.85不踏空)
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.75
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: true
+    regime_good: 1.0
+    regime_mid: 0.95
+    regime_bad: 0.85
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.13, cap: 0.30, value: 0.12, momentum: 0.20, growth: 0.0, sue: 0.10, high52: 0.10}
+  universe: dynamic
+  rebalance: monthly
+
+s49_sue_enriched@v7:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # 冲刺20% 第6轮C: s42同权重+紧止损0.15(早砍亏损降2022拖累)
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.75
+    cap_tilt: true
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.15
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.13, cap: 0.30, value: 0.12, momentum: 0.20, growth: 0.0, sue: 0.10, high52: 0.10}
+  universe: dynamic
+  rebalance: monthly
+
+# ============================================================================
+# 2026-07-28 冲刺20% 第7轮(B路线: 根本性新alpha引擎, 不再在s42骨架上调参)
+# 用户拍板选B: 行业动量轮动 / 分析师盈利修正 / 其它价值质量 三条都试, 不行再选A(s42入赛马)。
+# 机制确认: 回测中 news 恒为0(实盘才接news_engine) → 分析师盈利修正路线回测不可验,
+#   改用代码既定代理 event_pool(近期有盈余公告且SUE>0, 量化近似国信"研报标题超预期/分析师上调")。
+# 全部主板硬约束(main_board_universe) + 守"回撤≤年化"铁律。
+# ============================================================================
+
+s50_industry_momentum@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # B路线①行业动量轮动: ind_mom主导(新因子, 行业内候选动量中位数=行业强度)
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.75
+    cap_tilt: false
+    value_tilt: false
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.15, valuation: 0.15, cap: 0.0, value: 0.10, momentum: 0.10, growth: 0.0, sue: 0.0, high52: 0.0, ind_mom: 0.40}
+  universe: dynamic
+  rebalance: monthly
+
+s51_value_quality@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # B路线③深度价值+质量: 无动量/小盘/SUE, ROE+估值+低波+深度价值主导(与s42小盘动量互补)
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.75
+    cap_tilt: false
+    value_tilt: true
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.05, low_vol: 0.15, roe: 0.30, valuation: 0.25, cap: 0.0, value: 0.15, momentum: 0.0, growth: 0.0, sue: 0.0, high52: 0.0, ind_mom: 0.0}
+  universe: dynamic
+  rebalance: monthly
+
+s52_earnings_revision@v1:
+  class: strategies.ref_strategies.RefAggressiveSmallcap
+  benchmark: sh510300
+  frozen_date: 2026-07-28   # B路线②分析师盈利修正(回测代理): event_pool(近期盈余公告且SUE>0)门控 + sue/growth主导。
+  params:
+    rebalance: monthly
+    cap_segment: small
+    min_dividend_yield: 0.0
+    dividend_years: 0
+    roe_years: 0
+    roe_min: 0.0
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.75
+    cap_tilt: false
+    value_tilt: false
+    momentum_window: 252
+    momentum_skip: 21
+    momentum_min: -1.0
+    event_pool: true
+    event_window: 60
+    regime_downsize: false
+    regime_good: 1.0
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.15, valuation: 0.15, cap: 0.0, value: 0.10, momentum: 0.10, growth: 0.20, sue: 0.30, high52: 0.0, ind_mom: 0.0}
+  universe: dynamic
+  rebalance: monthly
+
