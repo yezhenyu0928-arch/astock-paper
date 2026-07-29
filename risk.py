@@ -161,6 +161,32 @@ _RISK_RELAX = {
         "time_stop_exempt": True,
         "stop_override": 0.30,
     },
+    # s53/s54/s55 全A冲刺策略(2026-07-29, 含科创/创业/北交): 放宽组。
+    # 首轮回测证明未入白名单时大盘冻结把开仓全禁 → 年化≈0, 故必须豁免。
+    "s53": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.25,
+    },
+    "s54": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.25,
+    },
+    "s55": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.25,
+    },
 }
 
 

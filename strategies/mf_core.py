@@ -488,7 +488,9 @@ def select(ctx, date, account, params, strategy_id, config):
     for c in scored:
         code = c[0]
         ind = ind_map.get(code) or "未知"
-        if ind_count.get(ind, 0) >= max_per_ind:
+        # "未知"不是真实行业(行业数据缺失), 不受 max_per_ind 限制;
+        # 否则行业映射缺失时(如全A新板票)持仓会被压到 max_per_ind 只, 仓位长期不满
+        if ind != "未知" and ind_count.get(ind, 0) >= max_per_ind:
             continue
         target.append(code)
         ind_count[ind] = ind_count.get(ind, 0) + 1

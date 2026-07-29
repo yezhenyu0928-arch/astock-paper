@@ -1989,7 +1989,7 @@ s49_sue_enriched@v7:
 s53_all_a_momentum_smallcap@v1:
   class: strategies.ref_strategies.RefAggressiveSmallcap
   benchmark: sh510300
-  frozen_date: 2026-07-28   # 全A①52周新高+动量+小盘: high52 0.25 + 动量 0.35 + 规模 0.20, 月频12只(小盘段)
+  frozen_date: 2026-07-29   # 全A① r3改配: 弃"动量主导"(r2全窗-3.9%), 复刻 s42 赢钱骨架 cap0.30+估值价值0.30+动量0.20, SUE换high52 0.20
   params:
     rebalance: monthly
     pool_index: all_a
@@ -1998,27 +1998,27 @@ s53_all_a_momentum_smallcap@v1:
     dividend_years: 0
     roe_years: 0
     roe_min: 0.0
-    hold_n: 12
-    max_per_industry: 2
-    low_vol_pct: 0.55
+    hold_n: 10
+    max_per_industry: 3
+    low_vol_pct: 0.75
     cap_tilt: true
-    value_tilt: false
+    value_tilt: true
     momentum_window: 252
     momentum_skip: 21
     momentum_min: -1.0
-    regime_downsize: true
+    regime_downsize: false
     regime_good: 1.0
-    regime_mid: 0.90
-    regime_bad: 0.80
-    stop_pct: 0.18
-    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.05, cap: 0.20, value: 0.05, momentum: 0.35, growth: 0.0, sue: 0.0, high52: 0.25}
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.15, cap: 0.30, value: 0.15, momentum: 0.20, growth: 0.0, sue: 0.0, high52: 0.20}
   universe: dynamic
   rebalance: monthly
 
 s54_all_a_industry_mom@v1:
   class: strategies.ref_strategies.RefAggressiveSmallcap
   benchmark: sh510300
-  frozen_date: 2026-07-28   # 全A②行业动量+动量+小盘: 行业动量(ind_mom)0.30 + 动量 0.25 + 规模 0.10, 月频12只
+  frozen_date: 2026-07-29   # 全A② r3改配: ind_mom 从0.30降为0.20辅助, 骨架回归 cap0.30+估值价值0.25, 月频10只
   params:
     rebalance: monthly
     pool_index: all_a
@@ -2027,27 +2027,27 @@ s54_all_a_industry_mom@v1:
     dividend_years: 0
     roe_years: 0
     roe_min: 0.0
-    hold_n: 12
+    hold_n: 10
     max_per_industry: 3
-    low_vol_pct: 0.55
+    low_vol_pct: 0.75
     cap_tilt: true
-    value_tilt: false
+    value_tilt: true
     momentum_window: 252
     momentum_skip: 21
     momentum_min: -1.0
-    regime_downsize: true
+    regime_downsize: false
     regime_good: 1.0
-    regime_mid: 0.90
-    regime_bad: 0.80
-    stop_pct: 0.18
-    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.05, cap: 0.10, value: 0.05, momentum: 0.25, growth: 0.0, sue: 0.0, high52: 0.10, ind_mom: 0.30}
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.15, cap: 0.30, value: 0.10, momentum: 0.15, growth: 0.0, sue: 0.0, high52: 0.10, ind_mom: 0.20}
   universe: dynamic
   rebalance: monthly
 
 s55_all_a_value_quality@v1:
   class: strategies.ref_strategies.RefAggressiveSmallcap
   benchmark: sh510300
-  frozen_date: 2026-07-28   # 全A③价值质量+动量+小盘(更防御): 价值0.20+ROE0.15+动量0.30+低波0.10, 月频15只
+  frozen_date: 2026-07-29   # 全A③ r3改配: 价值质量压舱加强 valuation0.20+value0.20+roe0.10, cap0.30主导, 动量降0.15
   params:
     rebalance: monthly
     pool_index: all_a
@@ -2056,20 +2056,20 @@ s55_all_a_value_quality@v1:
     dividend_years: 0
     roe_years: 3
     roe_min: 0.0
-    hold_n: 15
-    max_per_industry: 2
-    low_vol_pct: 0.55
+    hold_n: 12
+    max_per_industry: 3
+    low_vol_pct: 0.75
     cap_tilt: true
     value_tilt: true
     momentum_window: 252
     momentum_skip: 21
     momentum_min: -1.0
-    regime_downsize: true
+    regime_downsize: false
     regime_good: 1.0
-    regime_mid: 0.90
-    regime_bad: 0.80
-    stop_pct: 0.18
-    weights: {dividend: 0.0, low_vol: 0.10, roe: 0.15, valuation: 0.15, cap: 0.10, value: 0.15, momentum: 0.30, growth: 0.0, sue: 0.0, high52: 0.05}
+    regime_mid: 1.0
+    regime_bad: 1.0
+    stop_pct: 0.20
+    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.10, valuation: 0.20, cap: 0.30, value: 0.20, momentum: 0.15, growth: 0.0, sue: 0.0, high52: 0.05}
   universe: dynamic
   rebalance: monthly
 
