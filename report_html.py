@@ -1447,7 +1447,7 @@ def generate(out_path=None):
         exposure_html = _exposure_html(sid, exp_data)
         cards += (
             f"<div class='card'>"
-            f"<div class='card-h'><b>{meta['name']}</b><span class='risk'>{meta['risk']}</span>"
+            f"<div class='card-h'><b>{meta['name']}</b>{_scope_badge(sid)}<span class='risk'>{meta['risk']}</span>"
             f"{_verdict_badge(verdict)}"
             f"<span class='stat'>{st}</span></div>"
             f"{logic_block}"
@@ -1468,11 +1468,15 @@ def generate(out_path=None):
     chart_fb_banner = ("<div id='chartFallbackBanner' class='chart-fallback-banner' hidden>"
                         "⚠️ 图表库(Chart.js)未加载，因子暴露图已降级为纯文本/条形展示（数据完整，"
                         "见各策略卡内“风格暴露”的条形图与暴露值表格）。</div>")
+    scope_banner = ("<div class='banner yellow'>🟦 <b>现有策略</b>：看板当前 6 只参赛策略（s26/s27/s29/s32/s37/s42）仅交易 <b>A股主板</b>（主板硬约束）。"
+                    "🟧 <b>准备新增</b>：全A股候选策略（含科创板688 / 创业板300·301 / 北交所）覆盖范围更广，测试中，达标后入赛马。"
+                    "详见 <a href='methodology.html#candidates-alla'>方法论·全A股候选</a>。</div>")
     body = (
         f"{nav}<h1>📊 A股模拟跟单看板</h1>"
         f"{chart_fb_banner}"
         f"<div class='sub'>生成 {today} · 数据最新 {last} · 实盘赛马自 {LIVE_START} 起（所有策略 10 万元起跑，看未来收益） · 模拟/历史不代表未来，非投资建议，人工跟单</div>"
         f"{banner}"
+        f"{scope_banner}"
         f"{market_section}"
         f"{_market_regime_section(conn)}"
         f"{_news_flash_section(conn)}"
@@ -1536,6 +1540,9 @@ th{background:#f0f2f5;color:var(--mut);font-weight:600;font-size:12px}
 .diff{background:#fef9c3;padding:8px 12px;border-radius:6px;font-size:12.5px;margin:6px 0}
 .risk-badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;
 background:#fef3c7;color:#92400e;margin-left:6px}
+.scope-badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;margin-left:6px;font-weight:600;vertical-align:middle}
+.scope-mb{background:#dbeafe;color:#1d4ed8}
+.scope-alla{background:#ffedd5;color:#c2410c}
 </style>"""
 
 
@@ -1547,6 +1554,55 @@ def _enabled_strategy_ids():
         return None
 
 
+# ---------------- 策略覆盖范围（主板 / 全A股） ----------------
+# 现有参赛策略仅交易 A股主板（引擎层 main_board_universe 硬约束）；
+# s53/s54/s55 为全A股候选（pool_index: all_a，覆盖主板+科创+创业+北交），测试中。
+CANDIDATE_SIDS = [
+    "s53_all_a_momentum_smallcap@v1",
+    "s54_all_a_industry_mom@v1",
+    "s55_all_a_value_quality@v1",
+]
+
+
+def _scope_badge(sid):
+    """策略覆盖范围徽标：主板 vs 全A股（含科创/创业/北交）。"""
+    if "all_a" in sid:
+        return '<span class="scope-badge scope-alla">🟧 全A股·含科创/创业/北交</span>'
+    return '<span class="scope-badge scope-mb">🟦 A股主板</span>'
+
+
+def _methodology_candidate_block(sid):
+    """全A股候选策略卡（测试中·待测达标），带范围徽标与说明。"""
+    meta = _meta(sid)
+    factors = meta.get("factors", [])
+    factor_rows = ""
+    if factors:
+        factor_rows = "".join(
+            f"<tr><td>{html.escape(str(n))}</td><td>{html.escape(str(wt))}</td></tr>"
+            for n, wt in factors)
+    cand_badge = '<span class="risk-badge" style="background:#ffedd5;color:#c2410c">🧪 测试中·待测达标</span>'
+    return (f'<div class="strat-block" id="{sid}">'
+            f'<details><summary>{meta["name"]}{_scope_badge(sid)}{cand_badge}</summary>'
+            f'<p class="tagline">{html.escape(meta["tagline"])}</p>'
+            f'<h3>因子构成</h3>'
+            f'<table><thead><tr><th>因子 / 规则</th><th>权重 / 说明</th></tr></thead>'
+            f'<tbody>{factor_rows}</tbody></table>'
+            f'<p class="note">调仓：{html.escape(meta["rebalance"])} · 适合资金：{html.escape(meta["fit"])}</p>'
+            f'<p class="note"><b>覆盖范围</b>：全A股（主板 + 科创板688 + 创业板300·301 + 北交所），不卡主板前缀；'
+            f'与现有主板策略（主板硬约束）形成两档。当前回测未达「年化&gt;10% 且 回撤≤年化」铁律，'
+            f'达标后从注册日（2026-07-29）起入赛马，不追溯。</p>'
+            f'</details></div>')
+
+
+def _methodology_candidates_section():
+    blocks = "".join(_methodology_candidate_block(s) for s in CANDIDATE_SIDS)
+    return (f'<h2 id="candidates-alla">全A股候选策略（测试中）</h2>'
+            f'<div class="banner yellow">🟧 <b>全A股覆盖范围</b>：以下候选策略覆盖 <b>主板 + 科创板(688) + 创业板(300·301) + 北交所</b>，'
+            f'是看板准备新增的「全A股策略」。现有 6 只参赛策略（s26/s27/s29/s32/s37/s42）仅交易 <b>A股主板</b>（主板硬约束）。'
+            f'候选策略当前回测未达标，仅作透明展示，达标后入赛马。</div>'
+            f'{blocks}')
+
+
 def _methodology_toc():
     """目录锚点导航：仅展示当前 config.yaml 启用（参赛）策略，已下线/归档策略不展示。"""
     enabled = _enabled_strategy_ids()
@@ -1556,6 +1612,7 @@ def _methodology_toc():
             continue  # 已下线/归档策略不在看板展示
         items += f'<a href="#{sid}">{meta["name"]}</a>\n'
     items += '<a href="#risk-model">因子与风险模型</a>\n'
+    items += '<a href="#candidates-alla">全A股候选（测试中）</a>\n'
     return f'<div class="toc"><b>📑 目录</b>\n{items}</div>'
 
 
@@ -1634,7 +1691,7 @@ def _methodology_strat_block(sid):
     retired_badge = ('<span class="risk-badge" style="background:#e5e7eb;color:#6b7280">已下线/归档</span>'
                      if (enabled is not None and sid not in enabled) else "")
     return (f'<div class="strat-block" id="{sid}">'
-            f'<details><summary>{meta["name"]}<span class="risk-badge">{meta["risk"]}</span>{retired_badge}</summary>'
+            f'<details><summary>{meta["name"]}{_scope_badge(sid)}<span class="risk-badge">{meta["risk"]}</span>{retired_badge}</summary>'
             f'<p class="tagline">{html.escape(meta["tagline"])}</p>'
             f'<h3>因子构成</h3>'
             f'<table><thead><tr><th>因子 / 规则</th><th>权重 / 说明</th></tr></thead>'
@@ -1654,7 +1711,8 @@ def _methodology_risk_model():
 按免费数据现实裁剪，实现 10 个风格因子。每个因子由 1-3 个描述符加权复合。
 当前赛马阵容共 6 只纯个股策略（s26/s27/s29/s32/s37/s42），全部在<b>主板硬约束</b>下运行
 （引擎层 main_board_universe 强制过滤：主板前缀+非ST/停牌/北交所/科创创业+上市≥2年+市值≥80亿+日均成交≥8000万），
-回测与实盘同源、口径一致。各策略因子权重见下方"各策略详解"。</p>
+回测与实盘同源、口径一致。各策略因子权重见下方"各策略详解"。
+此外另有 3 只<b>全A股候选策略</b>（s53/s54/s55，覆盖主板+科创688+创业300·301+北交）正在回测验证，达标后入赛马，见页底"全A股候选策略（测试中）"。</p>
 <table>
 <thead><tr><th>因子</th><th>描述符</th><th>主要使用策略 / 方向</th><th>说明</th></tr></thead>
 <tbody>
@@ -1705,6 +1763,7 @@ def _methodology_risk_model():
 <h3>仅主板硬约束</h3>
 <p>引擎层 <code>common.main_board_universe()</code> 对所有策略候选池<b>强制过滤</b>：主板前缀（60/000/001/002/003）+ 非ST/停牌/退市/北交所/科创创业 + 上市≥2年 + 市值≥80亿 + 日均成交≥8000万。
 用户仅交易A股主板，该约束在回测与实盘<b>结构性一致</b>满足，无需逐策略重复声明。</p>
+<p><b>全A股候选策略的例外</b>：s53/s54/s55 使用 <code>pool_index: all_a</code>，经 <code>common.all_a_universe()</code>（仅排停牌/ST/退市/上市&lt;60日 + 流动性门槛）过滤，<b>不卡主板前缀</b>，从而纳入科创板(688)、创业板(300·301)、北交所。这是看板准备新增的「全A股策略」覆盖范围，与现有主板策略形成两档。</p>
 
 <h3>与 Barra CNE6 / Axioma 的差异声明</h3>
 <ul>
@@ -1762,6 +1821,7 @@ def generate_methodology(out_path=None):
             f"{toc}"
             f'<h2>各策略详解</h2>{strat_blocks}'
             f"{risk}"
+            f'{_methodology_candidates_section()}'
             f'<div class="foot"><b>免责</b>：本页由 report_html.py 自动生成；'
             f'模拟/历史表现不代表未来，不构成投资建议，请仅用可承受损失的资金。因子模型参考 MSCI Barra CNE5/CNE6 公开文献与'
             f'Axioma V4 Handbook，按本项目免费数据现实裁剪。</div>')
@@ -1860,6 +1920,9 @@ h1{font-size:20px;margin:8px 0}.sub{color:var(--mut);font-size:13px;margin-botto
 .banner{padding:10px 12px;border-radius:8px;font-size:13.5px;font-weight:600;margin:10px 0}
 .banner.yellow{background:#fef9c3;color:#854d0e;border:1px solid #fde68a}
 .banner.red{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+.scope-badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;margin-left:6px;font-weight:600;vertical-align:middle}
+.scope-mb{background:#dbeafe;color:#1d4ed8}
+.scope-alla{background:#ffedd5;color:#c2410c}
 table{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px;overflow:hidden;font-size:13.5px}
 th,td{padding:8px 7px;text-align:center;border-bottom:1px solid var(--line)}
 th{background:#f0f2f5;color:var(--mut);font-weight:600}td.l,th:first-child{text-align:left}
