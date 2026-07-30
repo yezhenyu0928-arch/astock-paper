@@ -77,9 +77,17 @@ jobs:
                       pq = c.execute("SELECT COUNT(*) FROM profit_q").fetchone()[0]
                   except Exception:
                       pq = 0
-                  # 2026-07-28: 新增 profit_q 覆盖度校验——云端必须拥有 SUE 因子数据(profit_q 来自本地 baostock 抓取后入种子库,
-                  # 海外 Runner 连不上 baostock, 故只能靠 db-seed 种子库还原)。旧缓存库无 profit_q 时强制整库还原。
-                  if fund >= 600 and mb >= 800 and pq >= 1000:
+                  try:
+                      lu = c.execute("SELECT COUNT(*) FROM limit_up_count").fetchone()[0]
+                  except Exception:
+                      lu = 0
+                  try:
+                      ar = c.execute("SELECT COUNT(*) FROM analyst_report").fetchone()[0]
+                  except Exception:
+                      ar = 0
+                  # 2026-07-28: 新增 profit_q 覆盖度校验; 2026-07-30: 全A(s53) 依赖 limit_up_count/analyst_report,
+                  # 旧缓存库缺这两表时强制整库还原(从 db-seed 取含全表的完整库)。
+                  if fund >= 600 and mb >= 800 and pq >= 1000 and lu >= 1000 and ar >= 1000:
                       need = 0
                   c.close()
               except Exception:

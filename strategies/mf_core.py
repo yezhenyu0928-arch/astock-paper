@@ -123,6 +123,86 @@ def _sue_score(date, codes, conn):
         return {}
 
 
+def _limit_up_score(date, codes, conn):
+    """近 window 交易日涨停次数因子(纯日线, A股题材行情强信号)。
+    读预计算的 limit_up_count 表(backfill_limit_up.py): 每张票取 <=date 最新一行,
+    返回 {code: 近20日涨停次数}(None=数据不足)。查表秒回, 不重算 800万行。
+    仅当 weights 含 'limit_up' 或 'limit_up60' 时调用。"""
+    try:
+        d = str(date)[:10]
+        ph = ",".join("?" for _ in codes)
+        rows = conn.execute(
+            f"SELECT code, lu20, lu60 FROM limit_up_count "
+            f"WHERE code IN ({ph}) AND trade_date <= ? "
+            f"ORDER BY code, trade_date DESC",
+            (*codes, d)).fetchall()
+        out, seen = {}, set()
+        for code, lu20, lu60 in rows:
+            if code in seen:
+                continue
+            seen.add(code)
+            out[code] = (lu20 or 0, lu60 or 0)
+        return out
+    except Exception:
+        return {}
+
+
+def _analyst_score(date, codes, conn):
+    """分析师评级/一致预期上调因子(选项B)。读 analyst_report 表(逐股研报历史, 含 date/东财评级/2026E EPS):
+      - 评级看好度 rating_score: 近180日东财评级加权(买入1.0/增持0.7/持有0.4/中性0.2/减持0.1/卖出0.0)
+      - 一致预期盈利上调 rev: 近60日 2026E EPS 中位 vs 前60-120日中位 的环比(截顶±0.3)
+      - 研报关注度 att: 近90日研报数(截顶10)
+    合成: 0.4*rating + 0.4*(rev/0.3) + 0.2*(att/10)  (越高越好, 范围约[-0.4,1.0])
+    返回 {code: score}(无数据=不在dict => 排末尾)。仅当 weights 含 'analyst' 时调用。"""
+    from datetime import datetime as _dt
+    try:
+        d = str(date)[:10]
+        d_dt = _dt.strptime(d, "%Y-%m-%d")
+        # 本地库 code 带交易所前缀(sh/sz/bj), analyst_report 存裸6位 -> 统一剥前缀
+        pref_map = {}
+        bare = []
+        for c in codes:
+            b = ''.join(ch for ch in c if ch.isdigit())
+            pref_map[b] = c
+            bare.append(b)
+        ph = ",".join("?" for _ in bare)
+        rows = conn.execute(
+            f"SELECT code, date, rating, eps26 FROM analyst_report "
+            f"WHERE code IN ({ph}) AND date <= ? ORDER BY code, date",
+            (*bare, d)).fetchall()
+        by = {}
+        for code, dt, rating, eps26 in rows:
+            by.setdefault(code, []).append((dt, rating, eps26))
+        R_W = {'买入': 1.0, '增持': 0.7, '持有': 0.4, '中性': 0.2, '减持': 0.1, '卖出': 0.0}
+        out = {}
+        for code, seq in by.items():
+            rec = []
+            for dt, r, e in seq:
+                try:
+                    db_days = (_dt.strptime(dt[:10], "%Y-%m-%d") - d_dt).days
+                except Exception:
+                    continue
+                if db_days <= 365:
+                    rec.append((db_days, r, e))
+            if not rec:
+                continue
+            rvals = [R_W[x] for (_, x, _) in rec if x in R_W]
+            rating_score = sum(rvals) / len(rvals) if rvals else 0.5
+            cur = [e for (dd, _, e) in rec if e is not None and dd <= 60]
+            prev = [e for (dd, _, e) in rec if e is not None and 60 < dd <= 120]
+            rev = 0.0
+            if cur and prev:
+                mc = statistics.median(cur); mp = statistics.median(prev)
+                if mp not in (None, 0, 0.0):
+                    rev = max(-0.3, min(0.3, (mc - mp) / abs(mp)))
+            att = min(10, sum(1 for (dd, _, _) in rec if dd <= 90))
+            score = 0.4 * rating_score + 0.4 * (rev / 0.3) + 0.2 * (att / 10.0)
+            out[pref_map.get(code, code)] = score
+        return out
+    except Exception:
+        return {}
+
+
 def _recent_announce(date, codes, conn, window=60):
     """近期有盈余公告的股票集合(量化代理"超预期/业绩大增"事件池)。
     取 code 在 date 前最新 pub_date, 距今 window 自然日内即视为"近期披露"(财报黄金期)。
@@ -381,6 +461,10 @@ def select(ctx, date, account, params, strategy_id, config):
     # 量化代理国信"分析师全部调升/研报标题超预期/业绩大增" 事件池(我们无分析师文本数据)。
     # 同时预计算 sue_sc 供下方打分(若 weights 含 'sue')。
     sue_sc = _sue_score(date, _cc, ctx.conn) if (w.get("sue") or params.get("event_pool")) else {}
+    # 涨停因子(题材强势代理): 近20/60日涨停次数, 读预计算表 limit_up_count
+    lu_sc = _limit_up_score(date, _cc, ctx.conn) if (w.get("limit_up") or w.get("limit_up60")) else {}
+    # 分析师评级/一致预期上调因子(选项B): 读 analyst_report 历史表
+    an_sc = _analyst_score(date, _cc, ctx.conn) if w.get("analyst") else {}
     if params.get("event_pool"):
         _win = int(params.get("event_window", 60))
         _rec = _recent_announce(date, _cc, ctx.conn, _win)
@@ -462,6 +546,12 @@ def select(ctx, date, account, params, strategy_id, config):
     # 行业动量(轮动)排名: 行业内候选个股动量均值=行业相对强度; 越高名次越前
     ind_mom_rank = {code: i for i, code in enumerate(
         sorted(_cc, key=lambda x: -(ind_mom_sc.get(x) or -9e9)))} if ind_mom_sc else {}
+    # 涨停因子排名: 近20日涨停次数越多名次越前(题材强势); 缺失者排末尾
+    lu_rank = {code: i for i, code in enumerate(
+        sorted(_cc, key=lambda x: -(lu_sc.get(x) or (0, 0))[0]))} if lu_sc else {}
+    # 分析师评级/一致预期上调排名: score 越高名次越前; 缺失者排末尾
+    an_rank = {code: i for i, code in enumerate(
+        sorted(_cc, key=lambda x: -(an_sc.get(x) or -9e9)))} if an_sc else {}
 
     def _score(c):
         """按各因子名次加权打分(名次越小越优); 修复原 _w(code) 闭包误用最后一只候选的 bug。
@@ -479,7 +569,9 @@ def select(ctx, date, account, params, strategy_id, config):
                 + w.get("ind_mom", 0.0) * ind_mom_rank.get(code, len(keep))
                 + w.get("cap", 0.0) * cap_rank.get(code, len(keep))
                 + w.get("value", 0.0) * val_rank.get(code, len(keep))
-                + w.get("momentum", 0.0) * mom_rank.get(code, len(keep)))
+                + w.get("momentum", 0.0) * mom_rank.get(code, len(keep))
+                + w.get("limit_up", 0.0) * lu_rank.get(code, len(keep))
+                + w.get("analyst", 0.0) * an_rank.get(code, len(keep)))
 
     scored = sorted(keep, key=_score)
 

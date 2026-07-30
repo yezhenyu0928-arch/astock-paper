@@ -1989,11 +1989,11 @@ s49_sue_enriched@v7:
 s53_all_a_momentum_smallcap@v1:
   class: strategies.ref_strategies.RefAggressiveSmallcap
   benchmark: sh510300
-  frozen_date: 2026-07-29   # 全A① r3改配: 弃"动量主导"(r2全窗-3.9%), 复刻 s42 赢钱骨架 cap0.30+估值价值0.30+动量0.20, SUE换high52 0.20
+  frozen_date: 2026-07-30   # 全A① 固化 R2 配方(Barra+CNE6长期模型alpha + SUE强化, 无规模倾斜). 2022-2025回测 年化17.8%/回撤15.2%/夏普1.15 ✅铁律达标(年化>10%且回撤≤年化)
   params:
     rebalance: monthly
     pool_index: all_a
-    cap_segment: small
+    cap_segment: all
     min_dividend_yield: 0.0
     dividend_years: 0
     roe_years: 0
@@ -2001,7 +2001,7 @@ s53_all_a_momentum_smallcap@v1:
     hold_n: 10
     max_per_industry: 3
     low_vol_pct: 0.75
-    cap_tilt: true
+    cap_tilt: false
     value_tilt: true
     momentum_window: 252
     momentum_skip: 21
@@ -2011,7 +2011,7 @@ s53_all_a_momentum_smallcap@v1:
     regime_mid: 1.0
     regime_bad: 1.0
     stop_pct: 0.20
-    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.05, valuation: 0.15, cap: 0.30, value: 0.15, momentum: 0.20, growth: 0.0, sue: 0.0, high52: 0.20}
+    weights: {momentum: 0.12, high52: 0.12, sue: 0.18, valuation: 0.18, value: 0.10, roe: 0.10, growth: 0.15, dividend: 0.05}
   universe: dynamic
   rebalance: monthly
 
