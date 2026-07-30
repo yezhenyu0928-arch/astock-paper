@@ -102,10 +102,10 @@ strategies:                     # 2026-07 重构:全面个股化——下线全�
   s40_sue_momentum@v1: false    # 弃
   s41_sue_high52@v1: false     # 弃:全窗口3.1%<10%, 实盘不用(云端回测矩阵仍强制跑以验证失败)
   s42_sue_enriched@v1: true   # ✅第6个达标:全窗口年化16.6%/回撤14.6%/超额+1.017,s29基线叠加SUE+52周高,月频10只
-  # ↓ 2026-07-28 全A冲刺(含科创/创业/北交): 待回测达标(年化>10%且回撤≤年化)后翻 true 进看板
-  s53_all_a_momentum_smallcap@v1: false   # 待定:全A动量小盘(52周新高+动量+规模)
-  s54_all_a_industry_mom@v1: false        # 待定:全A行业动量轮动
-  s55_all_a_value_quality@v1: false       # 待定:全A价值质量防御
+  # ↓ 全A冲刺结论(2026-07-30): 选项B(分析师+涨停)全窗反拖累; 仅 R2 控制组过铁律(17.8%/15.2%/夏普1.15)=全A上限, 远低于50%目标
+  s53_all_a_momentum_smallcap@v1: true    # ✅唯一过约束全A策略: R2配方(无规模倾斜) 全窗17.8%/回撤15.2%/夏普1.15
+  s54_all_a_industry_mom@v1: false        # 关闭: 原"规模倾斜毒药"配方; 无第二只合格全A(用户决策:只上s53)
+  s55_all_a_value_quality@v1: false       # 关闭: 同上
   s4_smallcap@v2: false        # 归档:被 @v3 主板small成长版取代
   s3_ma_trend@v1: false         # 归档:被 v2 纪律化趋势版取代(v1 全期-0.8%/回撤24% whipsaw)
   s3_ma_trend@v2: false         # 归档:借鉴v1重构仍-5%/回撤18%,A股价格趋势弱,被 s3_trend_timing 择时版取代

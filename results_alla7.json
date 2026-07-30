@@ -1,0 +1,44 @@
+{
+  "B1_an25_lu15": {
+    "ann": 14.5,
+    "dd": 21.4,
+    "sharpe": 0.89,
+    "ok": false,
+    "secs": 808
+  },
+  "B3_an35_dom": {
+    "ann": 7.5,
+    "dd": 23.9,
+    "sharpe": 0.49,
+    "ok": false,
+    "secs": 784
+  },
+  "B5_an20_lu20_bal": {
+    "ann": 17.2,
+    "dd": 24.8,
+    "sharpe": 0.94,
+    "ok": false,
+    "secs": 736
+  },
+  "B2_an30_lu20": {
+    "ann": 15.0,
+    "dd": 25.4,
+    "sharpe": 0.88,
+    "ok": false,
+    "secs": 733
+  },
+  "B4_an25_lu30": {
+    "ann": 7.5,
+    "dd": 29.4,
+    "sharpe": 0.48,
+    "ok": false,
+    "secs": 733
+  },
+  "B0_R2_control": {
+    "ann": 17.8,
+    "dd": 15.2,
+    "sharpe": 1.15,
+    "ok": true,
+    "secs": 606
+  }
+}

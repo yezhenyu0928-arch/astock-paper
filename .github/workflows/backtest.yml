@@ -178,7 +178,7 @@ jobs:
         run: |
             SIDS="${{ github.event.inputs.sids }}"
             if [ -z "$SIDS" ]; then
-              SIDS="s26_microcap@v1,s27_dividend_lowvol@v1,s29_smallcap_select@v1,s32_roe_quality@v1,s37_earnings_accel@v1,s42_sue_enriched@v1"
+              SIDS="s26_microcap@v1,s27_dividend_lowvol@v1,s29_smallcap_select@v1,s32_roe_quality@v1,s37_earnings_accel@v1,s42_sue_enriched@v1,s53_all_a_momentum_smallcap@v1"
             fi
             JSON=$(python -c "import json,sys; print(json.dumps([s.strip() for s in sys.argv[1].split(',') if s.strip()]))" "$SIDS")
             echo "策略矩阵: $JSON"
