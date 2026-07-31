@@ -1469,7 +1469,7 @@ def generate(out_path=None):
                         "⚠️ 图表库(Chart.js)未加载，因子暴露图已降级为纯文本/条形展示（数据完整，"
                         "见各策略卡内“风格暴露”的条形图与暴露值表格）。</div>")
     scope_banner = ("<div class='banner yellow'>🟦 <b>现有策略</b>：看板当前 6 只参赛策略（s26/s27/s29/s32/s37/s42）仅交易 <b>A股主板</b>（主板硬约束）。"
-                    "🟧 <b>准备新增</b>：全A股候选策略（含科创板688 / 创业板300·301 / 北交所）覆盖范围更广，测试中，达标后入赛马。"
+                    "🟧 <b>已上线</b>：全A股策略 <b>s53</b>（含科创板688 / 创业板300·301 / 北交所）已验证入池（年化16.0% / 回撤15.2% / 夏普1.03，过「回撤≤年化」铁律），实盘起跑后进入赛马；s54/s55 仍测试中。"
                     "详见 <a href='methodology.html#candidates-alla'>方法论·全A股候选</a>。</div>")
     body = (
         f"{nav}<h1>📊 A股模拟跟单看板</h1>"
@@ -1572,7 +1572,8 @@ def _scope_badge(sid):
 
 
 def _methodology_candidate_block(sid):
-    """全A股候选策略卡（测试中·待测达标），带范围徽标与说明。"""
+    """全A股候选策略卡：s53 已验证入池，s54/s55 测试中。带范围徽标与说明。"""
+    import pathlib
     meta = _meta(sid)
     factors = meta.get("factors", [])
     factor_rows = ""
@@ -1580,7 +1581,20 @@ def _methodology_candidate_block(sid):
         factor_rows = "".join(
             f"<tr><td>{html.escape(str(n))}</td><td>{html.escape(str(wt))}</td></tr>"
             for n, wt in factors)
-    cand_badge = '<span class="risk-badge" style="background:#ffedd5;color:#c2410c">🧪 测试中·待测达标</span>'
+    # 是否已验证入池：存在 reports/<sid前缀>*.md 即视为云端已跑出五关报告
+    rep = list(pathlib.Path(conf.ROOT / "reports").glob(f"{sid.split('@')[0]}*.md"))
+    if rep:
+        cand_badge = '<span class="risk-badge" style="background:#dcfce7;color:#15803d">✅ 已验证入池</span>'
+        verified_note = ('<p class="note"><b>验证结果（云端五关 + 蒙特卡洛，报告日 2026-07-30）</b>：'
+                         '主回测 年化16.0% / 回撤15.2% / 夏普1.03 / Calmar1.05；'
+                         '样本外(2024-今) 年化15.3% / 回撤12.4% / Calmar1.23（外优于内）；'
+                         '最坏5%情形总收益仍 +8.4%，已入池。满足「回撤≤年化」铁律，为当前全A股唯一过约束策略。'
+                         'config 已启用，实盘起跑后进入赛马总览（看板主卡仅统计实盘序列）。</p>')
+    else:
+        cand_badge = '<span class="risk-badge" style="background:#ffedd5;color:#c2410c">🧪 测试中·待测达标</span>'
+        verified_note = ('<p class="note"><b>覆盖范围</b>：全A股（主板 + 科创板688 + 创业板300·301 + 北交所），不卡主板前缀；'
+                         f'与现有主板策略（主板硬约束）形成两档。当前回测未达「年化&gt;10% 且 回撤≤年化」铁律，'
+                         f'达标后从注册日起入赛马，不追溯。</p>')
     return (f'<div class="strat-block" id="{sid}">'
             f'<details><summary>{meta["name"]}{_scope_badge(sid)}{cand_badge}</summary>'
             f'<p class="tagline">{html.escape(meta["tagline"])}</p>'
@@ -1588,18 +1602,16 @@ def _methodology_candidate_block(sid):
             f'<table><thead><tr><th>因子 / 规则</th><th>权重 / 说明</th></tr></thead>'
             f'<tbody>{factor_rows}</tbody></table>'
             f'<p class="note">调仓：{html.escape(meta["rebalance"])} · 适合资金：{html.escape(meta["fit"])}</p>'
-            f'<p class="note"><b>覆盖范围</b>：全A股（主板 + 科创板688 + 创业板300·301 + 北交所），不卡主板前缀；'
-            f'与现有主板策略（主板硬约束）形成两档。当前回测未达「年化&gt;10% 且 回撤≤年化」铁律，'
-            f'达标后从注册日（2026-07-29）起入赛马，不追溯。</p>'
+            f'{verified_note}'
             f'</details></div>')
 
 
 def _methodology_candidates_section():
     blocks = "".join(_methodology_candidate_block(s) for s in CANDIDATE_SIDS)
-    return (f'<h2 id="candidates-alla">全A股候选策略（测试中）</h2>'
+    return (f'<h2 id="candidates-alla">全A股候选策略</h2>'
             f'<div class="banner yellow">🟧 <b>全A股覆盖范围</b>：以下候选策略覆盖 <b>主板 + 科创板(688) + 创业板(300·301) + 北交所</b>，'
             f'是看板准备新增的「全A股策略」。现有 6 只参赛策略（s26/s27/s29/s32/s37/s42）仅交易 <b>A股主板</b>（主板硬约束）。'
-            f'候选策略当前回测未达标，仅作透明展示，达标后入赛马。</div>'
+            f'<b>s53 已验证入池</b>（云端五关 + 蒙特卡洛通过，年化16.0%/回撤15.2%/夏普1.03）；s54/s55 仍在测试中。</div>'
             f'{blocks}')
 
 
@@ -1612,7 +1624,7 @@ def _methodology_toc():
             continue  # 已下线/归档策略不在看板展示
         items += f'<a href="#{sid}">{meta["name"]}</a>\n'
     items += '<a href="#risk-model">因子与风险模型</a>\n'
-    items += '<a href="#candidates-alla">全A股候选（测试中）</a>\n'
+    items += '<a href="#candidates-alla">全A股候选策略</a>\n'
     return f'<div class="toc"><b>📑 目录</b>\n{items}</div>'
 
 
