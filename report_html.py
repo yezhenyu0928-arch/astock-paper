@@ -1123,34 +1123,38 @@ def _news_industry_section(conn):
     if not conn:
         return ""
     today = util.today_str()
-    try:
-        # 读取市场面信号
+
+    def _load_signals(d):
         r = conn.execute("SELECT score, evidence FROM news_signal WHERE signal_date=? AND scope='market'",
-                         (today,)).fetchone()
-        market_score = float(r[0]) if r else None
-        market_ev = r[1] if r else ""
-
-        # 读取行业信号
-        rows = conn.execute("SELECT scope, score, evidence FROM news_signal WHERE signal_date=? AND scope LIKE 'sector:%'",
-                            (today,)).fetchall()
-        sector_signals = []
-        for scope, score, ev in rows:
-            etf_code = scope.replace("sector:", "")
+                         (d,)).fetchone()
+        m = float(r[0]) if r else None
+        ev = r[1] if r else ""
+        sec = []
+        for scope, score, e in conn.execute(
+                "SELECT scope, score, evidence FROM news_signal WHERE signal_date=? AND scope LIKE 'sector:%'",
+                (d,)).fetchall():
             if float(score) != 0:
-                sector_signals.append((etf_code, float(score), ev))
-
-        # 读取个股信号
-        rows = conn.execute("SELECT scope, score, evidence FROM news_signal WHERE signal_date=? AND scope LIKE 'stock:%'",
-                            (today,)).fetchall()
-        stock_signals = []
-        for scope, score, ev in rows:
-            code = scope.replace("stock:", "")
+                sec.append((scope.replace("sector:", ""), float(score), e))
+        stk = []
+        for scope, score, e in conn.execute(
+                "SELECT scope, score, evidence FROM news_signal WHERE signal_date=? AND scope LIKE 'stock:%'",
+                (d,)).fetchall():
             if float(score) != 0:
-                stock_signals.append((code, float(score), ev))
+                stk.append((scope.replace("stock:", ""), float(score), e))
+        return m, ev, sec, stk
 
-        # 无信号时静默返回
+    try:
+        market_score, market_ev, sector_signals, stock_signals = _load_signals(today)
+        note = ""
         if market_score is None and not sector_signals and not stock_signals:
-            return ""
+            # 兜底:今日无信号时回退到最近一次有信号的快照,避免板块整块消失
+            latest = conn.execute(
+                "SELECT signal_date FROM news_signal "
+                "WHERE scope='market' OR scope LIKE 'sector:%' OR scope LIKE 'stock:%' "
+                "ORDER BY signal_date DESC LIMIT 1").fetchone()
+            if latest:
+                market_score, market_ev, sector_signals, stock_signals = _load_signals(latest[0])
+                note = f"<div class='rg-note'>（展示最近一次信号快照 {latest[0]}，今日尚未生成新信号）</div>"
 
         # 构建HTML
         parts = []
@@ -1173,12 +1177,13 @@ def _news_industry_section(conn):
             nm = ctx_name(conn, code) if conn else util.bare(code)
             parts.append(f"<span class='news-tag' style='background:{color}'>{nm} {score:+.1f}</span>")
 
-        if not parts:
-            return ""
-
         tags = " ".join(parts)
+        if not tags:
+            # 今日与历史均无任何信号:仍然渲染区块(空状态提示),避免板块消失
+            return (f"<div class='sec'>📰 新闻/产业信号</div>"
+                    f"<div class='rg-note'>今日暂无新增产业/市场信号（消息面扫描未产生有效信号）。</div>")
         return (f"<div class='sec'>📰 新闻/产业信号</div>"
-                f"<div class='news-bar'>{tags}</div>")
+                f"<div class='news-bar'>{tags}</div>{note}")
 
     except Exception:
         return ""
@@ -1239,6 +1244,13 @@ def _news_flash_section(conn):
             "WHERE (ts LIKE ? OR ts >= ?) AND length(title)>0 "
             "ORDER BY ts DESC LIMIT 60",
             (today + "%", cutoff)).fetchall()
+        if not rows:
+            # 兜底:云端抓取偶发失败时,回退展示最近7天快讯,避免整块新闻区消失
+            cutoff7 = (datetime.today() - timedelta(days=7)).strftime("%Y-%m-%d")
+            rows = conn.execute(
+                "SELECT ts, title, source FROM news_raw "
+                "WHERE ts >= ? AND length(title)>0 "
+                "ORDER BY ts DESC LIMIT 60", (cutoff7,)).fetchall()
         if not rows:
             return ""
         seen, items = set(), []
