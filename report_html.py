@@ -6,7 +6,7 @@
 V2 要点(见 docs/OPTIMIZE_V2.md 卡A):
 - 盈红亏绿(A股习惯):涨/盈/买=红 --up,跌/亏/卖=绿 --down。
 - 今日操作聚合置顶 + 一键复制 + 实时价渐进增强(腾讯行情,失败静默回昨收)。
-- 实盘赛马总览(2026-07-06 起算)+ 各策略卡(介绍/因子权重表/可展开实盘曲线/最新持仓表)。
+- 实盘赛马总览(2026-07-31 起算)+ 各策略卡(介绍/因子权重表/可展开实盘曲线/最新持仓表)。
 - 数据新鲜度横幅(按交易日落后数,红/黄两档)。
 """
 import json
@@ -23,7 +23,7 @@ import backtest as bt
 import trade_calendar as cal
 
 # ---------------- 常量 ----------------
-LIVE_START = "2026-07-26"          # 实盘赛马起算日(2026-07-26 重置:从今天起看前向收益,非回测;此前 nav 作为归一基准)
+LIVE_START = "2026-07-31"          # 实盘赛马起算日(2026-07-31 重置:从今天起看前向收益,非回测;此前 nav 作为归一基准)
 BENCH = "sh000300"                 # 实盘曲线基准:沪深300(库内 daily_bar 或指数)
 BUY_BAND = (0.99, 1.02)            # 买入跟单价格带:参考价×[0.99, 1.02]
 
@@ -420,7 +420,7 @@ def _load_accounts():
 
 
 def _load_trade_log():
-    """实盘成交流水 state/trade_log.csv(2026-07-06 起)。返回按 (sid,code) 分组的买入记录 + 全量行。"""
+    """实盘成交流水 state/trade_log.csv(2026-07-31 起)。返回按 (sid,code) 分组的买入记录 + 全量行。"""
     path = conf.STATE_DIR / "trade_log.csv"
     rows = []
     if path.exists():
@@ -807,7 +807,7 @@ def _freshness(conn):
     return last, banner
 
 
-# ---------------- 实盘曲线(2026-07-06 起算) ----------------
+# ---------------- 实盘曲线(2026-07-31 起算) ----------------
 def _live_series(a):
     """返回 (dates, pcts):自 LIVE_START 起相对基准净值的累计收益率序列(前置 0% 起点)。"""
     hist = a.get("nav_history", [])
@@ -1389,8 +1389,8 @@ def generate(out_path=None):
               "if(navigator.clipboard){navigator.clipboard.writeText(OPS_TEXT).then(function(){alert('已复制操作指令');},"
               "function(){alert('复制失败，请手动选择');});}else{alert('浏览器不支持一键复制，请手动选择');}}</script>")
     else:
-        ops_section = ("<div class='op none'>暂无待执行操作（各策略空仓或未到调仓日）。"
-                       "上线首个交易日 2026-07-06 起，有操作时此处按策略列出。</div>")
+        ops_section = (f"<div class='op none'>暂无待执行操作（各策略空仓或未到调仓日）。"
+                       f"赛马自 {LIVE_START} 起跑，有操作时此处按策略列出。</div>")
 
     # ===== 大盘指数（东方财富风卡片）=====
     market_data = _load_market_index()
@@ -1859,7 +1859,7 @@ def generate_methodology(out_path=None):
 
 
 def generate_trades(conn, out_path=None, cap=800):
-    """历史交易页:实盘成交(2026-07-06 起)置顶展开 + 各策略回测成交折叠靠后。买红卖绿。"""
+    """历史交易页:实盘成交(2026-07-31 起)置顶展开 + 各策略回测成交折叠靠后。买红卖绿。"""
     sids = ["s26_microcap@v1", "s29_smallcap_select@v1", "s32_roe_quality@v1",
             "s37_earnings_accel@v1", "s42_sue_enriched@v1", "s53_all_a_momentum_smallcap@v1"]
     live_rows = []
@@ -1889,7 +1889,8 @@ def generate_trades(conn, out_path=None, cap=800):
     sections = ""
     if live_rows:
         live_rows.sort(key=lambda r: r.get("trade_date", ""), reverse=True)
-        sections += (f"<details open><summary>🔴 实盘模拟成交 · 全部（2026-07-06 起，共{len(live_rows)}笔）</summary>"
+        live_start = min((r.get("trade_date", "") for r in live_rows), default=LIVE_START)
+        sections += (f"<details open><summary>🔴 实盘模拟成交 · 全部（{live_start} 起，共{len(live_rows)}笔）</summary>"
                      f"{table(live_rows, truncate=False)}</details>")
         # 按策略筛选(纯 HTML 分组,卡E):每个有成交的策略一个可折叠子块
         by_sid = {}
@@ -1902,8 +1903,8 @@ def generate_trades(conn, out_path=None, cap=800):
                 sections += (f"<details><summary>{_cn(sid)}（{len(rows)}笔）</summary>"
                              f"{table(rows, truncate=False)}</details>")
     else:
-        sections += ("<details open><summary>🔴 实盘模拟成交（2026-07-06 起）</summary>"
-                     "<p class='empty'>实盘模拟期尚未产生成交（首个交易日为 2026-07-06）。上线后此处将按“全部 + 按策略筛选”分组展示。</p></details>")
+        sections += (f"<details open><summary>🔴 实盘模拟成交（{LIVE_START} 起）</summary>"
+                     f"<p class='empty'>实盘模拟期尚未产生成交（首个交易日为 {LIVE_START}）。赛马自 {LIVE_START} 起跑，首次成交将在之后的交易日产生，此处按“全部 + 按策略筛选”分组展示。</p></details>")
     for sid in sids:
         p = conf.REPORTS_DIR / f"{sid.replace('@','_at_')}_trades.csv"
         if not p.exists():
@@ -1921,7 +1922,7 @@ def generate_trades(conn, out_path=None, cap=800):
            f"<div class='sub'>生成 {util.today_str()} · <a href='index.html'>← 返回看板</a> · "
            f"回测按次日开盘价+真实费用滑点模拟成交 · 买入红 / 卖出绿</div>"
            f"<div class='tw'>{sections}</div>"
-           f"<div class='foot'>实盘区为 2026-07-06 起真实跟踪的模拟成交；历史回放区为 2022 年至今回测(含费用/滑点/T+1)，仅供参考。"
+           f"<div class='foot'>实盘区为 {LIVE_START} 起真实跟踪的模拟成交；历史回放区为 2022 年至今回测(含费用/滑点/T+1)，仅供参考。"
            f"实盘价一列由你在 Streamlit 看板回填。完整明细见仓库 reports/*_trades.csv。</div>"
            f"</div></body></html>")
     out_path = out_path or (conf.ROOT / "docs" / "trades.html")
