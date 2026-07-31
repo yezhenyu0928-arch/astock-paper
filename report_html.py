@@ -465,7 +465,7 @@ def _backtest_summary(sid):
                     ok = float(ann.rstrip("%")) >= 5.0 and float(dd.rstrip("%")) <= 5.0
                 except Exception:
                     ok = False
-                badge = "✅达标" if ok else "❌不达标"
+                badge = "✅达标" if ok else "⚠️未达收益/回撤目标线"
                 bt_line = f"年化{ann}·回撤{dd} {badge}"
                 break
             # 兜底:老格式只有 年化收益均值 / 年化 行(无主回测段)
@@ -1480,9 +1480,7 @@ def generate(out_path=None):
     chart_fb_banner = ("<div id='chartFallbackBanner' class='chart-fallback-banner' hidden>"
                         "⚠️ 图表库(Chart.js)未加载，因子暴露图已降级为纯文本/条形展示（数据完整，"
                         "见各策略卡内“风格暴露”的条形图与暴露值表格）。</div>")
-    scope_banner = ("<div class='banner yellow'>🟦 <b>现有策略</b>：看板当前 6 只参赛策略（s26/s27/s29/s32/s37/s42）仅交易 <b>A股主板</b>（主板硬约束）。"
-                    "🟧 <b>已上线</b>：全A股策略 <b>s53</b>（含科创板688 / 创业板300·301 / 北交所）已验证入池（年化16.0% / 回撤15.2% / 夏普1.03，过「回撤≤年化」铁律），实盘起跑后进入赛马；s54/s55 仍测试中。"
-                    "详见 <a href='methodology.html#candidates-alla'>方法论·全A股候选</a>。</div>")
+    scope_banner = ""  # 已移除:原"现有策略…s54/s55 仍测试中"说明段(用户要求不再展示)
     body = (
         f"{nav}<h1>📊 A股模拟跟单看板</h1>"
         f"{chart_fb_banner}"
@@ -1622,7 +1620,7 @@ def _methodology_candidates_section():
     blocks = "".join(_methodology_candidate_block(s) for s in CANDIDATE_SIDS)
     return (f'<h2 id="candidates-alla">全A股候选策略</h2>'
             f'<div class="banner yellow">🟧 <b>全A股覆盖范围</b>：以下候选策略覆盖 <b>主板 + 科创板(688) + 创业板(300·301) + 北交所</b>，'
-            f'是看板准备新增的「全A股策略」。现有 6 只参赛策略（s26/s27/s29/s32/s37/s42）仅交易 <b>A股主板</b>（主板硬约束）。'
+            f'是看板准备新增的「全A股策略」。现有 5 只参赛策略（s26/s29/s32/s37/s42）仅交易 <b>A股主板</b>（主板硬约束）。'
             f'<b>s53 已验证入池</b>（云端五关 + 蒙特卡洛通过，年化16.0%/回撤15.2%/夏普1.03）；s54/s55 仍在测试中。</div>'
             f'{blocks}')
 
@@ -1862,8 +1860,8 @@ def generate_methodology(out_path=None):
 
 def generate_trades(conn, out_path=None, cap=800):
     """历史交易页:实盘成交(2026-07-06 起)置顶展开 + 各策略回测成交折叠靠后。买红卖绿。"""
-    sids = ["s26_microcap@v1", "s27_dividend_lowvol@v1", "s29_smallcap_select@v1",
-            "s32_roe_quality@v1", "s37_earnings_accel@v1", "s42_sue_enriched@v1"]
+    sids = ["s26_microcap@v1", "s29_smallcap_select@v1", "s32_roe_quality@v1",
+            "s37_earnings_accel@v1", "s42_sue_enriched@v1", "s53_all_a_momentum_smallcap@v1"]
     live_rows = []
     live_csv = conf.STATE_DIR / "trade_log.csv"
     if live_csv.exists():
@@ -2055,7 +2053,7 @@ details[open].usage-instructions summary{margin-bottom:8px;border-bottom:1px sol
 _FOOTER = """<div class="foot">
 <details class="usage-instructions"><summary>📖 使用说明（点击展开）</summary>
 <b>怎么用</b>：每天 18:00 前后微信收到推送，次日开盘按『操作计划』的价格带手动跟单（每条已标注所属策略）；没收到心跳=系统故障，当天别跟单。<br>
-<b>观察期纪律</b>：第0-2周只看不投；满季度后若赛马正常，5万低风险参考配比 = ETF轮动25%+红利低波25%+小市值多因子20%+行业轮动15%+现金15%（S7赛道旗舰仅观察，待实盘验证）。任何策略熔断→该部分转现金等复核。<br>
+<b>观察期纪律</b>：第0-2周只看不投；满季度后若赛马正常，5万低风险参考配比 = ETF轮动25%+大盘价值25%+小市值多因子20%+行业轮动15%+现金15%（S7赛道旗舰仅观察，待实盘验证）。任何策略熔断→该部分转现金等复核。<br>
 <b>数据来源</b>：腾讯/新浪/东财 免费源为主，baostock/yfinance为辅，每交易日17:40自动更新；页面顶部横幅提示数据新鲜度。<br>
 <b>免责</b>：本页由 report_html.py 自动生成，零外部依赖可离线打开；模拟/历史表现不代表未来，不构成投资建议，请仅用可承受损失的资金。
 </details>
