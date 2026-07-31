@@ -3,7 +3,11 @@
 增量:每标的取库内最大 trade_date,从其次日拉到今天;空库从 2018-01-01。
 基准指数亦存入 daily_bar(code=sh000300 等),复用 schema,供净值对比。
 """
+import os
+import time
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import pandas as pd
 
 import util
@@ -65,17 +69,27 @@ def update_calendar(end_pad_year=1):
     return n
 
 
-def update_daily(codes, conn=None, timeout_flag=None, timeout_check=None) -> dict:
-    """增量更新日线。codes 过多时支持通过 timeout_flag/check 回调提前终止。"""
+def update_daily(codes, conn=None, timeout_flag=None, timeout_check=None,
+                 workers=None) -> dict:
+    """增量更新日线。codes 过多时支持通过 timeout_flag/check 回调提前终止。
+
+    并发说明(2026-07):全A池达 5000+ 只,逐只串行网络请求在 900s 超时内跑不完,
+    会被截断成残缺数据(曾出现 07-27 仅 4532 行、07-28/29 仅 2333 行,应为 5084)。
+    改为线程池并发「拉取」+ 主线程串行「写库」:
+      · 网络 IO 是瓶颈,线程池吞吐提升约 15-20 倍;
+      · SQLite 写仍在单线程,避免 database is locked;
+      · baostock 兜底源已在 data_adapter 用 _BS_LOCK 串行化。
+    并发数可用环境变量 DAILY_WORKERS 调整(默认 16,设为 1 退回串行)。
+    """
     own = conn is None
     if own:
         conn = get_conn()
     today = util.today_str()
     summary = {}
-    for i, code in enumerate(codes):
-        if timeout_check and timeout_flag and timeout_flag["expired"]:
-            log.warning("update_daily 超时,提前终止(已处理 %d/%d 个)", i, len(codes))
-            break
+
+    # ① 先在主线程算出每只的增量起点(纯读库,很快)
+    tasks = []
+    for code in codes:
         mx = _max_date(conn, code)
         start = cal.next_trade_day(mx) if mx else DEFAULT_START
         if mx and start <= mx:                    # 冗余保护
@@ -83,16 +97,150 @@ def update_daily(codes, conn=None, timeout_flag=None, timeout_check=None) -> dic
         if start > today:
             summary[code] = 0
             continue
+        tasks.append((code, start))
+
+    if not tasks:
+        if own:
+            conn.close()
+        return summary
+
+    if workers is None:
         try:
-            df = da.fetch_daily(code, start, today)
-            n = da.upsert(df, "daily_bar", conn=conn)
-            summary[code] = n
+            workers = int(os.getenv("DAILY_WORKERS", "16"))
+        except ValueError:
+            workers = 16
+    workers = max(1, min(workers, 32))
+
+    def _expired():
+        return bool(timeout_flag and timeout_flag.get("expired"))
+
+    # ② 串行路径(小批量或显式关闭并发)
+    if workers == 1 or len(tasks) < 4:
+        for i, (code, start) in enumerate(tasks):
+            if _expired():
+                log.warning("update_daily 超时,提前终止(已处理 %d/%d 个)", i, len(tasks))
+                break
+            try:
+                summary[code] = da.upsert(da.fetch_daily(code, start, today),
+                                          "daily_bar", conn=conn)
+            except Exception as e:
+                log.error("日线更新失败 %s: %s", code, e)
+                summary[code] = -1
+        if own:
+            conn.close()
+        return summary
+
+    # ③ 并发路径:线程池只做网络拉取,结果回主线程写库
+    def _pull(item):
+        code, start = item
+        if _expired():
+            return code, None, "timeout"
+        try:
+            return code, da.fetch_daily(code, start, today), None
         except Exception as e:
-            log.error("日线更新失败 %s: %s", code, e)
-            summary[code] = -1
+            return code, None, e
+
+    done = ok = 0
+    t0 = time.time()
+    log.info("update_daily 并发拉取 %d 只(workers=%d)", len(tasks), workers)
+    ex = ThreadPoolExecutor(max_workers=workers)
+    try:
+        futures = [ex.submit(_pull, t) for t in tasks]
+        for fu in as_completed(futures):
+            code, df, err = fu.result()
+            done += 1
+            if err == "timeout":
+                summary[code] = -1
+                continue
+            if err is not None:
+                log.error("日线更新失败 %s: %s", code, err)
+                summary[code] = -1
+                continue
+            try:
+                summary[code] = da.upsert(df, "daily_bar", conn=conn)
+                ok += 1
+            except Exception as e:
+                log.error("日线写库失败 %s: %s", code, e)
+                summary[code] = -1
+            if done % 500 == 0:
+                log.info("  日线进度 %d/%d 成功%d 用时%.0fs", done, len(tasks), ok, time.time() - t0)
+            if _expired():
+                log.warning("update_daily 超时,停止收集(已处理 %d/%d 个)", done, len(tasks))
+                break
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
+
+    log.info("update_daily 完成:%d/%d 成功,用时 %.0fs", ok, len(tasks), time.time() - t0)
     if own:
         conn.close()
     return summary
+
+
+def update_daily_snapshot(codes, conn=None, date=None, only_missing=True) -> dict:
+    """【当日快速补数】用批量截面接口补 codes 的**当日**日线,秒级完成全A。
+
+    定位:与 update_daily(逐只、可补历史)互补——
+      · update_daily:补历史缺口,慢(全A约2.3小时),日常增量不适用;
+      · 本函数  :只补当日,全A约 13 次请求、十几秒,适合每日收盘后跑。
+    adj_factor 沿用该股前一交易日值(当日无除权即正确;有除权者由后续 update_daily 修正)。
+    only_missing=True 时跳过当日已有数据的标的(盘后覆盖请传 False)。
+    返回 {"requested":n,"fetched":n,"written":n,"skipped":n}
+    """
+    own = conn is None
+    if own:
+        conn = get_conn()
+    date = util.to_date_str(date) if date else util.today_str()
+    codes = list(dict.fromkeys(codes))
+    stat = {"requested": len(codes), "fetched": 0, "written": 0, "skipped": 0}
+
+    target = codes
+    if only_missing:
+        have = {r[0] for r in conn.execute(
+            "SELECT code FROM daily_bar WHERE trade_date=?", (date,))}
+        target = [c for c in codes if c not in have]
+        stat["skipped"] = len(codes) - len(target)
+    if not target:
+        log.info("截面补数:当日 %s 已全覆盖,无需补(跳过 %d)", date, stat["skipped"])
+        if own:
+            conn.close()
+        return stat
+
+    log.info("截面补数 %s:目标 %d 只(已有 %d 只)", date, len(target), stat["skipped"])
+    df = da.fetch_snapshot_bars(target)
+    if df is None or df.empty:
+        log.warning("截面补数:未取到任何数据")
+        if own:
+            conn.close()
+        return stat
+    stat["fetched"] = len(df)
+
+    # 只保留目标交易日(盘中/节假日调用可能返回其它日期)
+    df = df[df["trade_date"] == date].copy()
+    if df.empty:
+        log.warning("截面补数:返回数据日期均非 %s(可能非交易日或接口未更新)", date)
+        if own:
+            conn.close()
+        return stat
+
+    # adj_factor:沿用各股最近一个交易日的值(截面接口无复权信息)
+    prev = dict(conn.execute(
+        "SELECT code, adj_factor FROM daily_bar WHERE trade_date=("
+        "  SELECT MAX(trade_date) FROM daily_bar WHERE trade_date<?)", (date,)).fetchall())
+    df["adj_factor"] = df["code"].map(prev).fillna(1.0).round(6)
+    df["is_suspended"] = 0
+    lim = [util.price_limits(pc, c) for pc, c in zip(df["prev_close"], df["code"])]
+    df["limit_up"] = [x[0] for x in lim]
+    df["limit_down"] = [x[1] for x in lim]
+    df["source"] = "tencent_snapshot"
+
+    stat["written"] = da.upsert(
+        df[["code", "trade_date", "open", "high", "low", "close", "volume", "amount",
+            "adj_factor", "is_suspended", "limit_up", "limit_down", "source"]],
+        "daily_bar", conn=conn)
+    log.info("截面补数完成 %s:写入 %d 行", date, stat["written"])
+    if own:
+        conn.close()
+    return stat
 
 
 def update_index_daily(codes, conn=None) -> dict:

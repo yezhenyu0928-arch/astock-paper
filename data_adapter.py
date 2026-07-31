@@ -22,6 +22,7 @@
 import os
 import time
 import logging
+import threading
 import contextlib
 import pandas as pd
 import requests
@@ -105,13 +106,20 @@ def _retry_df(fn, tries=3, delay=0.5, what=""):
         return None
 
 
+# baostock 使用进程级全局 socket,非线程安全:并发调用会串包/返回错行。
+# update_daily 并发拉取时 baostock 仅作末位兜底源,用可重入锁把它串行化,
+# 其余源(tencent/tushare/akshare)基于 requests,天然线程安全,不受影响。
+_BS_LOCK = threading.RLock()
+
+
 def _bs():
     global _bs_logged_in
     _ensure_bs_socket_timeout()
     import baostock as bs
-    if not _bs_logged_in:
-        bs.login()
-        _bs_logged_in = True
+    with _BS_LOCK:
+        if not _bs_logged_in:
+            bs.login()
+            _bs_logged_in = True
     return bs
 
 
@@ -131,6 +139,13 @@ def _is_t0(code: str) -> int:
     return int(any(six.startswith(p) for p in _T0_PREFIX))
 
 
+# akshare 东财接口内部依赖 py_mini_racer(V8/JS 引擎)做签名计算,该扩展**非线程安全**:
+# 多线程并发调用会直接段错误崩掉整个解释器(实测 update_daily 并发时 mini_racer.dll 崩溃栈)。
+# 与 baostock 同样处理:用锁串行化。并发主力是 tencent(requests),akshare 仅作兜底,
+# 串行化它对整体吞吐影响很小,却能避免进程崩溃。
+_AK_LOCK = threading.RLock()
+
+
 # ============ 日线 ============
 def _ak_etf(code, start, end, adjust):
     df = ak_fund_etf(code, start, end, adjust)
@@ -140,18 +155,20 @@ def _ak_etf(code, start, end, adjust):
 def ak_fund_etf(code, start, end, adjust):
     import akshare as ak
     six = util.bare(code)
-    df = ak.fund_etf_hist_em(symbol=six, period="daily",
-                             start_date=start.replace("-", ""),
-                             end_date=end.replace("-", ""), adjust=adjust)
+    with _AK_LOCK:
+        df = ak.fund_etf_hist_em(symbol=six, period="daily",
+                                 start_date=start.replace("-", ""),
+                                 end_date=end.replace("-", ""), adjust=adjust)
     return df
 
 
 def ak_stock(code, start, end, adjust):
     import akshare as ak
     six = util.bare(code)
-    df = ak.stock_zh_a_hist(symbol=six, period="daily",
-                            start_date=start.replace("-", ""),
-                            end_date=end.replace("-", ""), adjust=adjust)
+    with _AK_LOCK:
+        df = ak.stock_zh_a_hist(symbol=six, period="daily",
+                                start_date=start.replace("-", ""),
+                                end_date=end.replace("-", ""), adjust=adjust)
     return df
 
 
@@ -188,15 +205,17 @@ def _norm_ak(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _bs_kline(code, start, end, adjustflag):
-    """baostock 日线。adjustflag: 1=后复权 2=前复权 3=不复权。返回统一列(含 tradestatus/isST)。"""
+    """baostock 日线。adjustflag: 1=后复权 2=前复权 3=不复权。返回统一列(含 tradestatus/isST)。
+    ⚠ 全程持 _BS_LOCK:baostock 全局 socket 非线程安全,并发下必须串行化。"""
     bs = _bs()
     fields = "date,open,high,low,close,volume,amount,tradestatus,isST"
-    rs = bs.query_history_k_data_plus(_bs_code(code), fields,
-                                      start_date=start, end_date=end,
-                                      frequency="d", adjustflag=str(adjustflag))
-    rows = []
-    while (rs.error_code == "0") and rs.next():
-        rows.append(rs.get_row_data())
+    with _BS_LOCK:
+        rs = bs.query_history_k_data_plus(_bs_code(code), fields,
+                                          start_date=start, end_date=end,
+                                          frequency="d", adjustflag=str(adjustflag))
+        rows = []
+        while (rs.error_code == "0") and rs.next():
+            rows.append(rs.get_row_data())
     if not rows:
         return pd.DataFrame(columns=["trade_date", "open", "high", "low", "close",
                                      "volume", "amount", "tradestatus", "isST"])
@@ -483,7 +502,11 @@ def _fetch_hfq_close(code, start, end, cfg=None):
     monitor = get_monitor()
 
     # 获取配置的数据源优先级
-    source_priority = cfg.get("data_source_priority", {}).get("hfq_close", ["baostock", "akshare_em"])
+    # ⚠ 默认把 tencent 放首位:baostock/akshare 均已因线程不安全被加锁串行化,
+    #   若复权因子仍首选 baostock,update_daily 的并发会被这把锁拖回串行(全A 5000+只跑不完)。
+    #   腾讯源(stock_zh_a_hist_tx)是纯 HTTP,可并发;失败再回退 baostock/akshare。
+    source_priority = cfg.get("data_source_priority", {}).get(
+        "hfq_close", ["tencent", "baostock", "akshare_em"])
 
     for src in source_priority:
         try:
@@ -911,6 +934,84 @@ def _fetch_sina(codes):
                      headers={"Referer": "https://finance.sina.com.cn"})
     r.encoding = "gbk"
     return _parse_sina(r.text)
+
+
+_SNAPSHOT_BATCH = 400          # 腾讯 q= 接口单次代码数(实测 400 稳定,过大易被截断)
+
+
+def _parse_snapshot(text):
+    """解析腾讯批量行情为完整 OHLCV。字段(~分隔)实测:
+    [1]名称 [2]六位代码 [3]现价 [4]昨收 [5]今开 [6]成交量(手)
+    [30]时间YYYYMMDDHHMMSS [33]最高 [34]最低 [37]成交额(万元)
+    """
+    out = {}
+    for line in text.split(";"):
+        line = line.strip()
+        if not line.startswith("v_") or "=" not in line:
+            continue
+        try:
+            head, payload = line.split("=", 1)
+            code = head[2:].strip()                      # v_sh600000 -> sh600000
+            f = payload.strip().strip('"').split("~")
+            if len(f) < 38:
+                continue
+            close = float(f[3] or 0)
+            if close <= 0:                               # 停牌/无成交
+                continue
+            ts = f[30] or ""
+            out[code] = {
+                "trade_date": f"{ts[0:4]}-{ts[4:6]}-{ts[6:8]}" if len(ts) >= 8 else "",
+                "open": float(f[5] or 0),
+                "high": float(f[33] or 0),
+                "low": float(f[34] or 0),
+                "close": close,
+                "prev_close": float(f[4] or 0),
+                "volume": float(f[6] or 0) * 100.0,      # 手 → 股
+                "amount": float(f[37] or 0) * 10000.0,   # 万元 → 元
+            }
+        except Exception:
+            continue
+    return out
+
+
+def fetch_snapshot_bars(codes, batch=None, cfg=None) -> pd.DataFrame:
+    """【批量截面】一次数百只拉取**当日** OHLCV,用于收盘后秒补全A当日日线。
+
+    为什么需要它:逐只 fetch_daily 对全A(5000+只)要发 1 万+次请求,
+    既慢(实测约2.3小时)又会触发腾讯限流(并发16时整批失败回落 yfinance)。
+    截面接口把请求数从 1 万+ 压到约 13 次,秒级完成且不触发限流。
+
+    ⚠ 局限(调用方须知):
+      · 只能取「当日」,补历史缺口仍需 fetch_daily;
+      · 不含复权信息,adj_factor 由调用方沿用该股前一交易日的值(当日无除权即正确);
+      · 盘中调用得到的是即时快照,收盘后需再跑一次覆盖(daily_bar 为 INSERT OR REPLACE)。
+    返回 df[code,trade_date,open,high,low,close,volume,amount,prev_close]。
+    """
+    codes = [c for c in dict.fromkeys(codes) if c]
+    if not codes:
+        return pd.DataFrame()
+    batch = batch or _SNAPSHOT_BATCH
+    monitor = get_monitor()
+    rows = []
+    for i in range(0, len(codes), batch):
+        chunk = codes[i:i + batch]
+        t0 = time.time()
+        try:
+            r = requests.get("https://qt.gtimg.cn/q=" + ",".join(chunk), timeout=15)
+            r.encoding = "gbk"
+            got = _parse_snapshot(r.text)
+            monitor.record_call("tencent_snapshot", bool(got), time.time() - t0,
+                                len(got), len(chunk))
+            for code, d in got.items():
+                d["code"] = code
+                rows.append(d)
+            log.info("截面批 %d-%d:请求%d 命中%d (%.1fs)",
+                     i, i + len(chunk), len(chunk), len(got), time.time() - t0)
+        except Exception as e:
+            monitor.record_call("tencent_snapshot", False, time.time() - t0, 0, len(chunk), str(e))
+            log.warning("截面批 %d-%d 失败:%s", i, i + len(chunk), e)
+        time.sleep(0.3)          # 批间轻微间隔,避免触发限流
+    return pd.DataFrame(rows)
 
 
 def fetch_realtime(codes, cfg=None) -> dict:

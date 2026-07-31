@@ -16,9 +16,12 @@
 评分 0.5-0.8: 亚健康(降级使用)
 评分 < 0.5: 故障(停用并告警)
 """
+import os
 import time
 import json
+import atexit
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Callable, Any
 from collections import deque
@@ -144,9 +147,15 @@ class SourceHealth:
 class DataSourceHealthMonitor:
     """数据源健康度监控器"""
 
+    _SAVE_INTERVAL = 5.0          # 落盘节流间隔(秒)
+
     def __init__(self):
         self.sources: Dict[str, SourceHealth] = {}
+        self._save_lock = threading.RLock()
+        self._last_save = 0.0
+        self._dirty = False
         self._load_state()
+        atexit.register(self.flush)   # 进程退出时补落一次,不丢统计
 
     def _load_state(self):
         """从文件加载状态"""
@@ -165,27 +174,47 @@ class DataSourceHealthMonitor:
             except Exception as e:
                 log.warning("加载健康状态失败: %s", e)
 
-    def _save_state(self):
-        """保存状态到文件"""
-        try:
-            HEALTH_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            data = {
-                'sources': {},
-                'saved_at': time.time()
-            }
-            for name, health in self.sources.items():
-                data['sources'][name] = {
-                    'total_calls': health.total_calls,
-                    'total_success': health.total_success,
-                    'disabled': health.disabled,
-                    'disabled_until': health.disabled_until,
-                    'health_score': health.health_score,
-                    'status': health.status
+    def _save_state(self, force: bool = False):
+        """保存状态到文件(带节流+锁)。
+
+        ⚠ 性能/并发修复(2026-07):此前 record_call 每次都同步落盘。
+        全A 5000+ 只日线更新会产生上万次 record_call → 上万次 JSON 写盘,
+        既拖慢并发拉取(实测加速比被压到 2.2x),多线程同写一个文件还可能写坏状态。
+        改为:内存实时更新,落盘按 _SAVE_INTERVAL 节流并加锁;进程退出时 force 落一次。
+        """
+        now = time.time()
+        with self._save_lock:
+            if not force and (now - self._last_save) < self._SAVE_INTERVAL:
+                self._dirty = True
+                return
+            try:
+                HEALTH_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+                data = {
+                    'sources': {},
+                    'saved_at': now
                 }
-            with open(HEALTH_STATE_FILE, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            log.warning("保存健康状态失败: %s", e)
+                for name, health in self.sources.items():
+                    data['sources'][name] = {
+                        'total_calls': health.total_calls,
+                        'total_success': health.total_success,
+                        'disabled': health.disabled,
+                        'disabled_until': health.disabled_until,
+                        'health_score': health.health_score,
+                        'status': health.status
+                    }
+                tmp = HEALTH_STATE_FILE.with_suffix(HEALTH_STATE_FILE.suffix + ".tmp")
+                with open(tmp, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp, HEALTH_STATE_FILE)       # 原子替换,避免半截文件
+                self._last_save = now
+                self._dirty = False
+            except Exception as e:
+                log.warning("保存健康状态失败: %s", e)
+
+    def flush(self):
+        """强制落盘(进程收尾时调用)。"""
+        if self._dirty:
+            self._save_state(force=True)
 
     def get_health(self, source_name: str) -> SourceHealth:
         """获取或创建数据源健康状态"""
@@ -252,11 +281,20 @@ class DataSourceHealthMonitor:
 _health_monitor: Optional[DataSourceHealthMonitor] = None
 
 
+_monitor_lock = threading.Lock()
+
+
 def get_monitor() -> DataSourceHealthMonitor:
-    """获取全局健康度监控器"""
+    """获取全局健康度监控器(线程安全单例)。
+
+    ⚠ 并发修复(2026-07):原实现无锁,多线程同时判定 `is None` 会各自 new 一个实例,
+    表现为日志反复刷"加载数据源健康状态: 13 个源",且各线程统计相互覆盖。
+    """
     global _health_monitor
     if _health_monitor is None:
-        _health_monitor = DataSourceHealthMonitor()
+        with _monitor_lock:
+            if _health_monitor is None:
+                _health_monitor = DataSourceHealthMonitor()
     return _health_monitor
 
 

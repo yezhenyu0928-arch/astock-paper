@@ -50,33 +50,67 @@ def _check_timeout(flag):
 
 
 def _stock_universe(cfg, reg, conn):
-    """启用的个股策略所需的日线更新范围(沪深300成分兜底;全A补数见 P7/P9)。
+    """启用的个股策略所需的日线更新范围——从 registry 动态推导,免手工登记。
 
-    ⚠ 关键修复(2026-07):必须按策略「前缀」识别,而非写死的 @v1 ID。
-    此前仅判断 s1_dividend@v1 / s4_smallcap@v1 / s3_ma_trend@v1;
-    当 config 切到 v2(s1_dividend@v2 等)后,这些 v1 ID 全部为 false →
-    返回空集 → run_daily 永远不调用 update_daily → 个股日线永不刷新 →
-    候选池空 → 全部策略 0 交易(即本期"为什么没有操作"的根因)。
-    改为:任一启用的「个股策略前缀」命中即拉沪深300成分日线(版本无关,新增个股策略须加入前缀表)。
+    ⚠ 两次踩坑史(务必别再改回白名单写法):
+    ① 2026-07 一次坑:写死 @v1 ID 判断,config 切到 v2 后全部 false → 返回空集。
+    ② 2026-07 二次坑:改成"策略前缀白名单"仍需人工登记;s26/s27/s29/s32/s37/s42/s53
+       一批上线后无人登记 → need_stock 恒为 False → update_daily 永不调用 →
+       个股日线停更在最后一次人工回填 → 当前交易日候选池=0 → 全部策略 0 交易、
+       微信零推送(即用户反馈的"微信推送一直没有任何策略产生交易")。
+    根治:不再维护任何名单,直接读 registry:
+      universe == 'dynamic'      → 个股策略,池由 params.pool_index 决定(默认 mainboard)
+      universe == 'index:<code>' → 个股策略,池为该指数成分
+      universe == [ETF代码列表]   → 纯ETF策略,不需要个股日线
+    池取并集并按覆盖面择大:all_a(全A) > mainboard(主板流动性池) > sh000300。
     """
-    codes = set()
     enabled = {s for s, on in cfg.get("strategies", {}).items() if on}
-    # 需要个股日线数据的策略前缀(版本无关)。新增个股策略务必在此登记,否则会再次掉进"0交易"坑。
-    stock_strategy_prefixes = (
-        "s1_dividend", "s4_smallcap", "s8_checklist",
-        "s13_growth_quality_rotation", "s14_value_reversal_rotation", "s15_core_allocation",
-    )
-    need_stock = any(s.split("@", 1)[0] in stock_strategy_prefixes for s in enabled)
-    if need_stock:
-        # 扩池后优先用主板流动性可投池(index_code='mainboard', 约1000-1500只);
-        # 未回填(空)时回退沪深300成分, 保证永不返回空集(旧"0交易"坑)。
-        rows = conn.execute("SELECT code FROM index_members WHERE index_code='mainboard'").fetchall()
-        src = "mainboard主板流动性池"
-        if not rows:
-            rows = conn.execute("SELECT code FROM index_members WHERE index_code='sh000300'").fetchall()
-            src = "沪深300成分兜底"
+    R = reg.get("strategies", reg) if isinstance(reg, dict) else {}
+
+    pools = set()          # 需要的 index_members.index_code 集合
+    stock_sids = []
+    for sid in sorted(enabled):
+        d = R.get(sid) or {}
+        if not isinstance(d, dict):
+            continue
+        uni = d.get("universe")
+        if isinstance(uni, (list, tuple)):      # 显式 ETF 列表 → 非个股策略
+            continue
+        uni = str(uni or "").strip().lower()
+        if uni == "dynamic":
+            params = d.get("params") or {}
+            pools.add(str(params.get("pool_index") or "mainboard"))
+            stock_sids.append(sid)
+        elif uni.startswith("index:"):
+            pools.add(uni.split(":", 1)[1])
+            stock_sids.append(sid)
+
+    if not pools:
+        log.info("无启用的个股策略,跳过个股日线更新")
+        return set()
+
+    # 覆盖面择大:只要有策略要全A,就一次性拉全A(它是其余池的超集)
+    if "all_a" in pools:
+        order = ["all_a"]
+    else:
+        order = sorted(pools, key=lambda p: 0 if p == "mainboard" else 1)
+
+    codes = set()
+    used = []
+    for pool in order:
+        rows = conn.execute(
+            "SELECT code FROM index_members WHERE index_code=?", (pool,)).fetchall()
+        if rows:
+            codes |= {r[0] for r in rows}
+            used.append(f"{pool}({len(rows)})")
+    if not codes:      # 兜底:池表未回填时退回沪深300,保证永不返回空集(旧"0交易"坑)
+        rows = conn.execute(
+            "SELECT code FROM index_members WHERE index_code='sh000300'").fetchall()
         codes |= {r[0] for r in rows}
-        log.info("个股策略已启用,日线更新范围=%d 只(%s)", len(codes), src)
+        used.append(f"sh000300兜底({len(rows)})")
+
+    log.info("个股策略 %d 只(%s),日线更新范围=%d 只,来源池=%s",
+             len(stock_sids), ",".join(stock_sids), len(codes), "+".join(used))
     return codes
 
 
@@ -183,13 +217,23 @@ def run(date=None, only=None):
         try:
             data.update_all(cfg, reg, with_members=True, _timeout_check=_check_timeout, _timeout_flag=flag)
             _check_timeout(flag)
-            # —— 个股日线回填(慢,受 _DATA_TIMEOUT 保护;超时才截断剩余未更,不阻断后续) ——
+            # —— 个股日线:先「截面秒补当日」,再「逐只补历史缺口」 ——
+            # 顺序很关键(2026-07 修复):策略选股只硬依赖「当日 bar 存在」+「近251日≥200条」,
+            # 而逐只 update_daily 拉全A(5000+只)要约2.3小时,在 _DATA_TIMEOUT 内必被截断,
+            # 且高并发会触发腾讯限流导致整批失败(历史上就是这样把当日数据拉残的:
+            # 07-27 仅4532行、07-28/29 仅2333行,应为5084行)。
+            # 现在改为:截面接口约13次请求、20秒补齐当日(决定今天能否出信号),
+            # 历史缺口再用逐只增量慢慢补(补不完也不影响当天出单)。
             if stock_codes:
+                try:
+                    data.update_daily_snapshot(sorted(stock_codes), conn=conn, date=today)
+                except Exception as e:
+                    log.warning("当日截面补数失败(降级为逐只增量):%s", e)
                 try:
                     data.update_daily(sorted(stock_codes), conn=conn, timeout_flag=flag, timeout_check=_check_timeout)
                     _check_timeout(flag)
                 except TimeoutError:
-                    log.warning("个股日线回填超时(已部分更新),继续;证券信息/基本面更新不受影响")
+                    log.warning("个股历史日线回填超时(当日数据已由截面补齐,不影响出单),继续")
                     flag["expired"] = False   # 解除标记,避免影响后续步骤
         finally:
             timer.cancel()
