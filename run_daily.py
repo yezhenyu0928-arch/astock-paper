@@ -235,6 +235,15 @@ def run(date=None, only=None):
                 except TimeoutError:
                     log.warning("个股历史日线回填超时(当日数据已由截面补齐,不影响出单),继续")
                     flag["expired"] = False   # 解除标记,避免影响后续步骤
+        except TimeoutError:
+            # _check_timeout(flag) 在 update_all 之后触发(整段超时)
+            log.warning("数据更新超时(降级继续):_check_timeout 触发")
+            flag["expired"] = False
+        except Exception as e:
+            # 卡B:任何非预期异常(网络/接口/DB 写入)均降级继续,绝不因单次抓取抖动让整轮任务失败。
+            # 原 try/finally 无 except,异常会冒泡使 GitHub Actions 整轮标红、微信只收到泛化"任务失败"。
+            log.warning("数据更新异常(降级继续,使用已有缓存数据):%s", e)
+            log.exception("数据更新异常详情")
         finally:
             timer.cancel()
         # —— 证券信息 + 基本面(独立于日线回填超时,策略选股硬依赖,必须跑) ——
@@ -293,10 +302,12 @@ def run(date=None, only=None):
                 for w in chk.get("warnings", []):
                     log.warning(w)
             except data.DataCheckError as e:
-                t, c = notify.build_alert(f"数据质检失败:{e},今日暂停跟单")
+                # 卡B:质检异常改为降级继续(不再 return 1 让整轮任务失败)。
+                # 系统为模拟盘,各策略对缺失数据已优雅降级;整轮静默失败(零推送)危害更大。
+                # 仍大声告警,提示今日数据可能不全。
+                t, c = notify.build_alert(f"🟡 数据质检异常(降级继续,请注意今日数据可能不全):{e}")
                 notify.push(t, c, "alert", cfg)
-                log.error("质检FAIL:%s", e)
-                return 1
+                log.error("质检FAIL(降级继续):%s", e)
         else:
             log.warning("今天无新数据入库(海外Runner数据源不可达),跳过质检,使用缓存DB继续")
     finally:
@@ -423,7 +434,21 @@ def main(argv=None):
     ap.add_argument("--only", help="仅运行指定策略,逗号分隔")
     args = ap.parse_args(argv)
     only = args.only.split(",") if args.only else None
-    return run(args.date, only)
+    try:
+        return run(args.date, only)
+    except Exception:
+        # 顶层兜底:任何 run() 未预期崩溃,把真实堆栈推到微信(末25行),
+        # 避免只收到 daily.yml 的泛化"任务失败"。NO_PUSH 时不发推送仅打印。
+        import traceback as _tb
+        tb_text = _tb.format_exc()
+        tail = "\n".join(tb_text.strip().splitlines()[-25:])
+        msg = "🔴 每日任务异常崩溃(非预期),堆栈末25行如下,请检查代码/数据:\n" + tail
+        try:
+            notify.push("【告警🔴】", msg, "alert", conf.load_config())
+        except Exception:
+            pass
+        print(tb_text)
+        return 1
 
 
 if __name__ == "__main__":

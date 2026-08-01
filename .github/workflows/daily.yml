@@ -88,7 +88,7 @@ jobs:
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
           FORCE_REBALANCE: ${{ github.event.inputs.force_rebalance }}
           NO_PUSH: ${{ github.event.inputs.no_push }}
-        run: python run_daily.py
+        run: python run_daily.py 2>&1 | tee run_daily.log
       - name: bundle Chart.js locally (no CDN dependency)
         # CI 有外网:把 Chart.js 抓到 docs/vendor/,使 Pages 自带该文件,不再依赖用户浏览器访问境外 CDN。
         run: |
@@ -111,7 +111,9 @@ jobs:
         env:
           PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
           SMTP_AUTH_CODE: ${{ secrets.SMTP_AUTH_CODE }}
-        run: python notify.py --alert "🔴 今日Actions任务失败,系统未正常运行,请暂停跟单并检查" || true
+        run: |
+          TAIL=$(tail -n 40 run_daily.log 2>/dev/null || echo "no-log")
+          python notify.py --alert "$(printf '🔴 今日Actions任务失败,系统未正常运行,请暂停跟单并检查。\n最近日志(末40行):\n%s' "$TAIL")" || true
       # 只提交文本快照(state/reports/docs),不提交 DB。docs/ 供 GitHub Pages。
       # 卡B:push 失败不再静默吞错——最多重试3次(每次先 rebase),仍失败则告警(Pages 会停更)。
       - name: commit snapshot
