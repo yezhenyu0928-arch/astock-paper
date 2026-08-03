@@ -2167,3 +2167,122 @@ s52_earnings_revision@v1:
   universe: dynamic
   rebalance: monthly
 
+# ============================================================
+# race_v2 系列 —— 依据因子诊断重建的 6 只真独立赛马策略(2026-08-03)
+# 因子均经 去极值→行业中性化→(市值中性化)→百分位标准化(见 strategies/factor_engine.py)
+# 调仓日定期等权再平衡 + 非调仓日波动率自适应止损 + 低波预筛/动量门槛防御管线
+# 混合中性化方案(用户确认): 行业中性化(真Alpha)保留, 市值中性化仅质量价值策略开启
+# ============================================================
+
+r1_small_rev@v1:
+  class: strategies.race_v2.RaceSmallRev
+  benchmark: sh000905
+  frozen_date: 2026-08-03
+  params:
+    rebalance: monthly
+    rebalance_light: true
+    pool_index: mainboard
+    cap_segment: small
+    min_market_cap: 5000000000
+    hold_n: 10
+    max_per_industry: 3
+    stop_base: 0.12
+    low_vol_pct: 0.60
+    momentum_min: -0.10
+    ind_neutral: true
+    factor_weights: {rev1m: -0.50, size: -0.25, amount: -0.15, vol: -0.10}
+  universe: dynamic
+  rebalance: monthly
+
+r2_quality_value@v1:
+  class: strategies.race_v2.RaceQualityValue
+  benchmark: sh000905
+  frozen_date: 2026-08-03
+  params:
+    rebalance: monthly
+    rebalance_light: true
+    pool_index: sh000300
+    hold_n: 10
+    max_per_industry: 3
+    stop_base: 0.10
+    low_vol_pct: 0.50
+    momentum_min: -0.10
+    ind_neutral: true
+    factor_weights: {roe: 0.30, ep: 0.20, bm: -0.15, vol: -0.20, size: -0.15}
+  universe: dynamic
+  rebalance: monthly
+
+r3_value_rev@v1:
+  class: strategies.race_v2.RaceValueRev
+  benchmark: sh000905
+  frozen_date: 2026-08-03
+  params:
+    rebalance: monthly
+    rebalance_light: true
+    pool_index: mainboard
+    cap_segment: mid
+    min_market_cap: 3000000000
+    hold_n: 10
+    max_per_industry: 3
+    stop_base: 0.12
+    low_vol_pct: 0.50
+    momentum_min: -0.10
+    ind_neutral: true
+    factor_weights: {bm: -0.45, rev1m: -0.30, ep: 0.15, vol: -0.10}
+  universe: dynamic
+  rebalance: monthly
+
+r4_all_a_growth@v1:
+  class: strategies.race_v2.RaceAllAGrowth
+  benchmark: sh000905
+  frozen_date: 2026-08-03
+  params:
+    rebalance: monthly
+    rebalance_light: true
+    pool_index: all_a
+    min_market_cap: 10000000000
+    hold_n: 10
+    max_per_industry: 3
+    stop_base: 0.15
+    low_vol_pct: 0.50
+    momentum_min: -0.10
+    ind_neutral: true
+    liquidity_floor: 30000000
+    factor_weights: {bm: -0.35, vol: -0.30, rev1m: -0.20, ep: 0.15}
+  universe: dynamic
+  rebalance: monthly
+
+r5_etf_momentum@v1:
+  class: strategies.race_v2.RaceEtfMomentum
+  benchmark: sh510300
+  frozen_date: 2026-08-03
+  params:
+    rebalance: monthly
+    hold_n: 4
+    max_per_industry: 3
+    stop_base: 0.08
+    factor_weights: {vol: -0.60, rev1m: 0.40}
+    etf_codes: [sh510300, sh512890, sh513100, sh511010]
+  universe: dynamic
+  rebalance: monthly
+
+r6_lowvol_def@v1:
+  class: strategies.race_v2.RaceLowVolDef
+  benchmark: sh000905
+  frozen_date: 2026-08-03
+  params:
+    rebalance: weekly
+    rebalance_light: true
+    pool_index: mainboard
+    market_gate: false
+    hold_n: 10
+    max_per_industry: 3
+    stop_base: 0.08
+    low_vol_pct: 0.50
+    momentum_min: -0.10
+    ind_neutral: true
+    liquidity_floor: 80000000
+    factor_weights: {vol: -0.40, roe: 0.25, bm: -0.20, ep: 0.15}
+  universe: dynamic
+  rebalance: weekly
+

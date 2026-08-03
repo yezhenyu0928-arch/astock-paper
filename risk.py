@@ -187,6 +187,63 @@ _RISK_RELAX = {
         "time_stop_exempt": True,
         "stop_override": 0.25,
     },
+    # ============ race_v2 系列(2026-08-03, 依据因子诊断重建) ============
+    # r1 小市值反转: 小盘, 熔断25%/止损20%。豁免宏观MA200敞口闸门(否则熊市持续空仓, s26 同款教训:
+    # macro_exposure_mult 在回测中把敞口压到0.1, 买单全部<5000元被取消 → 全年0成交)。
+    # 大盘保护靠选股防御(低波+流动性+反转)而非宏观闸门一刀切。
+    "r1": {
+        "max_dd": 0.25,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.20,
+    },
+    # r2 质量价值: 大盘质量, 熔断15%/止损15%(质量股波动低, 相对严格)
+    "r2": {
+        "max_dd": 0.15,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.15,
+    },
+    # r3 深度价值反转: 中盘, 熔断20%/止损20%
+    "r3": {
+        "max_dd": 0.20,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.20,
+    },
+    # r4 全A盈利加速: 全A含科创创业, 波动大, 熔断40%/止损30%
+    "r4": {
+        "max_dd": 0.40,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.30,
+    },
+    # r5 ETF动量轮动: ETF分散, 熔断20%/止损15%
+    "r5": {
+        "max_dd": 0.20,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.15,
+    },
+    # r6 低波防御: 防御型, 熔断15%/止损12%(相对严格, 靠选股防御而非放宽风控)
+    "r6": {
+        "max_dd": 0.15,
+        "market_freeze_exempt": True,
+        "exposure_exempt": True,
+        "trailing_tp_exempt": True,
+        "time_stop_exempt": True,
+        "stop_override": 0.12,
+    },
 }
 
 

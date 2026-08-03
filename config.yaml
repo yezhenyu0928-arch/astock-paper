@@ -55,7 +55,7 @@ strategies:                     # 2026-07 重构:全面个股化——下线全�
   s23_industry_momentum@v1: false # 下线:年化-1.5%,不达标
   s24_aggressive_smallcap@v1: false # 归档:诚实回测年化0.035%——大盘冻结弱市全程锁死开仓,被 s25 放宽版取代
   s25_aggressive_relaxed@v1: false # 下线:年化5.0%/夏普0.57,不达"年化≥10%且夏普>1"(v2周频实验3.6%更差)
-  s26_microcap@v1: true          # ✅保留观察:年化12.3%/回撤11.3%/夏普0.93——收益达标,夏普差0.07(v2/v3/v4改良均未超越)
+  s26_microcap@v1: false         # 下线(2026-08-03):被 race_v2 新阵容取代(旧同底座参数变体)
   s27_dividend_lowvol@v1: false  # 下线(2026-07-31):用户决策红利低波收益太低,移出看板赛马总览/策略卡/方法论
   # ↓ 个股策略(仅交易A股个股,无任何ETF);各策略模拟不同投资经理风格,综合宏观/行业/基本面/技术/资金面
   s1_dividend@v2: false         # 红利价值经理[归档:被@v3主板差异化版取代]
@@ -84,16 +84,16 @@ strategies:                     # 2026-07 重构:全面个股化——下线全�
   s14_value_reversal_rotation@v3: false   # 下线(2026-07-27 回测-1.9%不达标+数据报错)
   s15_core_allocation@v3: false          # 下线(2026-07-27 回测不达标,原阵容)
   # ↓ 2026-07-27 穿透5篇研报新建(国信金工/开源金工/中信建投):本地可落地因子复现
-  s29_smallcap_select@v1: true     # 国信小盘精选(规模+估值+反转):月频10只
+  s29_smallcap_select@v1: false    # 下线(2026-08-03):被 race_v2 新阵容取代
   s30_steady_select@v1: false     # 下线(2026-07-28):回测年化仅1.2%不达标,移出看板
   s31_etf_rotation@v1: false      # 下线(2026-07-28):真实回测年化1.6%/回撤13.1%,未达年化>10%线
   s31_etf_rotation@v2: false      # 下线(2026-07-28):真实回测年化-0.9%/回撤12.4%,未达线
-  s32_roe_quality@v1: true       # 国信ROE质量选股(ROE主导):月频10只
+  s32_roe_quality@v1: false       # 下线(2026-08-03):被 race_v2 新阵容取代
   s33_kyfactor_equal@v1: false    # 下线(2026-07-28):回测年化-0.4%不达标,移出看板
   s34_dividend_high@v1: false   # 下线(2026-07-28):回测年化0.6%不达标,移出看板
   s35_long_momentum@v1: false    # 下线(2026-07-28):回测年化8.3%<10%线,移出看板
   s36_growth_atlas@v1: false     # 下线(2026-07-28):回测年化8.8%<10%线,移出看板(成长图谱近似弱于s29)
-  s37_earnings_accel@v1: true   # ✅达标:国信超预期近似(同比加速度≈盈余惊喜),年化10.68%/回撤17.1%,第5个合格
+  s37_earnings_accel@v1: false   # 下线(2026-08-03):被 race_v2 新阵容取代
   # —— 冲刺20%+ 候选(全窗口2022-今权威验证, 2026-07-28) ——
   # s38/s39 事件门控已弃(披露后alpha衰减); s40 SUE主导跑输基准已弃。
   # s41 全窗口仅3.1%(<10%线, 近窗口20.4%属时段性峰值)→ 淘汰; s42 全窗口16.6%/超额+1.017 → 作为第6个达标策略进看板。
@@ -101,9 +101,9 @@ strategies:                     # 2026-07 重构:全面个股化——下线全�
   s39_earnings_event50@v1: false # 弃
   s40_sue_momentum@v1: false    # 弃
   s41_sue_high52@v1: false     # 弃:全窗口3.1%<10%, 实盘不用(云端回测矩阵仍强制跑以验证失败)
-  s42_sue_enriched@v1: true   # ✅第6个达标:全窗口年化16.6%/回撤14.6%/超额+1.017,s29基线叠加SUE+52周高,月频10只
+  s42_sue_enriched@v1: false    # 下线(2026-08-03):被 race_v2 新阵容取代
   # ↓ 全A冲刺结论(2026-07-30): 选项B(分析师+涨停)全窗反拖累; 仅 R2 控制组过铁律(17.8%/15.2%/夏普1.15)=全A上限, 远低于50%目标
-  s53_all_a_momentum_smallcap@v1: true    # ✅唯一过约束全A策略: R2配方(无规模倾斜) 全窗17.8%/回撤15.2%/夏普1.15
+  s53_all_a_momentum_smallcap@v1: false   # 下线(2026-08-03):被 race_v2 新阵容取代
   s54_all_a_industry_mom@v1: false        # 关闭: 原"规模倾斜毒药"配方; 无第二只合格全A(用户决策:只上s53)
   s55_all_a_value_quality@v1: false       # 关闭: 同上
   s4_smallcap@v2: false        # 归档:被 @v3 主板small成长版取代
@@ -116,6 +116,13 @@ strategies:                     # 2026-07 重构:全面个股化——下线全�
   s10_lowvol@v1: false          # 归档:用户评估相对 s1/s4/s8 无收益/回撤优势,下线
   s3_trend_timing@v1: false     # 归档:激进大盘择时 whipsaw 致-16.4%,被 s13/s14 重新设计替代
   s9_growth_timing@v1: false    # 归档:接近0收益(择时拖累),被 s13/s14 重新设计替代
+  # ↓ 2026-08-03 race_v2 新阵容(依据因子诊断重建, 混合中性化方案): 6只真独立赛马策略
+  r1_small_rev@v1: true          # 主板·小市值反转(规模+反转+低换手):月频10只, 沪深300基准改中证500
+  r2_quality_value@v1: true      # 主板·质量价值(ROE+EP+低波+小盘倾斜):月频10只, 沪深300池
+  r3_value_rev@v1: true          # 主板·深度价值反转(PB+反转+低波):月频10只, 中盘段
+  r4_all_a_growth@v1: true       # 全A·价值低波防御(PB+低波+反转):月频10只, 全A池(含科创/创业/北交)
+  r5_etf_momentum@v1: true       # ETF·全球防御配置(沪深300+红利+纳指+国债):月频4只
+  r6_lowvol_def@v1: true         # 主板·低波防御(低波+ROE+价值):周频10只, 无MA60闸门
 
 schedule:
   signal_push_time: "18:00"     # 北京时间,仅用于消息标题展示

@@ -43,11 +43,18 @@ jobs:
           AGNES_LLM_KEY: ${{ secrets.AGNES_LLM_KEY }}
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: python run_news.py
+      # 2026-08-03 修复: news 每天跑2次(含周末)但旧逻辑只 commit state/reports, 不重新生成看板;
+      # docs/index.html 仅由 daily.yml(仅工作日)生成提交 → 周末抓的新闻永远不上看板。
+      # 故 news 工作流也重新生成看板并提交 docs/(生成只读 DB + state, 无副作用)。
+      - name: regenerate dashboard
+        run: |
+          python report_html.py
+          git add docs/ || true
       - name: commit snapshot
         run: |
           git config user.name "astock-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add state/ reports/ || true
+          git add state/ reports/ docs/ || true
           git commit -m "news $(date -u +%F)" || { echo "nothing to commit"; exit 0; }
           git pull --rebase --autostash || true
           git push || true
