@@ -1,23 +1,11 @@
 {
- "strategy_id": "s42_sue_enriched@v1",
+ "strategy_id": "s53_all_a_momentum_smallcap@v1",
  "init_capital": 100000.0,
  "cash": 100000.0,
  "positions": {},
  "frozen": false,
  "nav": 1.0,
  "nav_history": [
-  [
-   "2026-07-28",
-   1.0
-  ],
-  [
-   "2026-07-29",
-   1.0
-  ],
-  [
-   "2026-07-30",
-   1.0
-  ],
   [
    "2026-08-03",
    1.0
@@ -26,9 +14,6 @@
  "pending": [],
  "highest_nav": 1.0,
  "settled_dates": [
-  "2026-07-28",
-  "2026-07-29",
-  "2026-07-30",
   "2026-08-03"
  ],
  "applied_div": [],
