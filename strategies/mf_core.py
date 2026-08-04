@@ -96,7 +96,8 @@ def _sue_score(date, codes, conn):
         ph = ",".join("?" for _ in codes)
         rows = conn.execute(
             f"SELECT code, stat_date, net_profit FROM profit_q "
-            f"WHERE code IN ({ph}) AND stat_date <= ? ORDER BY code, stat_date",
+            f"WHERE code IN ({ph}) AND pub_date IS NOT NULL AND pub_date<>'' AND pub_date <= ? "
+            f"ORDER BY code, stat_date",
             (*codes, d)).fetchall()
         by = {}
         for code, sd, np0 in rows:
@@ -430,15 +431,25 @@ def select(ctx, date, account, params, strategy_id, config):
         rets = [c[i] / c[i - 1] - 1 for i in range(1, len(c))]
         vol = pstdev(rets) if len(rets) > 1 else 9.9
         pe = f.get("pe")
-        mcap = f.get("market_cap") or 0.0
+        pb = f.get("pb")
+        mcap = f.get("market_cap") if f else 0.0
+        # 市值缺失修复: 缺失市值置 NaN(不再赋0, 避免缺失票获最优小市值排名)。
+        # 由 _score 的 cap_rank 处理(缺失排末尾)。
+        if not mcap or mcap <= 0:
+            mcap = None
         ns = _news_score(date, code, ctx.conn)
-        # 动量: 12-1月收益(close[-1]/close[-(win+skip)]-1), 不足给 0(中性)
+        # 动量: 12-1月收益(跳过最近1月, 《因子投资》3.5标准定义)。
+        # 修复: 原实现 mcs[-1]/mcs[-(win+skip)]-1 = 当日/273日前(未跳月, 12-0)。
+        # 正确: close[-22]/close[-253]-1(排除最近1月避免短期反转噪声)。
         mom = 0.0
         if mom_win:
             mcs = ctx.close(code, mom_win + mom_skip + 1)
-            if len(mcs) >= mom_win + mom_skip + 1 and mcs[-(mom_win + mom_skip + 1)]:
-                mom = mcs[-1] / mcs[-(mom_win + mom_skip + 1)] - 1
-        cand.append((code, (dy or 0.0), vol, roe, ns, pe, mcap, mom))
+            if len(mcs) >= mom_win + mom_skip + 1:
+                c_base = mcs[-(mom_win + mom_skip + 1)]
+                c_skip = mcs[-(mom_skip + 1)] if mom_skip > 0 else mcs[-1]
+                if c_base and c_skip:
+                    mom = c_skip / c_base - 1
+        cand.append((code, (dy or 0.0), vol, roe, ns, pe, pb, mcap, mom))
 
     log.info("%s 候选筛选: 池%d 无基本面%d 股息率%d 分红年数%d ROE%d 数据不足%d → 候选%d",
              strategy_id, n_pool, n_no_fund, n_dy, n_div, n_roe, n_bar, len(cand))
@@ -486,7 +497,7 @@ def select(ctx, date, account, params, strategy_id, config):
             from collections import defaultdict as _dd
             _im = _dd(list)
             for c in cand:
-                _im[_ind.get(c[0]) or "未知"].append(c[7] or 0.0)
+                _im[_ind.get(c[0]) or "未知"].append(c[8] or 0.0)
             _med = {k: (statistics.median(v) if v else 0.0) for k, v in _im.items()}
             ind_mom_sc = {c[0]: _med.get(_ind.get(c[0]) or "未知", 0.0) for c in cand}
         except Exception:
@@ -509,7 +520,7 @@ def select(ctx, date, account, params, strategy_id, config):
     # 动量硬门槛(趋势择时): 仅保留近期上行标的, 剔除深跌趋势; 空仓等待下一月
     # 防御: momentum_min 设为 None 表示不启用; 设为 -999 表示无限制(所有动量都通过)
     if mom_min is not None and mom_min > -998:
-        keep = [c for c in keep if (c[7] or 0) >= mom_min]
+        keep = [c for c in keep if (c[8] or 0) >= mom_min]
         if not keep:
             return {"target": [], "weight_per": 0.0, "meta": {}, "cand_codes": set(),
                     "keep_codes": set(), "full_rank": {}, "ind_map": {},
@@ -526,11 +537,15 @@ def select(ctx, date, account, params, strategy_id, config):
     by_pe = sorted(keep, key=lambda x: (x[5] is None, x[5] if x[5] is not None else 1e9))
     pe_rank = {c[0]: i for i, c in enumerate(by_pe)}
     # 动量排名(收益越高名次越前; 目标值 0.0 排末尾)
-    by_mom = sorted(keep, key=lambda x: (x[7] or 0.0), reverse=True)
+    by_mom = sorted(keep, key=lambda x: (x[8] or 0.0), reverse=True)
     mom_rank = {c[0]: i for i, c in enumerate(by_mom)}
     # 偏小市值 / 偏低估值 倾斜排名
-    cap_rank = {c[0]: i for i, c in enumerate(sorted(keep, key=lambda x: x[6]))} if cap_tilt else {}
-    val_rank = {c[0]: i for i, c in enumerate(sorted(keep, key=lambda x: (x[5] is None, x[5] if x[5] is not None else 1e9)))} if value_tilt else {}
+    # 市值缺失修复: None(缺失)排末尾, 不再因 sorted 默认 None<数值 而获最优小市值排名。
+    cap_rank = {c[0]: i for i, c in enumerate(
+        sorted(keep, key=lambda x: (x[7] is None, x[7] if x[7] is not None else 0)))} if cap_tilt else {}
+    # value_tilt 估值去重复: 原用 PE(与 valuation 重复), 改 PB(市净率, 真正不同的价值维度)。
+    val_rank = {c[0]: i for i, c in enumerate(
+        sorted(keep, key=lambda x: (x[6] is None, x[6] if x[6] is not None else 1e9)))} if value_tilt else {}
     # 个股行业地位排名(龙头优先): 行业内市值/ROE 综合, 越高名次越前
     ind_lead_rank = {code: i for i, code in enumerate(
         sorted(ind_lead_score, key=lambda x: -ind_lead_score.get(x, 0)))}
