@@ -409,7 +409,13 @@ def run(date=None, only=None):
         if mkt_score is not None and mkt_score < 0:
             note += f" | ⚠消息面市场分{mkt_score}(已降敞口)"
         t, c = notify.build_heartbeat(today, last, note)
-        notify.push(t, c, "heartbeat", cfg, smtp_fallback=False)
+        # 修复(2026-08-04): 心跳推送失败不应阻断后续看板生成。
+        # PushPlus token 失效("服务端验证错误")时, push 抛 RuntimeError 冒泡 → 整轮失败 → 看板不更新。
+        # 心跳是通知,看板是核心交付物; 心跳失败只降级记日志, 看板必须生成。
+        try:
+            notify.push(t, c, "heartbeat", cfg, smtp_fallback=False)
+        except Exception as e:
+            log.warning("心跳推送失败(降级继续,不影响看板):%s", e)
         # 刷新静态看板(国内可达,零依赖)
         try:
             import report_html

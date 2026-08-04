@@ -158,7 +158,15 @@ class DataSourceHealthMonitor:
         atexit.register(self.flush)   # 进程退出时补落一次,不丢统计
 
     def _load_state(self):
-        """从文件加载状态"""
+        """从文件加载状态。
+
+        ⚠ 修复(2026-08-04): `disabled`/`disabled_until` 是**运行内瞬时状态**,
+        不应跨运行/跨天延续。原实现把它持久化进提交的 state/data_source_health.json:
+        某天某源连续3次失败被 auto_disable(5分钟), 该禁用状态被保存并在下一次运行加载,
+        导致"数据源抽风"效应延续(8/3 tencent 被跳过 → 当日行情未拉全 → 月末信号无法成交)。
+        修复: 加载时只保留统计(成功/失败次数), 重置 disabled/disabled_until ——
+        每次运行从干净状态出发, 仅当本次运行内真的连续失败才临时禁用。
+        """
         if HEALTH_STATE_FILE.exists():
             try:
                 with open(HEALTH_STATE_FILE, 'r', encoding='utf-8') as f:
@@ -167,10 +175,11 @@ class DataSourceHealthMonitor:
                     health = SourceHealth(name=name)
                     health.total_calls = sdata.get('total_calls', 0)
                     health.total_success = sdata.get('total_success', 0)
-                    health.disabled = sdata.get('disabled', False)
-                    health.disabled_until = sdata.get('disabled_until', 0)
+                    # 不恢复禁用状态(见上方修复说明)
+                    health.disabled = False
+                    health.disabled_until = 0
                     self.sources[name] = health
-                log.info("加载数据源健康状态: %d 个源", len(self.sources))
+                log.info("加载数据源健康状态: %d 个源(禁用状态已重置,统计保留)", len(self.sources))
             except Exception as e:
                 log.warning("加载健康状态失败: %s", e)
 
