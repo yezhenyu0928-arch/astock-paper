@@ -45,3 +45,6 @@ db_seed*
 seed.db
 db_seed_tmp.sqlite
 fetch_profit_q.log
+
+# 每日任务运行日志(由 daily.yml tee 生成,不入库)
+run_daily.log
