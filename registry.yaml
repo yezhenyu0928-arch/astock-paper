@@ -886,7 +886,7 @@ s26_microcap@v1:
     regime_mid: 1.0
     regime_bad: 1.0
     stop_pct: 0.25
-    weights: {dividend: 0.0, low_vol: 0.05, roe: 0.10, valuation: 0.10, cap: 0.50, value: 0.05, momentum: 0.20}
+    weights: {dividend: 0.0, low_vol: 0.15, roe: 0.10, valuation: 0.05, cap: 0.45, value: 0.05, momentum: 0.20}
   universe: dynamic
   rebalance: monthly
 
