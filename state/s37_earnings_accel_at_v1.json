@@ -25,6 +25,10 @@
   [
    "2026-08-04",
    1.0
+  ],
+  [
+   "2026-08-05",
+   1.0
   ]
  ],
  "pending": [
@@ -40,7 +44,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 0
+   "_defer": 1
   },
   {
    "strategy_id": "s37_earnings_accel@v1",
@@ -54,7 +58,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 0
+   "_defer": 1
   },
   {
    "strategy_id": "s37_earnings_accel@v1",
@@ -68,7 +72,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 0
+   "_defer": 1
   },
   {
    "strategy_id": "s37_earnings_accel@v1",
@@ -82,7 +86,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 0
+   "_defer": 1
   },
   {
    "strategy_id": "s37_earnings_accel@v1",
@@ -96,7 +100,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 0
+   "_defer": 1
   },
   {
    "strategy_id": "s37_earnings_accel@v1",
@@ -110,7 +114,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 0
+   "_defer": 1
   },
   {
    "strategy_id": "s37_earnings_accel@v1",
@@ -124,7 +128,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 0
+   "_defer": 1
   },
   {
    "strategy_id": "s37_earnings_accel@v1",
@@ -138,7 +142,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 0
+   "_defer": 1
   }
  ],
  "highest_nav": 1.0,
@@ -147,7 +151,8 @@
   "2026-07-29",
   "2026-07-30",
   "2026-08-03",
-  "2026-08-04"
+  "2026-08-04",
+  "2026-08-05"
  ],
  "applied_div": [],
  "aux": {}
