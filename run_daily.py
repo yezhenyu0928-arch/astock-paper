@@ -109,6 +109,11 @@ def _stock_universe(cfg, reg, conn):
         codes |= {r[0] for r in rows}
         used.append(f"sh000300兜底({len(rows)})")
 
+    # 剔除 sh920 段(沪市新股/北交所转板, 2026-08-05): 332 只全A池股票数据源普遍拉不到
+    # (腾讯/baostock/yfinance 均无), 且不在任何策略选股池(mainboard/sh000300 主板前缀无 920)。
+    # 逐只失败重试3次严重拖慢 daily(是 45 分钟超时的主因之一)。
+    codes = {c for c in codes if not (c.startswith("sh920") or c.startswith("sz920"))}
+
     log.info("个股策略 %d 只(%s),日线更新范围=%d 只,来源池=%s",
              len(stock_sids), ",".join(stock_sids), len(codes), "+".join(used))
     return codes
