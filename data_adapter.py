@@ -1093,8 +1093,29 @@ def fetch_dividend(code: str) -> pd.DataFrame:
 # ============ 证券信息 ============
 def fetch_security_info(codes: list) -> pd.DataFrame:
     """返回 code,name,type,is_t0,list_date,status。
-    个股走 baostock query_stock_basic(稳定);ETF 用内置名+前缀判 T+0。"""
+    个股走 baostock query_stock_basic(稳定);ETF 用内置名+前缀判 T+0。
+    ⚠ 云端海外 Runner 连不上 baostock → 个股名称会落空。加腾讯快照(qt.gtimg.cn)兜底:
+      批量一次拉回全部 code 的名称, 弥补 baostock 不可达时 security.name 缺失
+      (否则看板操作计划显示"600741 600741"代码重复)。"""
     rows = []
+    tencent_names = {}
+    try:
+        # 一次拉全部(批量, 腾讯快照支持逗号拼接), 供 baostock 失败时兜底
+        stock_codes = [c for c in codes if not is_etf_code(c)]
+        if stock_codes:
+            import requests as _req
+            url = "https://qt.gtimg.cn/q=" + ",".join(stock_codes)
+            rr = _req.get(url, timeout=15)
+            rr.encoding = "gbk"
+            for line in rr.text.split(";"):
+                if "=" in line and len(line) > 20:
+                    parts = line.split("~")
+                    if len(parts) > 4 and parts[2]:
+                        tencent_names["sh" + parts[2]] = parts[1]
+                        tencent_names["sz" + parts[2]] = parts[1]
+                        tencent_names[parts[2]] = parts[1]
+    except Exception:
+        pass
     for code in codes:
         code = util.with_prefix(code) if code[:2] not in ("sh", "sz", "bj") else code
         if is_etf_code(code):
@@ -1103,6 +1124,7 @@ def fetch_security_info(codes: list) -> pd.DataFrame:
                 "type": "etf", "is_t0": _is_t0(code), "list_date": None, "status": "L",
             })
             continue
+        name_from_bs = None
         try:
             bs = _bs()
             rs = bs.query_stock_basic(code=_bs_code(code))
@@ -1111,15 +1133,21 @@ def fetch_security_info(codes: list) -> pd.DataFrame:
                 data.append(rs.get_row_data())
             if data:
                 d = dict(zip(rs.fields, data[0]))  # code,code_name,ipoDate,outDate,type,status
-                name = d.get("code_name", util.bare(code))
-                status = "D" if d.get("status") == "0" else ("ST" if "ST" in name.upper() else "L")
+                name = d.get("code_name")
+                status = "D" if d.get("status") == "0" else ("ST" if "ST" in (name or "").upper() else "L")
                 rows.append({
-                    "code": code, "name": name, "type": "stock", "is_t0": 0,
+                    "code": code, "name": name or util.bare(code), "type": "stock", "is_t0": 0,
                     "list_date": d.get("ipoDate") or None, "status": status,
                 })
                 continue
         except Exception as e:
             log.warning("证券信息失败 %s: %s", code, e)
+        # 腾讯兜底名称(baostock 不可达时)
+        name = tencent_names.get(code) or tencent_names.get(util.bare(code))
+        if name:
+            rows.append({"code": code, "name": name, "type": "stock",
+                         "is_t0": 0, "list_date": None, "status": "L"})
+            continue
         rows.append({"code": code, "name": util.bare(code), "type": "stock",
                      "is_t0": 0, "list_date": None, "status": "L"})
     return pd.DataFrame(rows)
