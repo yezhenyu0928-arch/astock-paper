@@ -33,36 +33,36 @@
       "status": "healthy"
     },
     "akshare_sina": {
-      "total_calls": 7221,
-      "total_success": 7221,
+      "total_calls": 7223,
+      "total_success": 7223,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.921,
+      "health_score": 0.836,
       "status": "healthy"
     },
     "sina_etf": {
-      "total_calls": 100,
+      "total_calls": 101,
       "total_success": 30,
       "disabled": false,
-      "disabled_until": 1785896413.8953621,
+      "disabled_until": 0,
       "health_score": 0.15,
       "status": "unhealthy"
     },
     "baostock": {
-      "total_calls": 5275,
-      "total_success": 5127,
+      "total_calls": 5276,
+      "total_success": 5128,
+      "disabled": false,
+      "disabled_until": 0,
+      "health_score": 0.75,
+      "status": "degraded"
+    },
+    "akshare_em": {
+      "total_calls": 281,
+      "total_success": 122,
       "disabled": false,
       "disabled_until": 0,
       "health_score": 0.15,
       "status": "unhealthy"
-    },
-    "akshare_em": {
-      "total_calls": 280,
-      "total_success": 122,
-      "disabled": false,
-      "disabled_until": 0,
-      "health_score": 0.67,
-      "status": "degraded"
     },
     "baostock_hfq": {
       "total_calls": 502,
@@ -109,9 +109,9 @@
       "total_success": 63,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.762,
-      "status": "degraded"
+      "health_score": 0.875,
+      "status": "healthy"
     }
   },
-  "saved_at": 1785898051.6608415
+  "saved_at": 1785934013.0834987
 }
