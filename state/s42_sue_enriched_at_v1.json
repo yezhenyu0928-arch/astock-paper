@@ -1,10 +1,67 @@
 {
  "strategy_id": "s42_sue_enriched@v1",
  "init_capital": 100000.0,
- "cash": 100000.0,
- "positions": {},
+ "cash": 76115.0,
+ "positions": {
+  "sh601117": {
+   "code": "sh601117",
+   "shares": 1100,
+   "avg_cost": 7.79,
+   "buy_date": "2026-08-06",
+   "highest_close": 7.79
+  },
+  "sz000002": {
+   "code": "sz000002",
+   "shares": 600,
+   "avg_cost": 3.29,
+   "buy_date": "2026-08-06",
+   "highest_close": 3.28
+  },
+  "sh601878": {
+   "code": "sh601878",
+   "shares": 200,
+   "avg_cost": 9.59,
+   "buy_date": "2026-08-06",
+   "highest_close": 9.56
+  },
+  "sh601077": {
+   "code": "sh601077",
+   "shares": 300,
+   "avg_cost": 6.51,
+   "buy_date": "2026-08-06",
+   "highest_close": 6.49
+  },
+  "sh600061": {
+   "code": "sh600061",
+   "shares": 100,
+   "avg_cost": 6.61,
+   "buy_date": "2026-08-06",
+   "highest_close": 6.56
+  },
+  "sh600233": {
+   "code": "sh600233",
+   "shares": 200,
+   "avg_cost": 18.91,
+   "buy_date": "2026-08-06",
+   "highest_close": 18.88
+  },
+  "sh601838": {
+   "code": "sh601838",
+   "shares": 200,
+   "avg_cost": 18.02,
+   "buy_date": "2026-08-06",
+   "highest_close": 17.99
+  },
+  "sh600027": {
+   "code": "sh600027",
+   "shares": 300,
+   "avg_cost": 4.75,
+   "buy_date": "2026-08-06",
+   "highest_close": 4.73
+  }
+ },
  "frozen": false,
- "nav": 1.0,
+ "nav": 0.99863,
  "nav_history": [
   [
    "2026-07-28",
@@ -32,151 +89,10 @@
   ],
   [
    "2026-08-06",
-   1.0
+   0.99863
   ]
  ],
- "pending": [
-  {
-   "strategy_id": "s42_sue_enriched@v1",
-   "code": "sh601117",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s42_sue_enriched@v1:买入中国化学(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s42_sue_enriched@v1",
-   "code": "sh600741",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s42_sue_enriched@v1:买入华域汽车(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s42_sue_enriched@v1",
-   "code": "sz000002",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s42_sue_enriched@v1:买入万科A(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s42_sue_enriched@v1",
-   "code": "sh601607",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s42_sue_enriched@v1:买入上海医药(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s42_sue_enriched@v1",
-   "code": "sh601878",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s42_sue_enriched@v1:买入浙商证券(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s42_sue_enriched@v1",
-   "code": "sh601077",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s42_sue_enriched@v1:买入渝农商行(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s42_sue_enriched@v1",
-   "code": "sh600061",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s42_sue_enriched@v1:买入国投资本(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s42_sue_enriched@v1",
-   "code": "sh600233",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s42_sue_enriched@v1:买入圆通速递(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s42_sue_enriched@v1",
-   "code": "sh601838",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s42_sue_enriched@v1:买入成都银行(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s42_sue_enriched@v1",
-   "code": "sh600027",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s42_sue_enriched@v1:买入华电国际(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  }
- ],
+ "pending": [],
  "highest_nav": 1.0,
  "settled_dates": [
   "2026-07-28",

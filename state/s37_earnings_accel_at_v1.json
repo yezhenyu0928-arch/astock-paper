@@ -1,10 +1,39 @@
 {
  "strategy_id": "s37_earnings_accel@v1",
  "init_capital": 100000.0,
- "cash": 100000.0,
- "positions": {},
+ "cash": 78247.0,
+ "positions": {
+  "sz002236": {
+   "code": "sz002236",
+   "shares": 400,
+   "avg_cost": 17.11,
+   "buy_date": "2026-08-06",
+   "highest_close": 17.1
+  },
+  "sh601117": {
+   "code": "sh601117",
+   "shares": 1200,
+   "avg_cost": 7.79,
+   "buy_date": "2026-08-06",
+   "highest_close": 7.79
+  },
+  "sh601838": {
+   "code": "sh601838",
+   "shares": 200,
+   "avg_cost": 18.02,
+   "buy_date": "2026-08-06",
+   "highest_close": 17.99
+  },
+  "sh601077": {
+   "code": "sh601077",
+   "shares": 300,
+   "avg_cost": 6.51,
+   "buy_date": "2026-08-06",
+   "highest_close": 6.49
+  }
+ },
  "frozen": false,
- "nav": 1.0,
+ "nav": 0.99891,
  "nav_history": [
   [
    "2026-07-28",
@@ -32,123 +61,10 @@
   ],
   [
    "2026-08-06",
-   1.0
+   0.99891
   ]
  ],
- "pending": [
-  {
-   "strategy_id": "s37_earnings_accel@v1",
-   "code": "sz002236",
-   "side": "buy",
-   "weight": 0.1125,
-   "reason": "s37_earnings_accel@v1:买入大华股份(股息率0.0%)[单票上限12%削仓][总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s37_earnings_accel@v1",
-   "code": "sz000708",
-   "side": "buy",
-   "weight": 0.1125,
-   "reason": "s37_earnings_accel@v1:买入中信特钢(股息率0.0%)[单票上限12%削仓][总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s37_earnings_accel@v1",
-   "code": "sh600741",
-   "side": "buy",
-   "weight": 0.1125,
-   "reason": "s37_earnings_accel@v1:买入华域汽车(股息率0.0%)[单票上限12%削仓][总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s37_earnings_accel@v1",
-   "code": "sh600039",
-   "side": "buy",
-   "weight": 0.1125,
-   "reason": "s37_earnings_accel@v1:买入四川路桥(股息率0.0%)[单票上限12%削仓][总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s37_earnings_accel@v1",
-   "code": "sh601117",
-   "side": "buy",
-   "weight": 0.1125,
-   "reason": "s37_earnings_accel@v1:买入中国化学(股息率0.0%)[单票上限12%削仓][总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s37_earnings_accel@v1",
-   "code": "sh601838",
-   "side": "buy",
-   "weight": 0.1125,
-   "reason": "s37_earnings_accel@v1:买入成都银行(股息率0.0%)[单票上限12%削仓][总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s37_earnings_accel@v1",
-   "code": "sh601077",
-   "side": "buy",
-   "weight": 0.1125,
-   "reason": "s37_earnings_accel@v1:买入渝农商行(股息率0.0%)[单票上限12%削仓][总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s37_earnings_accel@v1",
-   "code": "sh600674",
-   "side": "buy",
-   "weight": 0.1125,
-   "reason": "s37_earnings_accel@v1:买入川投能源(股息率0.0%)[单票上限12%削仓][总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  }
- ],
+ "pending": [],
  "highest_nav": 1.0,
  "settled_dates": [
   "2026-07-28",

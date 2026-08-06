@@ -1,10 +1,60 @@
 {
  "strategy_id": "s26_microcap@v1",
  "init_capital": 100000.0,
- "cash": 100000.0,
- "positions": {},
+ "cash": 78509.0,
+ "positions": {
+  "sh600061": {
+   "code": "sh600061",
+   "shares": 100,
+   "avg_cost": 6.61,
+   "buy_date": "2026-08-06",
+   "highest_close": 6.56
+  },
+  "sh601878": {
+   "code": "sh601878",
+   "shares": 200,
+   "avg_cost": 9.59,
+   "buy_date": "2026-08-06",
+   "highest_close": 9.56
+  },
+  "sh601117": {
+   "code": "sh601117",
+   "shares": 1100,
+   "avg_cost": 7.79,
+   "buy_date": "2026-08-06",
+   "highest_close": 7.79
+  },
+  "sz002236": {
+   "code": "sz002236",
+   "shares": 400,
+   "avg_cost": 17.11,
+   "buy_date": "2026-08-06",
+   "highest_close": 17.1
+  },
+  "sh600023": {
+   "code": "sh600023",
+   "shares": 300,
+   "avg_cost": 4.96,
+   "buy_date": "2026-08-06",
+   "highest_close": 4.94
+  },
+  "sh601901": {
+   "code": "sh601901",
+   "shares": 200,
+   "avg_cost": 7.18,
+   "buy_date": "2026-08-06",
+   "highest_close": 7.15
+  },
+  "sh600918": {
+   "code": "sh600918",
+   "shares": 100,
+   "avg_cost": 5.72,
+   "buy_date": "2026-08-06",
+   "highest_close": 5.67
+  }
+ },
  "frozen": false,
- "nav": 1.0,
+ "nav": 0.99879,
  "nav_history": [
   [
    "2026-07-27",
@@ -36,151 +86,10 @@
   ],
   [
    "2026-08-06",
-   1.0
+   0.99879
   ]
  ],
- "pending": [
-  {
-   "strategy_id": "s26_microcap@v1",
-   "code": "sh600741",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s26_microcap@v1:买入华域汽车(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s26_microcap@v1",
-   "code": "sh600061",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s26_microcap@v1:买入国投资本(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s26_microcap@v1",
-   "code": "sh601878",
-   "side": "buy",
-   "weight": 0.083333,
-   "reason": "s26_microcap@v1:买入浙商证券(股息率0.0%)[总仓≤90%缩放][行业证券Ⅱ≤25%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s26_microcap@v1",
-   "code": "sh601117",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s26_microcap@v1:买入中国化学(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s26_microcap@v1",
-   "code": "sh601607",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s26_microcap@v1:买入上海医药(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s26_microcap@v1",
-   "code": "sz002236",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s26_microcap@v1:买入大华股份(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s26_microcap@v1",
-   "code": "sh600023",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s26_microcap@v1:买入浙能电力(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s26_microcap@v1",
-   "code": "sh601059",
-   "side": "buy",
-   "weight": 0.083333,
-   "reason": "s26_microcap@v1:买入信达证券(股息率0.0%)[总仓≤90%缩放][行业证券Ⅱ≤25%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s26_microcap@v1",
-   "code": "sh601901",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s26_microcap@v1:买入方正证券(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s26_microcap@v1",
-   "code": "sh600918",
-   "side": "buy",
-   "weight": 0.083333,
-   "reason": "s26_microcap@v1:买入中泰证券(股息率0.0%)[总仓≤90%缩放][行业证券Ⅱ≤25%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  }
- ],
+ "pending": [],
  "highest_nav": 1.0,
  "settled_dates": [
   "2026-07-27",

@@ -1,10 +1,74 @@
 {
  "strategy_id": "s32_roe_quality@v1",
  "init_capital": 100000.0,
- "cash": 100000.0,
- "positions": {},
+ "cash": 55873.0,
+ "positions": {
+  "sh600015": {
+   "code": "sh600015",
+   "shares": 300,
+   "avg_cost": 6.85,
+   "buy_date": "2026-08-06",
+   "highest_close": 6.83
+  },
+  "sh601398": {
+   "code": "sh601398",
+   "shares": 1100,
+   "avg_cost": 7.55,
+   "buy_date": "2026-08-06",
+   "highest_close": 7.55
+  },
+  "sz000001": {
+   "code": "sz000001",
+   "shares": 700,
+   "avg_cost": 11.27,
+   "buy_date": "2026-08-06",
+   "highest_close": 11.26
+  },
+  "sh601988": {
+   "code": "sh601988",
+   "shares": 1400,
+   "avg_cost": 5.77,
+   "buy_date": "2026-08-06",
+   "highest_close": 5.77
+  },
+  "sh600018": {
+   "code": "sh600018",
+   "shares": 100,
+   "avg_cost": 5.24,
+   "buy_date": "2026-08-06",
+   "highest_close": 5.19
+  },
+  "sz000651": {
+   "code": "sz000651",
+   "shares": 100,
+   "avg_cost": 40.44,
+   "buy_date": "2026-08-06",
+   "highest_close": 40.39
+  },
+  "sh600019": {
+   "code": "sh600019",
+   "shares": 400,
+   "avg_cost": 5.91,
+   "buy_date": "2026-08-06",
+   "highest_close": 5.9
+  },
+  "sh601229": {
+   "code": "sh601229",
+   "shares": 200,
+   "avg_cost": 9.37,
+   "buy_date": "2026-08-06",
+   "highest_close": 9.34
+  },
+  "sh601658": {
+   "code": "sh601658",
+   "shares": 1800,
+   "avg_cost": 4.99,
+   "buy_date": "2026-08-06",
+   "highest_close": 4.99
+  }
+ },
  "frozen": false,
- "nav": 1.0,
+ "nav": 0.99804,
  "nav_history": [
   [
    "2026-07-27",
@@ -36,151 +100,10 @@
   ],
   [
    "2026-08-06",
-   1.0
+   0.99804
   ]
  ],
- "pending": [
-  {
-   "strategy_id": "s32_roe_quality@v1",
-   "code": "sh600015",
-   "side": "buy",
-   "weight": 0.083333,
-   "reason": "s32_roe_quality@v1:买入华夏银行(股息率0.0%)[总仓≤90%缩放][行业金融行业≤25%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s32_roe_quality@v1",
-   "code": "sh601398",
-   "side": "buy",
-   "weight": 0.083333,
-   "reason": "s32_roe_quality@v1:买入工商银行(股息率0.0%)[总仓≤90%缩放][行业金融行业≤25%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s32_roe_quality@v1",
-   "code": "sz000001",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s32_roe_quality@v1:买入平安银行(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s32_roe_quality@v1",
-   "code": "sh601988",
-   "side": "buy",
-   "weight": 0.083333,
-   "reason": "s32_roe_quality@v1:买入中国银行(股息率0.0%)[总仓≤90%缩放][行业金融行业≤25%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s32_roe_quality@v1",
-   "code": "sh601607",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s32_roe_quality@v1:买入上海医药(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s32_roe_quality@v1",
-   "code": "sh600018",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s32_roe_quality@v1:买入上港集团(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s32_roe_quality@v1",
-   "code": "sz000651",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s32_roe_quality@v1:买入格力电器(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s32_roe_quality@v1",
-   "code": "sh600019",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s32_roe_quality@v1:买入宝钢股份(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s32_roe_quality@v1",
-   "code": "sh601229",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s32_roe_quality@v1:买入上海银行(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  },
-  {
-   "strategy_id": "s32_roe_quality@v1",
-   "code": "sh601658",
-   "side": "buy",
-   "weight": 0.09,
-   "reason": "s32_roe_quality@v1:买入邮储银行(股息率0.0%)[总仓≤90%缩放]",
-   "signal_date": "2026-08-04",
-   "shares": 0,
-   "sim_price": 0.0,
-   "fee": 0.0,
-   "tax": 0.0,
-   "status": "pending",
-   "_defer": 2
-  }
- ],
+ "pending": [],
  "highest_nav": 1.0,
  "settled_dates": [
   "2026-07-27",
