@@ -474,7 +474,12 @@ class Engine:
         for sid in self.enabled_strategies():
             acct = self.load_account(sid)
             st = self.state[sid]
-            if date in st["settled_dates"]:
+            # 幂等:今天已 settle 且无更早遗留订单 → 跳过。
+            # 修复(2026-08-05): 若今天已 settled 但仍有 signal_date < 今天的 pending
+            # (因数据缺失顺延的买单), 继续用今天数据补撮合, 避免卡死 pending 永远不成交。
+            legacy = [o for o in st["pending"]
+                      if o.get("signal_date", "") < date]
+            if date in st["settled_dates"] and not legacy:
                 continue
             ctx = self.ctx(date)
             self._apply_dividends(sid, acct, date)
