@@ -17,6 +17,10 @@
   [
    "2026-08-05",
    1.0
+  ],
+  [
+   "2026-08-06",
+   1.0
   ]
  ],
  "pending": [
@@ -32,7 +36,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   },
   {
    "strategy_id": "s53_all_a_momentum_smallcap@v1",
@@ -46,7 +50,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   },
   {
    "strategy_id": "s53_all_a_momentum_smallcap@v1",
@@ -60,7 +64,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   },
   {
    "strategy_id": "s53_all_a_momentum_smallcap@v1",
@@ -74,7 +78,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   },
   {
    "strategy_id": "s53_all_a_momentum_smallcap@v1",
@@ -88,7 +92,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   },
   {
    "strategy_id": "s53_all_a_momentum_smallcap@v1",
@@ -102,7 +106,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   },
   {
    "strategy_id": "s53_all_a_momentum_smallcap@v1",
@@ -116,7 +120,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   },
   {
    "strategy_id": "s53_all_a_momentum_smallcap@v1",
@@ -130,7 +134,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   },
   {
    "strategy_id": "s53_all_a_momentum_smallcap@v1",
@@ -144,7 +148,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   },
   {
    "strategy_id": "s53_all_a_momentum_smallcap@v1",
@@ -158,14 +162,15 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   }
  ],
  "highest_nav": 1.0,
  "settled_dates": [
   "2026-08-03",
   "2026-08-04",
-  "2026-08-05"
+  "2026-08-05",
+  "2026-08-06"
  ],
  "applied_div": [],
  "aux": {}

@@ -33,36 +33,36 @@
       "status": "healthy"
     },
     "akshare_sina": {
-      "total_calls": 7210,
-      "total_success": 7210,
+      "total_calls": 7211,
+      "total_success": 7211,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.884,
-      "status": "healthy"
+      "health_score": 0.75,
+      "status": "degraded"
     },
     "sina_etf": {
-      "total_calls": 85,
+      "total_calls": 100,
       "total_success": 30,
       "disabled": false,
-      "disabled_until": 0,
-      "health_score": 0.875,
-      "status": "healthy"
+      "disabled_until": 1785977491.8780568,
+      "health_score": 0.15,
+      "status": "unhealthy"
     },
     "baostock": {
-      "total_calls": 5273,
+      "total_calls": 5288,
       "total_success": 5127,
       "disabled": false,
-      "disabled_until": 0,
-      "health_score": 0.875,
-      "status": "healthy"
+      "disabled_until": 1785977542.5439208,
+      "health_score": 0.15,
+      "status": "unhealthy"
     },
     "akshare_em": {
-      "total_calls": 268,
+      "total_calls": 283,
       "total_success": 109,
       "disabled": false,
-      "disabled_until": 0,
-      "health_score": 0.875,
-      "status": "healthy"
+      "disabled_until": 1785977539.605524,
+      "health_score": 0.15,
+      "status": "unhealthy"
     },
     "baostock_hfq": {
       "total_calls": 502,
@@ -81,37 +81,37 @@
       "status": "healthy"
     },
     "tencent": {
-      "total_calls": 3955,
+      "total_calls": 3971,
       "total_success": 3859,
       "disabled": false,
-      "disabled_until": 0,
-      "health_score": 0.75,
-      "status": "degraded"
+      "disabled_until": 1785977593.500544,
+      "health_score": 0.15,
+      "status": "unhealthy"
     },
     "tushare": {
-      "total_calls": 126,
+      "total_calls": 142,
       "total_success": 0,
       "disabled": false,
-      "disabled_until": 0,
-      "health_score": 0.875,
-      "status": "healthy"
+      "disabled_until": 1785977593.5111291,
+      "health_score": 0.15,
+      "status": "unhealthy"
     },
     "tencent_hfq": {
       "total_calls": 8414,
       "total_success": 8396,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.75,
-      "status": "degraded"
-    },
-    "tencent_snapshot": {
-      "total_calls": 53,
-      "total_success": 51,
-      "disabled": false,
-      "disabled_until": 0,
       "health_score": 0.875,
       "status": "healthy"
+    },
+    "tencent_snapshot": {
+      "total_calls": 65,
+      "total_success": 63,
+      "disabled": false,
+      "disabled_until": 0,
+      "health_score": 0.75,
+      "status": "degraded"
     }
   },
-  "saved_at": 1785977035.3791597
+  "saved_at": 1785979015.287482
 }
