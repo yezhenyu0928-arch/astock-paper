@@ -185,7 +185,10 @@ def _minute_advice(today, cfg, reg, eng, holdings):
             any_act = True
         lines.append(f"{tag} {util.bare(a['code'])}: {a['reason']}")
     if not any_act:
-        lines.append("(当前多数标的位置中性,无明确峰谷信号,按原计划持有/挂单)")
+        # 2026-08-13: 无任何买卖信号(全部 hold/中性)时静默,不推送"无实际意义"的日内择时。
+        # 用户需求: 无操作、无注意事项、无bug 时不推送,自行查看看板。
+        log.info("峰岭谷:今日无买卖点(%d 标的均中性),静默不推送", len(adv))
+        return 0
     notify.push(lines[0], "\n".join(lines[1:]), "op", cfg)
     log.info("峰岭谷日内择时完成 %s:%d 标的中 %d 有动作", today, len(adv), any_act)
     return 0
