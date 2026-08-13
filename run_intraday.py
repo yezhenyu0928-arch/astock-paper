@@ -173,7 +173,30 @@ def _minute_advice(today, cfg, reg, eng, holdings):
         rt = da.fetch_realtime(codes)
     except Exception:
         rt = {}
-    adv = mf.intraday_advice(codes, {c: v.get("price") for c, v in rt.items() if v.get("price")})
+    # 日线趋势(2026-08-13): 用最近30日 close 的 MA5/10/20 排列判断"走势方向",
+    # 峰谷只在顺势时给买卖点——日线空头不接刀、日线多头不追卖,避免逆势/过早下车。
+    day_trends = {}
+    try:
+        for c in codes:
+            rows = eng.conn.execute(
+                "SELECT trade_date, close FROM daily_bar WHERE code=? AND trade_date<=? "
+                "ORDER BY trade_date DESC LIMIT 30", (c, today)).fetchall()
+            cls = [r[1] for r in reversed(rows)]
+            if len(cls) >= 10:
+                ma5 = sum(cls[-5:]) / 5
+                ma10 = sum(cls[-10:]) / 10
+                ma20 = sum(cls[-20:]) / min(20, len(cls))
+                if ma5 > ma10 > ma20:
+                    day_trends[c] = "up"
+                elif ma5 < ma10 < ma20:
+                    day_trends[c] = "down"
+                else:
+                    day_trends[c] = "side"
+    except Exception as e:
+        log.warning("峰岭谷日线趋势计算失败(降级纯分钟):%s", e)
+    adv = mf.intraday_advice(codes,
+                             {c: v.get("price") for c, v in rt.items() if v.get("price")},
+                             day_trends=day_trends)
     if not adv:
         log.info("峰岭谷:分钟数据整体不可得,跳过")
         return 0

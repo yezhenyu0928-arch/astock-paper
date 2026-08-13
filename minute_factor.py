@@ -199,8 +199,18 @@ def fetch_minute_today(codes, freq=5, cfg=None):
     return out
 
 
-def peak_valley_signal(bars, cur_px=None):
-    """峰岭谷日内信号。bars=当日 5 分钟序列。返回可推送的信号 dict。"""
+def peak_valley_signal(bars, cur_px=None, day_trend=None):
+    """峰岭谷日内信号。bars=当日 5 分钟序列。返回可推送的信号 dict。
+
+    2026-08-13 升级(用户反馈: 峰谷应结合走势,不能机械"近谷就买/近峰就卖"):
+    - 纯形态的"抄日内回撤/兑现冲高"是逆势接刀/过早下车;
+    - 叠加**日线级别趋势**(day_trend, 由调用方用最近30日 MA5/10/20 排列算好传入)
+      与分钟均线双重过滤:
+      * 日线多头: 回踩谷=顺势低吸买点; 冲峰=持有不卖(让利润奔跑);
+      * 日线空头: 谷不接刀(下行趋势中的谷不是底); 冲峰=反弹兑现离场;
+      * 日线不明: 用分钟 MA10/MA20 排列兜底, 震荡时峰卖谷不追;
+      * 保留风控: 当日已暴涨>7% 不追买。
+    """
     if not bars or len(bars) < 2 * _W + 1:
         return {"signal": "hold", "reason": "分钟数据不足", "cur": cur_px}
     closes = [b["c"] for b in bars]
@@ -208,33 +218,64 @@ def peak_valley_signal(bars, cur_px=None):
     open_px = closes[0]
     highs = [b["h"] for b in bars]
     lows = [b["l"] for b in bars]
+    n = len(closes)
+
+    # ---- 趋势方向: 日线优先, 分钟兜底 ----
+    # 注意: A股一日仅48根5分钟K线, MA60盘中永远凑不满 → 用 MA10/MA20;
+    # "贴近谷"的现价天然低于短期均线, 故多头判定不要求 cur>均线, 而看均线排列+价未深破。
+    ma10 = sum(closes[-10:]) / min(10, n)
+    ma20 = sum(closes[-20:]) / min(20, n)
+    m_bull = ma10 > ma20 * 1.001 and cur >= ma20 * 0.995   # 分钟多头: MA10在上 + 价未深破MA20
+    m_bear = ma10 < ma20 * 0.999 and cur < ma20            # 分钟空头: MA10在下 + 价在MA20下方
+    if day_trend == "up":
+        bull, bear = True, False
+    elif day_trend == "down":
+        bull, bear = False, True
+    else:
+        bull, bear = m_bull, m_bear
 
     valleys, peaks = [], []
-    for i in range(_W, len(closes) - _W):
+    for i in range(_W, n - _W):
         seg = closes[i - _W:i + _W + 1]
         if closes[i] <= min(seg):
             valleys.append((i, closes[i]))
         if closes[i] >= max(seg):
             peaks.append((i, closes[i]))
     last_valley = valleys[-1] if valleys else (0, lows[0])
-    last_peak = peaks[-1] if peaks else (len(closes) - 1, highs[-1])
+    last_peak = peaks[-1] if peaks else (n - 1, highs[-1])
 
     day_chg = cur / open_px - 1 if open_px else 0.0
     dist_valley = cur / last_valley[1] - 1 if last_valley[1] else 0.0
     dist_peak = cur / last_peak[1] - 1 if last_peak[1] else 0.0
 
-    # 信号判定:近谷+远低于峰→买;近峰+远高于谷→卖;否则持有
+    # ---- 信号判定(叠加趋势过滤) ----
+    signal, reason = "hold", ""
     if dist_valley <= 0.006 and dist_peak <= -0.012:
-        signal = "buy"
-        reason = (f"贴近日内谷({last_valley[1]:.2f})且低于峰({last_peak[1]:.2f})"
-                  f"{abs(dist_peak)*100:.1f}%,可逢低介入")
+        # 近谷:买不买取决于趋势方向
+        if bull:
+            signal = "buy"
+            reason = (f"上升趋势回踩日内谷({last_valley[1]:.2f})顺势低吸"
+                      f"(低于峰{abs(dist_peak)*100:.1f}%),可逢低介入")
+        elif bear:
+            signal = "hold"
+            reason = f"下行趋势中的谷({last_valley[1]:.2f})不是底,不接刀"
+        else:
+            signal = "hold"
+            reason = f"趋势不明(MA20 {ma20:.2f}走平),谷不追,观望"
     elif dist_peak >= -0.006 and dist_valley >= 0.012:
-        signal = "sell"
-        reason = (f"贴近日内峰({last_peak[1]:.2f})且高于谷({last_valley[1]:.2f})"
-                  f"{dist_valley*100:.1f}%,可兑现冲高")
+        # 近峰:卖不卖取决于趋势方向
+        if bear or cur < ma20:
+            signal = "sell"
+            reason = (f"跌破短期均线(MA20 {ma20:.2f})或冲峰({last_peak[1]:.2f})滞涨,"
+                      f"兑现离场")
+        elif bull:
+            signal = "hold"
+            reason = f"上升趋势冲峰({last_peak[1]:.2f})不急于卖,持有让利润奔跑"
+        else:
+            signal = "sell"
+            reason = f"震荡区间触及峰({last_peak[1]:.2f}),高抛兑现"
     else:
-        signal = "hold"
-        reason = (f"介于峰谷之间(距谷{dist_valley*100:+.1f}%/距峰{dist_peak*100:+.1f}%),观望")
+        reason = f"介于峰谷之间(距谷{dist_valley*100:+.1f}%/距峰{dist_peak*100:+.1f}%),观望"
 
     # 风控:当日已暴涨>7% 不再给买点(防追高)
     if signal == "buy" and day_chg > 0.07:
@@ -246,12 +287,15 @@ def peak_valley_signal(bars, cur_px=None):
         "cur": round(cur, 2), "open": round(open_px, 2),
         "day_chg": round(day_chg, 4),
         "valley": round(last_valley[1], 2), "peak": round(last_peak[1], 2),
-        "bars": len(bars),
+        "trend": "up" if bull else ("down" if bear else "side"),
+        "ma10": round(ma10, 2), "ma20": round(ma20, 2),
+        "day_trend": day_trend,
+        "bars": n,
     }
 
 
-def intraday_advice(codes, cur_prices=None, freq=5):
-    """对一批代码算峰岭谷建议。cur_prices={code:实时价}可选。
+def intraday_advice(codes, cur_prices=None, freq=5, day_trends=None):
+    """对一批代码算峰岭谷建议。cur_prices={code:实时价}可选;day_trends={code:"up"/"down"/"side"}可选。
     返回 [{code, name, ...signal}]。"""
     import conf
     cfg = conf.load_config()
@@ -262,7 +306,7 @@ def intraday_advice(codes, cur_prices=None, freq=5):
         if not bars:
             continue
         cur = (cur_prices or {}).get(code)
-        sig = peak_valley_signal(bars, cur)
+        sig = peak_valley_signal(bars, cur, (day_trends or {}).get(code))
         sig["code"] = code
         out.append(sig)
     return out
