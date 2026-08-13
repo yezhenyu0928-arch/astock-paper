@@ -22,12 +22,25 @@ log = logging.getLogger("data")
 
 # ---------- 目标代码集 ----------
 def core_etf_codes(cfg, registry) -> set:
-    """交易赖以运行的核心 ETF 池:S2 动量池 + S5 网格标的 + S6 行业池(注册后自动纳入)。
-    这些是"当日必须有数据、否则暂停跟单"的标的。"""
-    codes = set(registry.get("s2_etf@v1", {}).get("universe", []) or [])
+    """交易赖以运行的核心 ETF 池:仅收集 config.yaml 中启用(true)策略的 ETF universe。
+
+    ⚠ 2026-08-13 修复(误报"数据质检异常"的根因):
+    原实现硬编码读 s2_etf@v1/s5_grid@v1/s6_sector@v1 的 universe,但这三个策略早已在
+    config.yaml 下线(false)。当前 6 只赛马(s26/s29/s32/s37/s42/s53)均为纯个股策略
+    (universe=dynamic),根本不依赖 ETF 数据 → 质检因此每天误报"可交易标的(已下线ETF)
+    缺日线数据",而 ETF 主源 sina_etf 成功率仅 31%,海外云端几乎天天抓不全。
+    改为: 只收集启用策略的 ETF universe;纯个股阵容下返回空集,质检聚焦于持仓个股
+    (check ①b 规则),不再为废弃 ETF 告警。若日后重新启用某个 ETF 策略,其 universe 会自动纳入。
+    """
+    enabled = {sid for sid, on in (cfg.get("strategies") or {}).items() if on}
+    codes = set()
+    for sid in enabled:
+        v = registry.get(sid) or {}
+        u = v.get("universe")
+        if isinstance(u, list):
+            codes |= set(u)
+    # 用户手动追加的 ETF 池(即使对应策略下线,仍按用户意愿纳入质检)
     codes |= set((cfg.get("custom") or {}).get("s2_universe_extra", []) or [])
-    codes |= set(registry.get("s5_grid@v1", {}).get("universe", []) or [])
-    codes |= set(registry.get("s6_sector@v1", {}).get("universe", []) or [])   # 卡B/卡C:S6 行业ETF池
     return {c for c in codes if da.is_etf_code(c)}
 
 
