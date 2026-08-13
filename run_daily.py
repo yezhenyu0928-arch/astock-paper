@@ -189,11 +189,9 @@ def run(date=None, only=None):
         cfg["strategies"] = {s: (s in only) for s in reg}
     today = util.to_date_str(date) if date else util.today_str()
 
-    # 1 非交易日
+    # 1 非交易日(2026-08-13: 无操作/无注意事项/无bug 时静默,不再推"休市心跳";用户自行查看看板)
     if not cal.is_trade_day(today):
-        t, c = notify.build_heartbeat(today, today, "非交易日,休市")
-        notify.push(t, c, "heartbeat", cfg)
-        log.info("非交易日 %s,退出", today)
+        log.info("非交易日 %s,休市,静默不推送", today)
         return 0
 
     # 1.5 数据库丢失自检(卡B):防 Actions cache 被驱逐后静默空库跑。
@@ -406,21 +404,26 @@ def run(date=None, only=None):
             items = _render_plan_items(eng, ctx, sid, os_)
             t, c = notify.build_op_message(sid, today, items)
             notify.push(t, c, "op", cfg)
-        # 7 心跳(含市场分)
+        # 7 心跳(含市场分)——2026-08-13: 仅在有实质内容时推送(有操作/有市场风险提示)。
+        # 用户需求: 无操作、无注意事项、无bug 时不推送,自行查看看板。
         last = eng.conn.execute("SELECT max(trade_date) FROM daily_bar").fetchone()[0]
         acted = set(by_sid.keys())
-        idle = [notify.strategy_cn(s) for s in eng.enabled_strategies() if s not in acted]
-        note = ("今日有操作见上条;" if acted else "") + ("无操作策略:" + "、".join(idle) if idle else "全部策略今日有操作")
+        parts = []
+        if acted:
+            parts.append("今日有操作,详见上条")
         if mkt_score is not None and mkt_score < 0:
-            note += f" | ⚠消息面市场分{mkt_score}(已降敞口)"
-        t, c = notify.build_heartbeat(today, last, note)
-        # 修复(2026-08-04): 心跳推送失败不应阻断后续看板生成。
-        # PushPlus token 失效("服务端验证错误")时, push 抛 RuntimeError 冒泡 → 整轮失败 → 看板不更新。
-        # 心跳是通知,看板是核心交付物; 心跳失败只降级记日志, 看板必须生成。
-        try:
-            notify.push(t, c, "heartbeat", cfg, smtp_fallback=False)
-        except Exception as e:
-            log.warning("心跳推送失败(降级继续,不影响看板):%s", e)
+            parts.append(f"⚠消息面市场分{mkt_score}(已降敞口)")
+        if parts:
+            t, c = notify.build_heartbeat(today, last, " | ".join(parts))
+            # 修复(2026-08-04): 心跳推送失败不应阻断后续看板生成。
+            # PushPlus token 失效("服务端验证错误")时, push 抛 RuntimeError 冒泡 → 整轮失败 → 看板不更新。
+            # 心跳是通知,看板是核心交付物; 心跳失败只降级记日志, 看板必须生成。
+            try:
+                notify.push(t, c, "heartbeat", cfg, smtp_fallback=False)
+            except Exception as e:
+                log.warning("心跳推送失败(降级继续,不影响看板):%s", e)
+        else:
+            log.info("今日无操作、无风险提示,静默不推送(可自行查看看板)")
         # 刷新静态看板(国内可达,零依赖)
         try:
             import report_html
