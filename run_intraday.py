@@ -142,8 +142,11 @@ def _scan(today, cfg, reg):
             act = "建议立即人工减仓(盘中不自动落单,系统次日按你回填对齐)" if sc == -2 else "请人工研判"
             t, c = notify.build_alert(f"{icon} 持仓 {util.bare(code)}:{'/'.join(evd[:2])},{act}")
             notify.push(t, c, "alert", cfg)
-        # 峰岭谷日内择时(新增):用分钟线对"持仓+今日待买候选"算买卖点,盘中自动推送
-        _minute_advice(today, cfg, reg, eng, holdings)
+        # 峰岭谷日内择时(2026-08-13 用户决策: 彻底关闭)。
+        # 用户只跟随模拟盘的实际操作信号(run_strategies 生成的订单/成交回报)来实盘跟单;
+        # 峰岭谷是独立计算的"建议类"信号,不代表模拟盘操作,推送无跟单意义 → 不再调用。
+        # 如需恢复,取消下行注释即可(代码与日线趋势过滤逻辑保留在 minute_factor.py)。
+        # _minute_advice(today, cfg, reg, eng, holdings)
         log.info("盘中扫描完成 %s:市场分%s 持仓命中%d", today, score, len(flags))
     finally:
         conn.close()
