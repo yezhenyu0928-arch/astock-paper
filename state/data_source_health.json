@@ -33,11 +33,11 @@
       "status": "healthy"
     },
     "akshare_sina": {
-      "total_calls": 8925,
-      "total_success": 8925,
+      "total_calls": 8926,
+      "total_success": 8926,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.794,
+      "health_score": 0.75,
       "status": "degraded"
     },
     "sina_etf": {
@@ -52,17 +52,17 @@
       "total_calls": 5375,
       "total_success": 5183,
       "disabled": false,
-      "disabled_until": 1788199594.2174392,
-      "health_score": 0.45,
-      "status": "unhealthy"
+      "disabled_until": 0,
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "akshare_em": {
       "total_calls": 346,
       "total_success": 109,
       "disabled": false,
-      "disabled_until": 1788199364.9673092,
-      "health_score": 0.15,
-      "status": "unhealthy"
+      "disabled_until": 0,
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "baostock_hfq": {
       "total_calls": 502,
@@ -85,33 +85,33 @@
       "total_success": 5493,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.738,
-      "status": "degraded"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "tushare": {
       "total_calls": 145,
       "total_success": 0,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.15,
-      "status": "unhealthy"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "tencent_hfq": {
       "total_calls": 10089,
       "total_success": 10071,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.75,
-      "status": "degraded"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "tencent_snapshot": {
-      "total_calls": 161,
-      "total_success": 159,
+      "total_calls": 173,
+      "total_success": 171,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.768,
+      "health_score": 0.75,
       "status": "degraded"
     }
   },
-  "saved_at": 1788199894.7552807
+  "saved_at": 1788276938.8363898
 }
