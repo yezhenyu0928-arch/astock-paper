@@ -153,7 +153,22 @@
    0.98878
   ]
  ],
- "pending": [],
+ "pending": [
+  {
+   "strategy_id": "s29_smallcap_select@v1",
+   "code": "sh601238",
+   "side": "sell",
+   "weight": 0.0,
+   "reason": "s29_smallcap_select@v1:广汽集团当日跌停(触及跌停价, 流动性/弱势风险, 结构性排雷),清仓",
+   "signal_date": "2026-09-15",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  }
+ ],
  "highest_nav": 1.0,
  "settled_dates": [
   "2026-07-27",
