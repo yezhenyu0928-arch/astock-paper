@@ -54,7 +54,7 @@
   }
  },
  "frozen": false,
- "nav": 0.98813,
+ "nav": 0.98705,
  "nav_history": [
   [
    "2026-07-27",
@@ -155,6 +155,10 @@
   [
    "2026-09-16",
    0.98813
+  ],
+  [
+   "2026-09-17",
+   0.98705
   ]
  ],
  "pending": [
@@ -170,7 +174,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   },
   {
    "strategy_id": "s29_smallcap_select@v1",
@@ -179,6 +183,20 @@
    "weight": 0.0,
    "reason": "s29_smallcap_select@v1:广汽集团当日跌停(触及跌停价, 流动性/弱势风险, 结构性排雷),清仓",
    "signal_date": "2026-09-16",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 1
+  },
+  {
+   "strategy_id": "s29_smallcap_select@v1",
+   "code": "sh601238",
+   "side": "sell",
+   "weight": 0.0,
+   "reason": "s29_smallcap_select@v1:广汽集团当日跌停(触及跌停价, 流动性/弱势风险, 结构性排雷),清仓",
+   "signal_date": "2026-09-17",
    "shares": 0,
    "sim_price": 0.0,
    "fee": 0.0,
@@ -213,7 +231,8 @@
   "2026-09-10",
   "2026-09-11",
   "2026-09-15",
-  "2026-09-16"
+  "2026-09-16",
+  "2026-09-17"
  ],
  "applied_div": [],
  "aux": {}
