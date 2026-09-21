@@ -54,7 +54,7 @@
   }
  },
  "frozen": false,
- "nav": 0.99037,
+ "nav": 0.99149,
  "nav_history": [
   [
    "2026-07-27",
@@ -163,6 +163,10 @@
   [
    "2026-09-18",
    0.99037
+  ],
+  [
+   "2026-09-22",
+   0.99149
   ]
  ],
  "pending": [
@@ -178,7 +182,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 3
+   "_defer": 4
   },
   {
    "strategy_id": "s29_smallcap_select@v1",
@@ -192,7 +196,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 2
+   "_defer": 3
   },
   {
    "strategy_id": "s29_smallcap_select@v1",
@@ -206,7 +210,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   },
   {
    "strategy_id": "s29_smallcap_select@v1",
@@ -220,7 +224,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 0
+   "_defer": 1
   }
  ],
  "highest_nav": 1.0,
@@ -251,7 +255,8 @@
   "2026-09-15",
   "2026-09-16",
   "2026-09-17",
-  "2026-09-18"
+  "2026-09-18",
+  "2026-09-22"
  ],
  "applied_div": [],
  "aux": {}
