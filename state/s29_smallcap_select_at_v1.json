@@ -8,7 +8,7 @@
    "shares": 600,
    "avg_cost": 3.29,
    "buy_date": "2026-08-06",
-   "highest_close": 3.33
+   "highest_close": 3.81
   },
   "sh600061": {
    "code": "sh600061",
@@ -54,7 +54,7 @@
   }
  },
  "frozen": false,
- "nav": 0.99149,
+ "nav": 0.99447,
  "nav_history": [
   [
    "2026-07-27",
@@ -166,7 +166,7 @@
   ],
   [
    "2026-09-22",
-   0.99149
+   0.99447
   ]
  ],
  "pending": [
@@ -182,7 +182,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 4
+   "_defer": 5
   },
   {
    "strategy_id": "s29_smallcap_select@v1",
@@ -196,7 +196,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 3
+   "_defer": 4
   },
   {
    "strategy_id": "s29_smallcap_select@v1",
@@ -210,7 +210,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 2
+   "_defer": 3
   },
   {
    "strategy_id": "s29_smallcap_select@v1",
@@ -224,7 +224,21 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
+  },
+  {
+   "strategy_id": "s29_smallcap_select@v1",
+   "code": "sh601238",
+   "side": "sell",
+   "weight": 0.0,
+   "reason": "s29_smallcap_select@v1:广汽集团当日跌停(触及跌停价, 流动性/弱势风险, 结构性排雷),清仓",
+   "signal_date": "2026-09-22",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
   }
  ],
  "highest_nav": 1.0,

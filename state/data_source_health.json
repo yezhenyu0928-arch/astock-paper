@@ -33,12 +33,12 @@
       "status": "healthy"
     },
     "akshare_sina": {
-      "total_calls": 11167,
-      "total_success": 11167,
+      "total_calls": 11168,
+      "total_success": 11168,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.822,
-      "status": "healthy"
+      "health_score": 0.75,
+      "status": "degraded"
     },
     "sina_etf": {
       "total_calls": 145,
@@ -53,16 +53,16 @@
       "total_success": 6373,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.673,
-      "status": "degraded"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "akshare_em": {
       "total_calls": 380,
       "total_success": 117,
       "disabled": false,
-      "disabled_until": 1790009160.9571846,
-      "health_score": 0.15,
-      "status": "unhealthy"
+      "disabled_until": 0,
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "baostock_hfq": {
       "total_calls": 506,
@@ -85,33 +85,33 @@
       "total_success": 6522,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.738,
-      "status": "degraded"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "tushare": {
       "total_calls": 150,
       "total_success": 0,
       "disabled": false,
-      "disabled_until": 1790009151.746502,
-      "health_score": 0.15,
-      "status": "unhealthy"
+      "disabled_until": 0,
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "tencent_hfq": {
       "total_calls": 12316,
       "total_success": 12294,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.75,
-      "status": "degraded"
+      "health_score": 0.875,
+      "status": "healthy"
     },
     "tencent_snapshot": {
-      "total_calls": 341,
-      "total_success": 339,
+      "total_calls": 353,
+      "total_success": 351,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.763,
+      "health_score": 0.75,
       "status": "degraded"
     }
   },
-  "saved_at": 1790009760.854184
+  "saved_at": 1790090828.0633779
 }
