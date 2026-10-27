@@ -29,7 +29,7 @@
    "shares": 300,
    "avg_cost": 6.51,
    "buy_date": "2026-08-06",
-   "highest_close": 7.11
+   "highest_close": 7.25
   },
   "sh600061": {
    "code": "sh600061",
@@ -61,7 +61,7 @@
   }
  },
  "frozen": false,
- "nav": 0.98882,
+ "nav": 0.99178,
  "nav_history": [
   [
    "2026-07-28",
@@ -218,9 +218,28 @@
   [
    "2026-10-23",
    0.98882
+  ],
+  [
+   "2026-10-27",
+   0.99178
   ]
  ],
- "pending": [],
+ "pending": [
+  {
+   "strategy_id": "s42_sue_enriched@v1",
+   "code": "sz000002",
+   "side": "sell",
+   "weight": 0.0,
+   "reason": "s42_sue_enriched@v1:万科A自高点回撤>20%,跟踪止损",
+   "signal_date": "2026-10-27",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 0
+  }
+ ],
  "highest_nav": 1.0,
  "settled_dates": [
   "2026-07-28",
@@ -261,7 +280,8 @@
   "2026-10-20",
   "2026-10-21",
   "2026-10-22",
-  "2026-10-23"
+  "2026-10-23",
+  "2026-10-27"
  ],
  "applied_div": [],
  "aux": {}

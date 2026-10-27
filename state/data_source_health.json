@@ -33,8 +33,8 @@
       "status": "healthy"
     },
     "akshare_sina": {
-      "total_calls": 17306,
-      "total_success": 17306,
+      "total_calls": 17307,
+      "total_success": 17307,
       "disabled": false,
       "disabled_until": 0,
       "health_score": 0.75,
@@ -105,13 +105,13 @@
       "status": "healthy"
     },
     "tencent_snapshot": {
-      "total_calls": 521,
-      "total_success": 519,
+      "total_calls": 533,
+      "total_success": 531,
       "disabled": false,
       "disabled_until": 0,
-      "health_score": 0.75,
+      "health_score": 0.774,
       "status": "degraded"
     }
   },
-  "saved_at": 1792769919.2246103
+  "saved_at": 1793116369.537209
 }
