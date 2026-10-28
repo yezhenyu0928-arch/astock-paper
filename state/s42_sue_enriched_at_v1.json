@@ -61,7 +61,7 @@
   }
  },
  "frozen": false,
- "nav": 0.99178,
+ "nav": 0.98938,
  "nav_history": [
   [
    "2026-07-28",
@@ -222,6 +222,10 @@
   [
    "2026-10-27",
    0.99178
+  ],
+  [
+   "2026-10-29",
+   0.98938
   ]
  ],
  "pending": [
@@ -232,6 +236,20 @@
    "weight": 0.0,
    "reason": "s42_sue_enriched@v1:万科A自高点回撤>20%,跟踪止损",
    "signal_date": "2026-10-27",
+   "shares": 0,
+   "sim_price": 0.0,
+   "fee": 0.0,
+   "tax": 0.0,
+   "status": "pending",
+   "_defer": 1
+  },
+  {
+   "strategy_id": "s42_sue_enriched@v1",
+   "code": "sz000002",
+   "side": "sell",
+   "weight": 0.0,
+   "reason": "s42_sue_enriched@v1:000002自高点回撤>20%,跟踪止损",
+   "signal_date": "2026-10-29",
    "shares": 0,
    "sim_price": 0.0,
    "fee": 0.0,
@@ -281,7 +299,8 @@
   "2026-10-21",
   "2026-10-22",
   "2026-10-23",
-  "2026-10-27"
+  "2026-10-27",
+  "2026-10-29"
  ],
  "applied_div": [],
  "aux": {}
