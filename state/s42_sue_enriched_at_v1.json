@@ -29,7 +29,7 @@
    "shares": 300,
    "avg_cost": 6.51,
    "buy_date": "2026-08-06",
-   "highest_close": 7.25
+   "highest_close": 7.3
   },
   "sh600061": {
    "code": "sh600061",
@@ -50,7 +50,7 @@
    "shares": 200,
    "avg_cost": 18.02,
    "buy_date": "2026-08-06",
-   "highest_close": 20.28
+   "highest_close": 20.33
   },
   "sh600027": {
    "code": "sh600027",
@@ -61,7 +61,7 @@
   }
  },
  "frozen": false,
- "nav": 0.99425,
+ "nav": 0.99778,
  "nav_history": [
   [
    "2026-07-28",
@@ -230,6 +230,10 @@
   [
    "2026-11-03",
    0.99425
+  ],
+  [
+   "2026-11-11",
+   0.99778
   ]
  ],
  "pending": [
@@ -245,7 +249,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 2
+   "_defer": 3
   },
   {
    "strategy_id": "s42_sue_enriched@v1",
@@ -259,7 +263,7 @@
    "fee": 0.0,
    "tax": 0.0,
    "status": "pending",
-   "_defer": 1
+   "_defer": 2
   }
  ],
  "highest_nav": 1.0,
@@ -305,7 +309,8 @@
   "2026-10-23",
   "2026-10-27",
   "2026-10-29",
-  "2026-11-03"
+  "2026-11-03",
+  "2026-11-11"
  ],
  "applied_div": [],
  "aux": {}
