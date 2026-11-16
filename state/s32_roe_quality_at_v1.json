@@ -15,28 +15,28 @@
    "shares": 1100,
    "avg_cost": 7.55,
    "buy_date": "2026-08-06",
-   "highest_close": 8.69
+   "highest_close": 9.05
   },
   "sz000001": {
    "code": "sz000001",
    "shares": 700,
    "avg_cost": 11.27,
    "buy_date": "2026-08-06",
-   "highest_close": 11.91
+   "highest_close": 12.07
   },
   "sh601988": {
    "code": "sh601988",
    "shares": 1400,
    "avg_cost": 5.77,
    "buy_date": "2026-08-06",
-   "highest_close": 7.24
+   "highest_close": 7.32
   },
   "sh600018": {
    "code": "sh600018",
    "shares": 100,
    "avg_cost": 5.24,
    "buy_date": "2026-08-06",
-   "highest_close": 5.73
+   "highest_close": 5.84
   },
   "sz000651": {
    "code": "sz000651",
@@ -50,7 +50,7 @@
    "shares": 400,
    "avg_cost": 5.91,
    "buy_date": "2026-08-06",
-   "highest_close": 6.18
+   "highest_close": 6.25
   },
   "sh601229": {
    "code": "sh601229",
@@ -64,11 +64,11 @@
    "shares": 1800,
    "avg_cost": 4.99,
    "buy_date": "2026-08-06",
-   "highest_close": 5.72
+   "highest_close": 5.8
   }
  },
  "frozen": false,
- "nav": 1.04132,
+ "nav": 1.05785,
  "nav_history": [
   [
    "2026-07-27",
@@ -245,10 +245,14 @@
   [
    "2026-11-11",
    1.04132
+  ],
+  [
+   "2026-11-17",
+   1.05785
   ]
  ],
  "pending": [],
- "highest_nav": 1.04343,
+ "highest_nav": 1.05785,
  "settled_dates": [
   "2026-07-27",
   "2026-07-28",
@@ -293,7 +297,8 @@
   "2026-10-27",
   "2026-10-29",
   "2026-11-03",
-  "2026-11-11"
+  "2026-11-11",
+  "2026-11-17"
  ],
  "applied_div": [],
  "aux": {}
